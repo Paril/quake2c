@@ -1,0 +1,78 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <None Include="src\game.def" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="src">
+      <UniqueIdentifier>{2b4115b2-12de-4fe1-8346-227ef381fc8d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="inc">
+      <UniqueIdentifier>{e1810386-02c0-4fff-8105-8a6b8bdd92a7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="inc\shared">
+      <UniqueIdentifier>{6f2022d4-528a-4247-8843-58553860cf6f}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\g_main.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\shared\shared.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\g_vm.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_gi.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_game.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_ext.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_string.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_mem.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_debug.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_vector.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_math.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\shared\client.h">
+      <Filter>inc\shared</Filter>
+    </ClInclude>
+    <ClInclude Include="src\shared\entity.h">
+      <Filter>inc\shared</Filter>
+    </ClInclude>
+    <ClInclude Include="src\shared\api.h">
+      <Filter>inc\shared</Filter>
+    </ClInclude>
+    <ClInclude Include="src\shared\platform.h">
+      <Filter>inc\shared</Filter>
+    </ClInclude>
+    <ClInclude Include="src\shared\shared.h">
+      <Filter>inc\shared</Filter>
+    </ClInclude>
+    <ClInclude Include="src\g_vm.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\game.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vm_game.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
