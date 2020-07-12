@@ -5,7 +5,7 @@
 static void QC_va(QCVM &vm)
 {
 	const auto &fmt = vm.ArgvString(0);
-	vm.Return(vm.dynamic_strings.StoreStatic(va("%s", ParseFormat(fmt, vm, 1).data())));
+	vm.Return(ParseFormat(fmt, vm, 1));
 }
 
 static void QC_itos(QCVM &vm)
@@ -67,14 +67,14 @@ static void QC_strtok(QCVM &vm)
 	if (offset == -1)
 	{
 		vm.Return(vm.string_data);
-		vm.SetGlobal<int32_t>(global_t::PARM1, -1);
+		vm.SetGlobal(global_t::PARM1, -1);
 		return;
 	}
 
 	const char *ptr = str + offset;
 	const char *parsed = COM_Parse(&ptr);
-	vm.Return(vm.dynamic_strings.StoreStatic(parsed));
-	vm.SetGlobal<int32_t>(global_t::PARM1, (ptr == nullptr) ? -1 : (ptr - str));
+	vm.Return(std::string(parsed));
+	vm.SetGlobal(global_t::PARM1, (ptr == nullptr) ? -1 : (ptr - str));
 }
 
 static void QC_strat(QCVM &vm)
@@ -98,14 +98,30 @@ static void QC_substr(QCVM &vm)
 	if (vm.state.argc >= 3)
 		length = vm.ArgvInt32(2);
 
-	static char substr_buffer[2048];
+	length = min(str_len - start, length);
 
-	length = min(sizeof(substr_buffer) - start - 1, length);
+	vm.Return(std::string(str + start, length));
+}
 
-	strncpy(substr_buffer, str + start, length);
-	substr_buffer[length] = 0;
+static void QC_strconcat(QCVM &vm)
+{
+	if (vm.state.argc == 0)
+	{
+		vm.Return(vm.string_data);
+		return;
+	}
+	else if (vm.state.argc == 1)
+	{
+		vm.Return(vm.ArgvStringID(0));
+		return;
+	}
 
-	vm.Return(vm.dynamic_strings.StoreStatic(substr_buffer));
+	std::string str;
+
+	for (int32_t i = 0; i < vm.state.argc; i++)
+		str += vm.ArgvString(i);
+
+	vm.Return(str);
 }
 
 static void QC_Info_ValueForKey(QCVM &vm)
@@ -113,7 +129,7 @@ static void QC_Info_ValueForKey(QCVM &vm)
 	const auto &userinfo = vm.ArgvString(0);
 	const auto &key = vm.ArgvString(1);
 
-	vm.Return(vm.dynamic_strings.StoreStatic(Info_ValueForKey(userinfo, key)));
+	vm.Return(std::string(Info_ValueForKey(userinfo, key)));
 }
 
 static void QC_Info_SetValueForKey(QCVM &vm)
@@ -123,41 +139,6 @@ static void QC_Info_SetValueForKey(QCVM &vm)
 	const auto &value = vm.ArgvString(2);
 
 	vm.Return(Info_SetValueForKey(const_cast<char *>(userinfo), key, value));
-}
-
-static void QC_dynstring_acquire(QCVM &vm)
-{
-	const auto &v = vm.ArgvStringID(0);
-	vm.dynamic_strings.AcquireRefCounted(v);
-}
-
-static void QC_dynstring_release(QCVM &vm)
-{
-	const auto &v = vm.ArgvStringID(0);
-	vm.dynamic_strings.ReleaseRefCounted(v);
-}
-
-static void QC_dynstring_create(QCVM &vm)
-{
-	const auto &v = vm.ArgvString(0);
-	std::string str = v;
-	vm.Return(vm.dynamic_strings.StoreRefCounted(v));
-}
-
-static void QC_dynstring_alloc(QCVM &vm)
-{
-	const auto &size = vm.ArgvInt32(0);
-	std::string str;
-	str.reserve(size);
-	vm.Return(vm.dynamic_strings.StoreRefCounted(std::move(str)));
-}
-
-static void QC_dynstring_append(QCVM &vm)
-{
-	const auto &appendee = vm.ArgvStringID(0);
-	const auto &appender = vm.ArgvString(1);
-
-	vm.dynamic_strings.GetDynamic(appendee).append(appender);
 }
 
 void InitStringBuiltins(QCVM &vm)
@@ -175,13 +156,8 @@ void InitStringBuiltins(QCVM &vm)
 	RegisterBuiltin(strat);
 	RegisterBuiltin(substr);
 	RegisterBuiltin(strncmp);
+	RegisterBuiltin(strconcat);
 
 	RegisterBuiltin(Info_ValueForKey);
 	RegisterBuiltin(Info_SetValueForKey);
-	
-	RegisterBuiltin(dynstring_acquire);
-	RegisterBuiltin(dynstring_release);
-	RegisterBuiltin(dynstring_create);
-	RegisterBuiltin(dynstring_alloc);
-	RegisterBuiltin(dynstring_append);
 }

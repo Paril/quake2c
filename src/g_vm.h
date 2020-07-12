@@ -1,8 +1,7 @@
 #pragma once
 
+//#define ALLOW_PROFILING
 //#define ALLOW_TRACING
-//#define STACK_TRACING
-#define ALLOW_PROFILING
 
 #include <cassert>
 #include <variant>
@@ -10,6 +9,7 @@
 #include <stack>
 #include <deque>
 #include <unordered_map>
+#include <unordered_set>
 #include <filesystem>
 #include <fstream>
 
@@ -154,18 +154,6 @@ struct QCDefinition
 	string_t	name_index;
 };
 
-struct QCFunction
-{
-	int32_t					id;
-	uint32_t				first_arg;
-	uint32_t				num_args_and_locals;
-	uint32_t				profile;
-	string_t				name_index;
-	uint32_t				file_index;
-	int32_t					num_args;
-	std::array<uint8_t, 8>	arg_sizes;
-};
-
 enum class global_t : uint32_t
 {
 	QC_NULL	= 0,
@@ -179,6 +167,18 @@ enum class global_t : uint32_t
 	PARM6	= 22,
 	PARM7	= 25,
 	QC_OFS	= 28
+};
+
+struct QCFunction
+{
+	int32_t					id;
+	global_t				first_arg;
+	uint32_t				num_args_and_locals;
+	uint32_t				profile;
+	string_t				name_index;
+	uint32_t				file_index;
+	int32_t					num_args;
+	std::array<uint8_t, 8>	arg_sizes;
 };
 
 #ifdef ALLOW_PROFILING
@@ -215,6 +215,50 @@ constexpr const char *profile_type_names[TotalProfileFields] =
 	"# Func Calls"
 };
 
+enum profile_timer_type_t
+{
+	StringAcquire,
+	StringRelease,
+	StringMark,
+	StringCheckUnset,
+	StringHasRef,
+
+	TotalTimerFields
+};
+
+constexpr const char *timer_type_names[TotalTimerFields] =
+{
+	"String Acquire",
+	"String Release",
+	"String Mark",
+	"String Check Unset",
+	"String HasRef"
+};
+
+struct profile_timer_t
+{
+	size_t					count;
+	clock_type::duration	time;
+};
+
+struct active_timer_t
+{
+	profile_timer_t			&timer;
+	clock_type::time_point	start;
+
+	active_timer_t(profile_timer_t &time) :
+		timer(time),
+		start(clock_type::now())
+	{
+		timer.count++;
+	}
+
+	~active_timer_t()
+	{
+		timer.time += clock_type::now() - start;
+	}
+};
+
 struct QCProfile
 {
 	//std::unordered_map<const QCStatement *, size_t>	called_from;
@@ -229,7 +273,9 @@ struct QCStack
 {
 	QCFunction								*function = nullptr;
 	const QCStatement						*statement = nullptr;
-	std::unordered_map<uint32_t, global_t>	locals;
+	std::unordered_map<global_t, global_t>	locals;
+	std::vector<string_t>					ref_strings;
+	std::unordered_set<string_t>			parm_strings;
 
 #ifdef ALLOW_PROFILING
 	QCProfile				*profile;
@@ -248,7 +294,9 @@ struct QCVMRefCountString
 
 class QCVMStringList
 {
-	using StringType = std::variant<std::string, std::string_view, const char**, QCVMRefCountString>;
+	struct QCVM	&vm;
+
+	using StringType = std::variant<std::string_view, const char**, QCVMRefCountString>;
 
 	// The string list maps IDs (one-indexed) to either a custom string object or
 	// a string view that points to existing memory.
@@ -260,9 +308,14 @@ class QCVMStringList
 	// static strings mapped to string_t's
 	std::unordered_map<const void *, string_t> constant_storage;
 
+	// mapped list of addresses that contain(ed) strings
+	std::unordered_map<const void *, string_t> ref_storage;
+
 	string_t Allocate();
 
 public:
+	QCVMStringList(struct QCVM &invm);
+
 	const decltype(strings) &GetStrings() const
 	{
 		return strings;
@@ -272,15 +325,11 @@ public:
 
 	string_t StoreStatic(const std::string_view &view);
 
-	string_t StoreDynamic(const std::string &&str);
-
-	string_t StoreRefCounted(const std::string &&str);
+	string_t StoreRefCounted(const std::string &str);
 
 	void Unstore(const string_t &id);
 
 	size_t Length(const string_t &id) const;
-
-	std::string &GetDynamic(const string_t &id);
 
 	const char *GetStatic(const string_t &id) const;
 
@@ -291,6 +340,16 @@ public:
 	void AcquireRefCounted(const string_t &id);
 
 	void ReleaseRefCounted(const string_t &id);
+
+	void MarkRefCopy(const string_t &id, const void *ptr);
+
+	void CheckRefUnset(const void *ptr, const size_t &span);
+
+	bool HasRef(const void *ptr, string_t &id);
+
+	bool HasRef(const void *ptr, const size_t &span, std::unordered_map<string_t, size_t> &ids);
+
+	bool IsRefCounted(const string_t &id);
 };
 
 class QCVMBuiltinList
@@ -358,6 +417,7 @@ struct QCVM
 	std::vector<QCFunction>						functions;
 #ifdef ALLOW_PROFILING
 	std::vector<QCProfile>						profile_data;
+	profile_timer_t								timers[TotalTimerFields];
 #endif
 	global_t									*global_data = nullptr;
 	char										*string_data = nullptr;
@@ -367,17 +427,15 @@ struct QCVM
 	QCVMFieldWrapList							field_wraps;
 	std::unordered_map<global_t, global_t>		params_from;
 	std::vector<int>							linenumbers;
-#ifdef STACK_TRACING
-	std::string									stack_pos;
-#endif
 
 	QCVM();
 
 	template<typename ...T>
 	[[noreturn]] void Error(T ...args)
 	{
+		std::string str = vas(args...);
 		__debugbreak();
-		gi.error(args...);
+		gi.error(str.data());
 		exit(0);
 	}
 
@@ -388,8 +446,18 @@ struct QCVM
 	inline void EnableTrace()
 	{
 		enable_tracing = true;
-		trace_file = fopen(vas("%s/trace.txt", gi.cvar("game", "", 0)->string).data(), "w+");
+		trace_file = fopen(vas("%s/trace.txt", gi.cvar("game", "", CVAR_NONE)->string).data(), "w+");
 		fprintf(trace_file, "TRACING ENABLED\n");
+	}
+
+	inline void PauseTrace()
+	{
+		enable_tracing = false;
+	}
+
+	inline void ResumeTrace()
+	{
+		enable_tracing = true;
 	}
 
 	inline void StopTrace()
@@ -406,7 +474,7 @@ struct QCVM
 		if (!enable_tracing)
 			return;
 
-		for (size_t i = 0; i < state.stack.size() - 1; i++)
+		for (size_t i = 0; i < state.stack.size(); i++)
 			fprintf(trace_file, " ");
 
 		fprintf(trace_file, "[%s] %s\n", StackEntry(state.current).data(), vas(format, args...).data());
@@ -537,16 +605,35 @@ struct QCVM
 
 		return vas("[%i] (%s)", g, DumpGlobalValue(g, type).data());
 	}
+
+#define PrintTraceExt(vm, ...) \
+	vm.PrintTrace(__VA_ARGS__)
 #else
 	static constexpr bool enable_tracing = false;
-
+	
 	constexpr void EnableTrace() { }
+	constexpr void PauseTrace() { }
+	constexpr void ResumeTrace() { }
 	constexpr void StopTrace() { }
 	template<typename ...T>
 	constexpr void PrintTrace() { }
 
 	// no-op them
 #define PrintTrace(...)
+#define PrintTraceExt(vm, ...)
+#endif
+
+#ifdef ALLOW_PROFILING
+	[[nodiscard]] active_timer_t CreateTimer(const profile_timer_type_t &type)
+	{
+		return active_timer_t(timers[type]);
+	}
+#else
+	// no-op
+	constexpr nullptr_t Timer_() { return nullptr; }
+
+#define CreateTimer(...) \
+		Timer_()
 #endif
 
 	inline const global_t *GetGlobalByIndex(const global_t &g) const
@@ -584,15 +671,47 @@ struct QCVM
 			state.current.profile->fields[NumGlobalsSet]++;
 #endif
 
+		static_assert(std::is_standard_layout_v<T> && (sizeof(T) % 4) == 0);
+
 		*reinterpret_cast<T*>(GetGlobalByIndex(global)) = value;
+		dynamic_strings.CheckRefUnset(GetGlobalByIndex(global), sizeof(T) / sizeof(global_t));
 
 		if (enable_tracing)
 			PrintTrace("  SetGlobal: %i -> %s", global, TraceGlobal(global).data());
 	}
 
+	inline string_t SetGlobal(const global_t &global, const std::string &value)
+	{
+		string_t str = dynamic_strings.StoreRefCounted(value);
+		SetGlobal(global, str);
+		dynamic_strings.MarkRefCopy(str, GetGlobalByIndex(global));
+		return str;
+	}
+
+	// safe way of copying globals between other globals
+	inline void CopyGlobal(const global_t &dst, const global_t &src, const size_t &count)
+	{
+		const auto src_ptr = GetGlobalByIndex(src);
+		auto dst_ptr = GetGlobalByIndex(dst);
+
+		memcpy(dst_ptr, src_ptr, sizeof(global_t) * count);
+		dynamic_strings.CheckRefUnset(dst_ptr, count);
+
+		// if there were any ref strings in src, make sure they are
+		// reffed in dst too
+		std::unordered_map<string_t, size_t> ids;
+
+		if (dynamic_strings.HasRef(src_ptr, count, ids))
+			for (auto &s : ids)
+				dynamic_strings.MarkRefCopy(s.first, dst_ptr + s.second);
+
+		if (enable_tracing)
+			PrintTrace("  CopyGlobal: %i:%u -> %i (%s)", src, count, dst, TraceGlobal(dst).data());
+	}
+
 	[[nodiscard]] inline edict_t *ArgvEntity(const uint8_t &d) const
 	{
- 		return EntToEntity(GetGlobal<ent_t>(GlobalOffset(global_t::PARM0, d * 3)));
+		return EntToEntity(GetGlobal<ent_t>(GlobalOffset(global_t::PARM0, d * 3)));
 	}
 	
 	[[nodiscard]] inline edict_t *EntToEntity(const ent_t &ent, bool allow_invalid = false) const
@@ -649,7 +768,7 @@ struct QCVM
 	
 	inline void Return(const vec_t &value)
 	{
-		SetGlobal<vec_t>(global_t::RETURN, value);
+		SetGlobal(global_t::RETURN, value);
 
 		PrintTrace("BUILTIN RETURN F %f", value);
 	}
@@ -657,35 +776,28 @@ struct QCVM
 	inline void Return(const vec3_t &value)
 	{
 		for (size_t i = 0; i < value.size(); i++)
-			SetGlobal<vec_t>(GlobalOffset(global_t::RETURN, i), value.at(i));
+			SetGlobal(GlobalOffset(global_t::RETURN, i), value.at(i));
 
 		PrintTrace("BUILTIN RETURN VEC %f %f %f", value[0], value[1], value[2]);
 	}
 	
 	inline void Return(const edict_t &value)
 	{
-		SetGlobal<int32_t>(global_t::RETURN, reinterpret_cast<int32_t>(&value));
+		SetGlobal(global_t::RETURN, reinterpret_cast<int32_t>(&value));
 
 		PrintTrace("BUILTIN RETURN ENT %s", TraceEntity(&value).data());
 	}
 	
 	inline void Return(const int32_t &value)
 	{
-		SetGlobal<int32_t>(global_t::RETURN, value);
+		SetGlobal(global_t::RETURN, value);
 
 		PrintTrace("BUILTIN RETURN I %i", value);
 	}
 
-	inline void Return(const string_t &str)
-	{
-		SetGlobal<string_t>(global_t::RETURN, str);
-		
-		PrintTrace("BUILTIN RETURN S %s", GetString(str));
-	}
-
 	inline void Return(const func_t &str)
 	{
-		SetGlobal<func_t>(global_t::RETURN, str);
+		SetGlobal(global_t::RETURN, str);
 		
 		if (str != func_t::FUNC_VOID)
 			PrintTrace("BUILTIN RETURN FUNC %s", GetString(FindFunction(str)->name_index));
@@ -699,31 +811,42 @@ struct QCVM
 			Error("attempt to return dynamic string from %s", __func__);
 
 		Return(static_cast<string_t>(value - string_data));
+		
+		PrintTrace("BUILTIN RETURN STATIC S %s", value);
 	}
 
-	inline bool MatchString(const std::string_view &value, string_t &output) const
+	inline void Return(const std::string &str)
 	{
+		SetGlobal(global_t::RETURN, str);
+		
+		PrintTrace("BUILTIN RETURN REFCOUNT S %s", str.data());
+	}
+
+	inline void Return(const string_t &str)
+	{
+		SetGlobal(global_t::RETURN, str);
+		
+		PrintTrace("BUILTIN RETURN S %s", GetString(str));
+	}
+
+	inline string_t StoreOrFind(const std::string_view &value)
+	{
+		// TODO: hash dis
 		// check built-ins
 		for (const char *s = string_data; s < string_data + string_size; s += strlen(s) + 1)
-		{
 			if (value.compare(s) == 0)
-			{
-				output = static_cast<string_t>(s - string_data);
-				return true;
-			}
-		}
+				return static_cast<string_t>(s - string_data);
 		
 		// check temp strings
 		for (auto &s : dynamic_strings.GetStrings())
 		{
-			if (value.compare(dynamic_strings.Get(s.first)) == 0)
-			{
-				output = static_cast<string_t>(-static_cast<int32_t>(s.first));
-				return true;
-			}
+			const char *str = dynamic_strings.Get(s.first);
+
+			if (str && value.compare(str) == 0)
+				return s.first;
 		}
 
-		return false;
+		return dynamic_strings.StoreRefCounted(std::string(value));
 	}
 
 	struct {
@@ -739,10 +862,20 @@ struct QCVM
 		{
 			state.current.locals.reserve(function.num_args_and_locals);
 
-			for (size_t i = 0, arg = function.first_arg; i < static_cast<size_t>(function.num_args_and_locals); i++, arg++)
-				state.current.locals[arg] = global_data[arg];
+			for (size_t i = 0, arg = static_cast<size_t>(function.first_arg); i < static_cast<size_t>(function.num_args_and_locals); i++, arg++)
+			{
+				state.current.locals[static_cast<global_t>(arg)] = GetGlobal<global_t>(static_cast<global_t>(arg));
 
-			PrintTrace("Backup locals %u -> %u", function.first_arg, function.first_arg + function.num_args_and_locals);
+				string_t str;
+
+				if (dynamic_strings.HasRef(GetGlobalByIndex(static_cast<global_t>(arg)), str))
+				{
+					state.current.ref_strings.push_back(str);
+					dynamic_strings.AcquireRefCounted(str);
+				}
+			}
+
+			PrintTrace("Backup locals %u -> %u", function.first_arg, static_cast<uint32_t>(function.first_arg) + function.num_args_and_locals);
 		}
 
 		state.stack.push_back(std::move(state.current));
@@ -754,7 +887,7 @@ struct QCVM
 		// copy parameters
 		for (size_t i = 0, arg_id = static_cast<size_t>(function.first_arg); i < static_cast<size_t>(function.num_args); i++)
 			for (size_t s = 0; s < function.arg_sizes[i]; s++, arg_id++)
-				global_data[arg_id] = *GetGlobalByIndex(GlobalOffset(global_t::PARM0, (i * 3) + s));
+				CopyGlobal(static_cast<global_t>(arg_id), GlobalOffset(global_t::PARM0, (i * 3) + s), 1);
 
 #ifdef ALLOW_PROFILING
 		state.current.profile = &profile_data[&function - functions.data()];
@@ -773,10 +906,15 @@ struct QCVM
 		{
 			auto &current_func = *state.current.function;
 
-			for (size_t i = 0, arg = current_func.first_arg; i < static_cast<size_t>(current_func.num_args_and_locals); i++, arg++)
-				global_data[arg] = prev_stack.locals[arg];
+			for (size_t i = 0, arg = static_cast<size_t>(current_func.first_arg); i < static_cast<size_t>(current_func.num_args_and_locals); i++, arg++)
+				SetGlobal(static_cast<global_t>(arg), prev_stack.locals[static_cast<global_t>(arg)]);
 
-			PrintTrace("Restore locals %u -> %u", current_func.first_arg, current_func.first_arg + current_func.num_args_and_locals);
+			for (auto &str : prev_stack.ref_strings)
+				dynamic_strings.ReleaseRefCounted(str);
+
+			prev_stack.ref_strings.clear();
+
+			PrintTrace("Restore locals %u -> %u", current_func.first_arg, static_cast<uint32_t>(current_func.first_arg) + current_func.num_args_and_locals);
 		}
 		
 #ifdef ALLOW_PROFILING
@@ -821,7 +959,7 @@ struct QCVM
 		if (static_cast<int32_t>(str) < 0)
 			return dynamic_strings.Get(str);
 
- 		return string_data + static_cast<int>(str);
+		return string_data + static_cast<int>(str);
 	}
 
 	inline QCFunction *FindFunction(const func_t &id)
@@ -878,20 +1016,20 @@ struct QCVM
 		return reinterpret_cast<uint8_t*>(GetEntityFieldPointer(ent, field)) - reinterpret_cast<uint8_t *>(globals.edicts);
 	}
 
-	template<typename T>
-	inline T &AddressToEntityField(const int32_t &address)
-	{
-		return *reinterpret_cast<T *>(reinterpret_cast<uint8_t *>(globals.edicts) + address);
-	}
-
 	inline void *AddressToEntityField(const int32_t &address)
 	{
 		return reinterpret_cast<uint8_t *>(globals.edicts) + address;
 	}
 
+	template<typename T>
+	inline T *AddressToEntityField(const int32_t &address)
+	{
+		return reinterpret_cast<T *>(AddressToEntityField(address));
+	}
+
 	inline ptrdiff_t AddressToField(edict_t &entity, const int32_t &address)
 	{
-		return &AddressToEntityField<uint8_t>(address) - reinterpret_cast<uint8_t *>(&entity);
+		return AddressToEntityField<uint8_t>(address) - reinterpret_cast<uint8_t *>(&entity);
 	}
 
 	inline edict_t &AddressToEntity(const int32_t &address)
@@ -909,16 +1047,22 @@ struct QCVM
 		if (!builtins.IsRegistered(builtin))
 			Error("Bad builtin call number");
 
+#ifdef ALLOW_PROFILING
 		auto profile = &profile_data[&function - functions.data()];
 		profile->fields[NumSelfCalls]++;
 		auto start = perf_time();
+#endif
+
 		builtins.Get(builtin)(*this);
+
+#ifdef ALLOW_PROFILING
 		auto time_spent = perf_time() - start;
 		profile->total += time_spent;
 
 		// add time we spent in this function into the parent's call_into time
 		if (state.current.profile)
 			state.current.profile->call_into += time_spent;
+#endif
 
 		params_from.clear();
 	}

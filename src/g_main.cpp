@@ -188,18 +188,10 @@ static void SpawnEntities(const char *mapname, const char *entities, const char 
 		game.entity(i + 1).client = &game.clients[i];
 
 	auto func = qvm.FindFunction(qce.SpawnEntities);
-	auto mapname_str = qvm.dynamic_strings.StoreRefCounted(mapname);
-	auto entities_str = qvm.dynamic_strings.StoreRefCounted(entities);
-	auto spawnpoint_str = qvm.dynamic_strings.StoreRefCounted(spawnpoint);
-
-	qvm.SetGlobal<string_t>(global_t::PARM0, mapname_str);
-	qvm.SetGlobal<string_t>(global_t::PARM1, entities_str);
-	qvm.SetGlobal<string_t>(global_t::PARM2, spawnpoint_str);
+	qvm.SetGlobal(global_t::PARM0, std::string(mapname));
+	qvm.SetGlobal(global_t::PARM1, std::string(entities));
+	qvm.SetGlobal(global_t::PARM2, std::string(spawnpoint));
 	qvm.Execute(*func);
-	
-	qvm.dynamic_strings.ReleaseRefCounted(mapname_str);
-	qvm.dynamic_strings.ReleaseRefCounted(entities_str);
-	qvm.dynamic_strings.ReleaseRefCounted(spawnpoint_str);
 }
 
 game_export_t globals = {
@@ -226,48 +218,50 @@ game_export_t globals = {
 	
 	.ClientConnect = [](edict_t *e, char *userinfo) -> qboolean
 	{
+		//qvm.EnableTrace();
 		auto func = qvm.FindFunction(qce.ClientConnect);
-		qvm.SetGlobal<ent_t>(global_t::PARM0, qvm.EntityToEnt(e));
-		const auto userinfo_str = qvm.dynamic_strings.StoreStatic(userinfo);
-		qvm.SetGlobal<string_t>(global_t::PARM1, userinfo_str);
+		qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
+		string_t str = qvm.SetGlobal(global_t::PARM1, std::string(userinfo));
+		qvm.dynamic_strings.AcquireRefCounted(str);
 		qvm.Execute(*func);
-		qvm.dynamic_strings.Unstore(userinfo_str);
 
-		const int32_t &ret = qvm.GetGlobal<int32_t>(global_t::RETURN);
+		Q_strlcpy(userinfo, qvm.GetString(str), MAX_INFO_STRING);
+		qvm.dynamic_strings.ReleaseRefCounted(str);
+		//qvm.PauseTrace();
 
-		return static_cast<qboolean>(ret);
+		return qvm.GetGlobal<qboolean>(global_t::RETURN);
 	},
 	.ClientBegin = [](edict_t *e)
 	{
+		//qvm.ResumeTrace();
 		auto func = qvm.FindFunction(qce.ClientBegin);
-		qvm.SetGlobal<ent_t>(global_t::PARM0, qvm.EntityToEnt(e));
+		qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 		qvm.Execute(*func);
+		//qvm.StopTrace();
 	},
 	.ClientUserinfoChanged = [](edict_t *e, char *userinfo)
 	{
 		auto func = qvm.FindFunction(qce.ClientUserinfoChanged);
-		qvm.SetGlobal<ent_t>(global_t::PARM0, qvm.EntityToEnt(e));
-		const auto userinfo_str = qvm.dynamic_strings.StoreRefCounted(userinfo);
-		qvm.SetGlobal<string_t>(global_t::PARM1, userinfo_str);
+		qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
+		qvm.SetGlobal(global_t::PARM1, std::string(userinfo));
 		qvm.Execute(*func);
-		qvm.dynamic_strings.ReleaseRefCounted(userinfo_str);
 	},
 	.ClientDisconnect = [](edict_t *e)
 	{
 		auto func = qvm.FindFunction(qce.ClientDisconnect);
-		qvm.SetGlobal<ent_t>(global_t::PARM0, qvm.EntityToEnt(e));
+		qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 		qvm.Execute(*func);
 	},
 	.ClientCommand = [](edict_t *e)
 	{
 		auto func = qvm.FindFunction(qce.ClientCommand);
-		qvm.SetGlobal<ent_t>(global_t::PARM0, qvm.EntityToEnt(e));
+		qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 		qvm.Execute(*func);
 	},
 	.ClientThink = [](edict_t *e, usercmd_t *ucmd)
 	{
 		auto func = qvm.FindFunction(qce.ClientThink);
-		qvm.SetGlobal<ent_t>(global_t::PARM0, qvm.EntityToEnt(e));
+		qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 
 		QC_usercmd_t cmd = {
 			ucmd->msec,
@@ -280,7 +274,7 @@ game_export_t globals = {
 			ucmd->lightlevel
 		};
 
-		qvm.SetGlobal<QC_usercmd_t>(global_t::PARM1, cmd);
+		qvm.SetGlobal(global_t::PARM1, cmd);
 
 		qvm.Execute(*func);
 	},

@@ -9,16 +9,16 @@ static void QC_AngleVectors(QCVM &vm)
 	vec3_t forward, right, up;
 	AngleVectors(v, forward, right, up);
 
-	vm.SetGlobal<vec3_t>(global_t::PARM1, forward);
-	vm.SetGlobal<vec3_t>(global_t::PARM2, right);
-	vm.SetGlobal<vec3_t>(global_t::PARM3, up);
+	vm.SetGlobal(global_t::PARM1, forward);
+	vm.SetGlobal(global_t::PARM2, right);
+	vm.SetGlobal(global_t::PARM3, up);
 }
 
 static void QC_VectorNormalize(QCVM &vm)
 {
 	auto v = vm.ArgvVector(0);
 	vm.Return(VectorNormalize(v));
-	vm.SetGlobal<vec3_t>(global_t::PARM0, v);
+	vm.SetGlobal(global_t::PARM0, v);
 }
 
 static void vectoangles(const vec3_t &value1, vec3_t &angles)
@@ -63,7 +63,7 @@ static void QC_vectoangles(QCVM &vm)
 	auto &v = vm.ArgvVector(0);
 	vec3_t angles;
 	vectoangles(v, angles);
-	vm.SetGlobal<vec3_t>(global_t::PARM1, angles);
+	vm.SetGlobal(global_t::PARM1, angles);
 }
 
 static void QC_CrossProduct(QCVM &vm)
@@ -72,7 +72,7 @@ static void QC_CrossProduct(QCVM &vm)
 	auto &b = vm.ArgvVector(1);
 	vec3_t c;
 	CrossProduct(a, b, c);
-	vm.SetGlobal<vec3_t>(global_t::PARM2, c);
+	vm.SetGlobal(global_t::PARM2, c);
 }
 
 static void QC_VectorLength(QCVM &vm)

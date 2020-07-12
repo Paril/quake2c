@@ -24,6 +24,11 @@ struct QCHeader
 	} sections;
 };
 
+QCVMStringList::QCVMStringList(struct QCVM &invm) :
+	vm(invm)
+{
+}
+
 string_t QCVMStringList::Allocate()
 {
 	if (free_indices.size())
@@ -39,11 +44,11 @@ string_t QCVMStringList::Allocate()
 string_t QCVMStringList::StoreStatic(const char **resolver)
 {
 	if (constant_storage.contains(resolver))
-		return constant_storage[resolver];
+		return constant_storage.at(resolver);
 
 	string_t id = Allocate();
-	constant_storage[resolver] = id;
-	strings[id] = resolver;
+	constant_storage.emplace(resolver, id);
+	strings.emplace(id, resolver);
 	return id;
 }
 
@@ -52,32 +57,27 @@ string_t QCVMStringList::StoreStatic(const std::string_view &view)
 	string_t id;
 
 	if (constant_storage.contains(view.data()))
-		id = constant_storage[view.data()];
+		id = constant_storage.at(view.data());
 	else
 	{
 		id = Allocate();
-		constant_storage[view.data()] = id;
+		constant_storage.emplace(view.data(), id);
 	}
 
-	strings[id] = view;
+	strings.emplace(id, view);
 	return id;
 }
 
-string_t QCVMStringList::StoreDynamic(const std::string &&str)
+string_t QCVMStringList::StoreRefCounted(const std::string &str)
 {
 	string_t id = Allocate();
-	strings[id] = str;
-	return id;
-}
+	
+	PrintTraceExt(vm, "REFSTRING STORE %10s -> %i", str.data(), id);
 
-string_t QCVMStringList::StoreRefCounted(const std::string &&str)
-{
-	string_t id = Allocate();
-	strings[id] = (QCVMRefCountString) {
-		str,
-		1
-	};
-
+	strings.emplace(id, (QCVMRefCountString) {
+		std::move(str),
+		0
+	});
 	return id;
 }
 
@@ -87,12 +87,12 @@ void QCVMStringList::Unstore(const string_t &id)
 		
 	const StringType &str = strings.at(id);
 		
-	if (std::holds_alternative<std::string_view>(str))
-		constant_storage.erase(std::get<std::string_view>(str).data());
-	else if (std::holds_alternative<const char **>(str))
+	if (std::holds_alternative<const char **>(str))
 		constant_storage.erase(std::get<const char **>(str));
 		
 	assert(!std::holds_alternative<QCVMRefCountString>(str) || !std::get<QCVMRefCountString>(str).ref_count);
+	
+	PrintTraceExt(vm, "REFSTRING UNSTORE %i", id);
 		
 	strings.erase(id);
 	free_indices.push(id);
@@ -104,28 +104,12 @@ size_t QCVMStringList::Length(const string_t &id) const
 		
 	const StringType &str = strings.at(id);
 		
-	if (std::holds_alternative<std::string>(str))
-		return std::get<std::string>(str).length();
-	else if (std::holds_alternative<std::string_view>(str))
+	if (std::holds_alternative<std::string_view>(str))
 		return std::get<std::string_view>(str).length();
 	else if (std::holds_alternative<QCVMRefCountString>(str))
 		return std::get<QCVMRefCountString>(str).str.length();
 		
 	return strlen(*std::get<const char **>(str));
-}
-
-std::string &QCVMStringList::GetDynamic(const string_t &id)
-{
-	assert(strings.contains(id));
-		
-	StringType &str = strings.at(id);
-
-	assert(std::holds_alternative<std::string>(str) || std::holds_alternative<QCVMRefCountString>(str));
-		
-	if (std::holds_alternative<QCVMRefCountString>(str))
-		return std::get<QCVMRefCountString>(str).str;
-
-	return std::get<std::string>(str);
 }
 
 const char *QCVMStringList::GetStatic(const string_t &id) const
@@ -166,14 +150,14 @@ const char *QCVMStringList::Get(const string_t &id) const
 		return std::get<std::string_view>(str).data();
 	else if (std::holds_alternative<const char **>(str))
 		return *std::get<const char **>(str);
-	else if (std::holds_alternative<QCVMRefCountString>(str))
-		return std::get<QCVMRefCountString>(str).str.c_str();
 
-	return std::get<std::string>(str).c_str();
+	return std::get<QCVMRefCountString>(str).str.c_str();
 }
 
 void QCVMStringList::AcquireRefCounted(const string_t &id)
 {
+	auto timer = vm.CreateTimer(StringAcquire);
+
 	assert(strings.contains(id));
 
 	StringType &str = strings.at(id);
@@ -183,10 +167,14 @@ void QCVMStringList::AcquireRefCounted(const string_t &id)
 	auto &ref = std::get<QCVMRefCountString>(str);
 
 	ref.ref_count++;
+	
+	PrintTraceExt(vm, "REFSTRING ACQUIRE %i (now %i)", id, ref.ref_count);
 }
 
 void QCVMStringList::ReleaseRefCounted(const string_t &id)
 {
+	auto timer = vm.CreateTimer(StringRelease);
+
 	assert(strings.contains(id));
 
 	StringType &str = strings.at(id);
@@ -198,9 +186,100 @@ void QCVMStringList::ReleaseRefCounted(const string_t &id)
 	assert(ref.ref_count);
 		
 	ref.ref_count--;
+	
+	PrintTraceExt(vm, "REFSTRING RELEASE %i (now %i)", id, ref.ref_count);
 
 	if (!ref.ref_count)
 		Unstore(id);
+}
+
+// mark a memory address as containing a reference to the specified string.
+// increases ref count by 1 and shoves it into the list.
+void QCVMStringList::MarkRefCopy(const string_t &id, const void *ptr)
+{
+	auto timer = vm.CreateTimer(StringMark);
+
+	if (ref_storage.contains(ptr))
+	{
+		CheckRefUnset(ptr, 1);
+
+		// it's *possible* for a seemingly no-op to occur in some cases
+		// (for instance, a call into function which copies PARM0 into locals+0, then
+		// copies locals+0 back into PARM0 for calling a function). because PARM0
+		// doesn't release its ref until its value changes, we treat this as a no-op.
+		// if we released every time the value changes (even to the same value it already
+		// had) this would effectively be the same behavior.
+		string_t current_id;
+
+		if (HasRef(ptr, current_id) && id == current_id)
+			return;
+	}
+
+	// increase ref count
+	AcquireRefCounted(id);
+
+	// mark
+	ref_storage.emplace(ptr, id);
+	
+	PrintTraceExt(vm, "REFSTRING MARK %i -> %x", id, ptr);
+}
+
+void QCVMStringList::CheckRefUnset(const void *ptr, const size_t &span)
+{
+	auto timer = vm.CreateTimer(StringCheckUnset);
+
+	for (size_t i = 0; i < span; i++)
+	{
+		auto gptr = reinterpret_cast<const global_t *>(ptr) + i;
+
+		if (!ref_storage.contains(gptr))
+			continue;
+
+		auto old = ref_storage.at(gptr);
+		auto newstr = *reinterpret_cast<const string_t *>(gptr);
+
+		// still here, so we probably just copied to ourselves or something
+		if (newstr == old)
+			continue;
+
+		// not here! release and unmark
+		ReleaseRefCounted(old);
+		PrintTraceExt(vm, "REFSTRING UNSET %i -> %x", old, gptr);
+		ref_storage.erase(gptr);
+	}
+}
+
+bool QCVMStringList::HasRef(const void *ptr, string_t &id)
+{
+	auto timer = vm.CreateTimer(StringHasRef);
+
+	if (ref_storage.contains(ptr))
+	{
+		id = ref_storage.at(ptr);
+		return true;
+	}
+
+	return false;
+}
+
+bool QCVMStringList::HasRef(const void *ptr, const size_t &span, std::unordered_map<string_t, size_t> &ids)
+{
+	auto timer = vm.CreateTimer(StringHasRef);
+
+	for (size_t i = 0; i < span; i++)
+	{
+		auto gptr = reinterpret_cast<const global_t *>(ptr) + i;
+
+		if (ref_storage.contains(gptr))
+			ids.emplace(ref_storage.at(gptr), i);
+	}
+
+	return ids.size();
+}
+
+bool QCVMStringList::IsRefCounted(const string_t &id)
+{
+	return strings.contains(id) && std::holds_alternative<QCVMRefCountString>(strings.at(id));
 }
 
 QCVMBuiltinList::QCVMBuiltinList(QCVM &invm) :
@@ -332,7 +411,7 @@ void QCVMBuiltinList::Register(const char *name, QCBuiltin builtin)
 {
 	func_t id = static_cast<func_t>(this->next_id);
 	this->next_id--;
-	this->builtins[id] = builtin;
+	this->builtins.emplace(id, builtin);
 
 	for (auto &func : vm.functions)
 	{
@@ -373,6 +452,7 @@ void QCVMFieldWrapList::Register(const char *field_name, const size_t &field_off
 }
 
 QCVM::QCVM() :
+	dynamic_strings(*this),
 	builtins(*this),
 	field_wraps(*this)
 {
@@ -382,6 +462,9 @@ std::string QCVM::StackEntry(const QCStack &stack)
 {
 	if (!linenumbers.size())
 		return "dunno:dunno";
+
+	if (!stack.function)
+		return "C code";
 
 	const char *func = GetString(stack.function->name_index);
 
@@ -424,10 +507,6 @@ void QCVM::Execute(QCFunction &function)
 	{
 		// get next statement
 		const QCStatement &statement = *(++state.current.statement);
-
-#ifdef STACK_TRACING
-		stack_pos = StackTrace();
-#endif
 
 #ifdef ALLOW_PROFILING
 		state.current.profile->fields[NumInstructions]++;
@@ -745,8 +824,7 @@ void QCVM::Execute(QCFunction &function)
 		case OP_STORE_FLD:		// integers
 		case OP_STORE_S:
 		case OP_STORE_FNC: {		// pointers
-			const int32_t &value = GetGlobal<int32_t>(operands[0]);
-			SetGlobal<int32_t>(operands[1], value);
+			CopyGlobal(operands[1], operands[0], 1);
 
 			if (operands[1] >= global_t::PARM0 && operands[1] < global_t::QC_OFS)
 				params_from[operands[1]] = operands[0];
@@ -755,8 +833,7 @@ void QCVM::Execute(QCFunction &function)
 				PrintTrace("STORE %s -> %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceGlobal(operands[1], OpcodeType(statement.opcode)).data());
 			break; }
 		case OP_STORE_V: {
-			const vec3_t &value = GetGlobal<vec3_t>(operands[0]);
-			SetGlobal<vec3_t>(operands[1], value);
+			CopyGlobal(operands[1], operands[0], 3);
 
 			if (operands[1] >= global_t::PARM0 && operands[1] < global_t::QC_OFS)
 				params_from[operands[1]] = operands[0];
@@ -770,7 +847,7 @@ void QCVM::Execute(QCFunction &function)
 		case OP_ADDRESS: {
 			auto &ent = *EntToEntity(GetGlobal<ent_t>(operands[0]), true);
 			auto field = GetGlobal<int32_t>(operands[1]);
-			SetGlobal<int32_t>(operands[2], EntityFieldAddress(ent, field));
+			SetGlobal(operands[2], EntityFieldAddress(ent, field));
 			if (enable_tracing)
 				PrintTrace("ADDRESS : %s %s -> %s", TraceGlobal(operands[0], TYPE_ENTITY).data(), TraceGlobal(operands[1], TYPE_FIELD).data(), TraceGlobal(operands[2], TYPE_POINTER).data());
 			break; }
@@ -785,29 +862,44 @@ void QCVM::Execute(QCFunction &function)
 			const auto &address = GetGlobal<int32_t>(operands[1]);
 			const auto &value = GetGlobal<int32_t>(operands[0]);
 
-			AddressToEntityField<uint32_t>(address) = value;
+			auto address_ptr = AddressToEntityField<uint32_t>(address);
+			*address_ptr = value;
+			dynamic_strings.CheckRefUnset(address_ptr, 1);
 				
 			auto &ent = AddressToEntity(address);
 			const auto &field = AddressToField(ent, address);
 			field_wraps.WrapField(ent, field, &value);
+
+			string_t str;
+
+			if (dynamic_strings.HasRef(&value, str))
+				dynamic_strings.MarkRefCopy(str, address_ptr);
 				
 			if (enable_tracing)
-				PrintTrace("STOREP %s -> %s %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceEntity(&ent).data(), TraceField(field).data());
+				PrintTrace("STOREP %s -> %s %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceEntity(&ent).data(), TraceField(field / sizeof(global_t)).data());
 			break; }
 		case OP_STOREP_V: {
 			const auto &address = GetGlobal<int32_t>(operands[1]);
 			const auto &value = GetGlobal<vec3_t>(operands[0]);
 
-			AddressToEntityField<vec3_t>(address) = value;
+			auto address_ptr = AddressToEntityField<vec3_t>(address);
+			*address_ptr = value;
+			dynamic_strings.CheckRefUnset(address_ptr, 3);
 
 			auto &ent = AddressToEntity(address);
 			const auto &field = AddressToField(ent, address);
 			field_wraps.WrapField(ent, field, &value[0]);
 			field_wraps.WrapField(ent, field + 4, &value[1]);
 			field_wraps.WrapField(ent, field + 8, &value[2]);
+
+			std::unordered_map<string_t, size_t> str;
+
+			if (dynamic_strings.HasRef(&value, 3, str))
+				for (auto &s : str)
+					dynamic_strings.MarkRefCopy(s.first, reinterpret_cast<global_t *>(address_ptr) + s.second);
 				
 			if (enable_tracing)
-				PrintTrace("STOREP %s -> %s %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceEntity(&ent).data(), TraceField(field).data());
+				PrintTrace("STOREP %s -> %s %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceEntity(&ent).data(), TraceField(field / sizeof(global_t)).data());
 			break; }
 				
 
@@ -818,13 +910,15 @@ void QCVM::Execute(QCFunction &function)
 		case OP_LOAD_S:
 		case OP_LOAD_FNC: {
 			auto &ent = *EntToEntity(GetGlobal<ent_t>(operands[0]), true);
-
-			if (&ent < globals.edicts)
-				__debugbreak();
-
 			auto &field_offset = GetGlobal<int32_t>(operands[1]);
 			auto &field_value = *reinterpret_cast<int32_t *>(reinterpret_cast<int32_t*>(&ent) + field_offset);
-			SetGlobal<int32_t>(operands[2], field_value);
+			SetGlobal(operands[2], field_value);
+
+			string_t str;
+
+			if (dynamic_strings.HasRef(&field_value, str))
+				dynamic_strings.MarkRefCopy(str, GetGlobalByIndex(operands[2]));
+
 			if (enable_tracing)
 				PrintTrace("LOAD : %s %s -> %s", TraceGlobal(operands[0], TYPE_ENTITY).data(), TraceGlobal(operands[1], TYPE_FIELD).data(), TraceGlobal(operands[2], OpcodeType(statement.opcode)).data());
 			break; }
@@ -832,7 +926,14 @@ void QCVM::Execute(QCFunction &function)
 			auto &ent = *EntToEntity(GetGlobal<ent_t>(operands[0]), true);
 			auto &field_offset = GetGlobal<int32_t>(operands[1]);
 			auto &field_value = *reinterpret_cast<vec3_t *>(reinterpret_cast<int32_t*>(&ent) + field_offset);
-			SetGlobal<vec3_t>(operands[2], field_value);
+			SetGlobal(operands[2], field_value);
+
+			std::unordered_map<string_t, size_t> str;
+
+			if (dynamic_strings.HasRef(&field_value, 3, str))
+				for (auto &s : str)
+					dynamic_strings.MarkRefCopy(s.first, GetGlobalByIndex(operands[2]) + s.second);
+
 			if (enable_tracing)
 				PrintTrace("LOAD : %s %s -> %s", TraceGlobal(operands[0], TYPE_ENTITY).data(), TraceGlobal(operands[1], TYPE_FIELD).data(), TraceGlobal(operands[2], OpcodeType(statement.opcode)).data());
 			break; }
@@ -920,8 +1021,7 @@ void QCVM::Execute(QCFunction &function)
 
 			if (operands[0].arg)
 			{
-				for (size_t i = 0; i < 3; i++)
-					SetGlobal<int32_t>(GlobalOffset(global_t::RETURN, i), GetGlobal<int32_t>(GlobalOffset(operands[0], i)));
+				CopyGlobal(global_t::RETURN, operands[0], 3);
 					
 				if (enable_tracing)
 					PrintTrace("RETURN %s", TraceGlobal(operands[0]).data());
@@ -940,7 +1040,7 @@ void QCVM::Execute(QCFunction &function)
 			Error("STATE is not a valid OP in Q2QC");
 			
 		case OP_GLOBALADDRESS:
-			SetGlobal<int32_t>(operands[2], reinterpret_cast<int32_t>(&GetGlobal<int32_t>(operands[0]) + GetGlobal<int32_t>(operands[1])));
+			SetGlobal(operands[2], reinterpret_cast<int32_t>(&GetGlobal<int32_t>(operands[0]) + GetGlobal<int32_t>(operands[1])));
 			break;
 
 		default:
@@ -1055,37 +1155,57 @@ void CheckVM()
 void ShutdownVM()
 {
 #ifdef ALLOW_PROFILING
-	std::filesystem::path progs_path(vas("%s/profile.csv", game_var->string).data());
-	std::filebuf fb;
-	fb.open(progs_path, std::ios::out);
-	std::ostream stream(&fb);
-
-	stream << "ID,Name,Total (ms),Self(ms),Funcs(ms)";
-	
-	for (auto pf : profile_type_names)
-		stream << "," << pf;
-	
-	stream << "\n";
-
-	for (size_t i = 0; i < qvm.profile_data.size(); i++)
 	{
-		auto &profile = qvm.profile_data[i];
-		auto &ff = qvm.functions[i];
-		const char *name = qvm.GetString(ff.name_index);
-		
-		auto total = std::chrono::duration<double, std::milli>(profile.total).count();
-		double self = total;
-		double func_call_time = std::chrono::duration<double, std::milli>(profile.call_into).count();
-		
-		if (func_call_time)
-			self -= func_call_time;
+		std::filesystem::path progs_path(vas("%s/profile.csv", game_var->string).data());
+		std::filebuf fb;
+		fb.open(progs_path, std::ios::out);
+		std::ostream stream(&fb);
 
-		stream << i << "," << name << "," << total << "," << self << "," << func_call_time;
-		
-		for (profile_type_t f = static_cast<profile_type_t>(0); f < TotalProfileFields; f = static_cast<profile_type_t>(static_cast<size_t>(f) + 1))
-			stream << "," << profile.fields[f];
-
+		stream << "ID,Name,Total (ms),Self(ms),Funcs(ms)";
+	
+		for (auto pf : profile_type_names)
+			stream << "," << pf;
+	
 		stream << "\n";
+
+		for (size_t i = 0; i < qvm.profile_data.size(); i++)
+		{
+			auto &profile = qvm.profile_data[i];
+			auto &ff = qvm.functions[i];
+			const char *name = qvm.GetString(ff.name_index);
+		
+			auto total = std::chrono::duration<double, std::milli>(profile.total).count();
+			double self = total;
+			double func_call_time = std::chrono::duration<double, std::milli>(profile.call_into).count();
+		
+			if (func_call_time)
+				self -= func_call_time;
+
+			stream << i << "," << name << "," << total << "," << self << "," << func_call_time;
+		
+			for (profile_type_t f = static_cast<profile_type_t>(0); f < TotalProfileFields; f = static_cast<profile_type_t>(static_cast<size_t>(f) + 1))
+				stream << "," << profile.fields[f];
+
+			stream << "\n";
+		}
+	}
+
+	{
+		std::filesystem::path progs_path(vas("%s/timers.csv", game_var->string).data());
+		std::filebuf fb;
+		fb.open(progs_path, std::ios::out);
+		std::ostream stream(&fb);
+
+		stream << "Name,Count,Total (ms)\n";
+
+		for (size_t i = 0; i < TotalTimerFields; i++)
+		{
+			auto &timer = qvm.timers[i];
+
+			auto total = std::chrono::duration<double, std::milli>(timer.time).count();
+
+			stream << timer_type_names[i] << "," << timer.count << "," << total << "\n";
+		}
 	}
 #endif
 }

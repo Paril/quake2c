@@ -224,7 +224,7 @@ static void QC_trace_result(QCVM &vm)
 	out.surface = static_cast<QC_csurface_t>(reinterpret_cast<int32_t>(trace_result.surface));
 	out.contents = trace_result.contents;
 	out.ent = vm.EntityToEnt(trace_result.ent);
-	vm.SetGlobal<QC_trace_t>(global_t::PARM0, out);
+	vm.SetGlobal(global_t::PARM0, out);
 }
 
 static void QC_pointcontents(QCVM &vm)
@@ -307,7 +307,7 @@ static void QC_BoxEdicts(QCVM &vm)
 
 	vm.Return(reinterpret_cast<int32_t>(edicts));
 
-	vm.SetGlobal<int32_t>(global_t::PARM4, edicts->size());
+	vm.SetGlobal(global_t::PARM4, edicts->size());
 }
 
 static void QC_FreeBoxEdicts(QCVM &vm)
@@ -361,7 +361,7 @@ static func_t QC_pm_pointcontents_func;
 static content_flags_t QC_pm_pointcontents(const vec3_t &position)
 {
 	auto func = qvm.FindFunction(QC_pm_pointcontents_func);
-	qvm.SetGlobal<vec3_t>(global_t::PARM0, position);
+	qvm.SetGlobal(global_t::PARM0, position);
 	qvm.Execute(*func);
 	return qvm.GetGlobal<content_flags_t>(global_t::RETURN);
 }
@@ -371,10 +371,10 @@ static func_t QC_pm_trace_func;
 static trace_t QC_pm_trace(const vec3_t &start, const vec3_t &mins, const vec3_t &maxs, const vec3_t &end)
 {
 	auto func = qvm.FindFunction(QC_pm_trace_func);
-	qvm.SetGlobal<vec3_t>(global_t::PARM0, start);
-	qvm.SetGlobal<vec3_t>(global_t::PARM1, mins);
-	qvm.SetGlobal<vec3_t>(global_t::PARM2, maxs);
-	qvm.SetGlobal<vec3_t>(global_t::PARM3, end);
+	qvm.SetGlobal(global_t::PARM0, start);
+	qvm.SetGlobal(global_t::PARM1, mins);
+	qvm.SetGlobal(global_t::PARM2, maxs);
+	qvm.SetGlobal(global_t::PARM3, end);
 	qvm.Execute(*func);
 
 	return trace_result;
@@ -444,7 +444,7 @@ static void QC_Pmove(QCVM &vm)
 		qc_pm.groundentity = vm.EntityToEnt(pm.groundentity);
 	qc_pm.watertype = pm.watertype;
 	qc_pm.waterlevel = pm.waterlevel;
-	vm.SetGlobal<QC_pmove_t>(pm_from, qc_pm);
+	vm.SetGlobal(pm_from, qc_pm);
 }
 
 static void QC_multicast(QCVM &vm)
@@ -529,7 +529,7 @@ static void QC_WriteAngle(QCVM &vm)
 static void QC_argv(QCVM &vm)
 {
 	const auto &n = vm.ArgvInt32(0);
-	vm.Return(vm.dynamic_strings.StoreStatic(va("%s", gi.argv(n))));
+	vm.Return(std::string(gi.argv(n)));
 }
 
 static void QC_argc(QCVM &vm)
@@ -539,7 +539,7 @@ static void QC_argc(QCVM &vm)
 
 static void QC_args(QCVM &vm)
 {
-	vm.Return(vm.dynamic_strings.StoreStatic(va("%s", gi.args())));
+	vm.Return(std::string(gi.args()));
 }
 
 static void QC_bprintf(QCVM &vm)

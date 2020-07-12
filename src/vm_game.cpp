@@ -18,6 +18,8 @@ static void QC_ClearEntity(QCVM &vm)
 
 	if (number > 0 && number <= game.clients.size())
 		entity->client = &game.clients[number - 1];
+
+	vm.dynamic_strings.CheckRefUnset(entity, sizeof(*entity) / sizeof(global_t));
 }
 
 static void QC_SyncPlayerState(QCVM &vm)
@@ -33,15 +35,18 @@ static void QC_SyncPlayerState(QCVM &vm)
 
 static inline void QC_parse_value_into_ptr(QCVM &vm, const deftype_t &type, const char *value, void *ptr)
 {
+	size_t data_span = 1;
+
 	switch (type)
 	{
 	case TYPE_STRING:
-		*reinterpret_cast<string_t *>(ptr) = vm.dynamic_strings.StoreRefCounted(value);
+		*reinterpret_cast<string_t *>(ptr) = vm.StoreOrFind(value);
 		break;
 	case TYPE_FLOAT:
 		*reinterpret_cast<vec_t *>(ptr) = strtof(value, nullptr);
 		break;
 	case TYPE_VECTOR:
+		data_span = 3;
 		sscanf(value, "%f %f %f", reinterpret_cast<vec_t *>(ptr), reinterpret_cast<vec_t *>(ptr) + 1, reinterpret_cast<vec_t *>(ptr) + 2);
 		break;
 	case TYPE_INTEGER:
@@ -50,6 +55,11 @@ static inline void QC_parse_value_into_ptr(QCVM &vm, const deftype_t &type, cons
 	default:
 		vm.Error("Couldn't parse field, bad type %i", type);
 	}
+	
+	vm.dynamic_strings.CheckRefUnset(ptr, data_span);
+
+	if (type == TYPE_STRING && vm.dynamic_strings.IsRefCounted(*reinterpret_cast<string_t *>(ptr)))
+		vm.dynamic_strings.MarkRefCopy(*reinterpret_cast<string_t *>(ptr), ptr);
 }
 
 static void QC_entity_key_parse(QCVM &vm)
