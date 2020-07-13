@@ -70,17 +70,12 @@ static void QC_entity_key_parse(QCVM &vm)
 
 	void *ptr = vm.GetEntityFieldPointer(*ent, field);
 
-	// FIXME: this should be constant time
-	for (auto &f : vm.fields)
-	{
-		if (f.global_index != field)
-			continue;
+	auto f = vm.field_map.find(field);
 
-		QC_parse_value_into_ptr(vm, f.id, value, ptr);
-		return;
-	}
+	if (f == vm.field_map.end())
+		vm.Error("Couldn't match field %i", field);
 
-	vm.Error("Couldn't match field %i", field);
+	QC_parse_value_into_ptr(vm, (*f).second->id, value, ptr);
 }
 
 static void QC_struct_key_parse(QCVM &vm)
@@ -89,34 +84,28 @@ static void QC_struct_key_parse(QCVM &vm)
 	const auto &key_name = vm.ArgvString(1);
 	const auto &value = vm.ArgvString(2);
 	
-	const size_t struct_len = strlen(struct_name);
-	const size_t key_len = strlen(key_name);
-	
-	// FIXME: this should be constant time
-	for (auto &g : vm.definitions)
+	auto full_name = vas("%s.%s", struct_name, key_name);
+	auto hashed = vm.string_hashes.find(full_name);
+
+	if (hashed == vm.string_hashes.end())
 	{
-		if (g.name_index == string_t::STRING_EMPTY)
-			continue;
-
-		const auto &name = vm.GetString(g.name_index);
-
-		if (Q_stricmpn(name, struct_name, struct_len))
-			continue;
-
-		if (name[struct_len] != '.')
-			continue;
-
-		if (Q_stricmpn(name + struct_len + 1, key_name, key_len))
-			continue;
-
-		// match!
-		auto global = vm.GetGlobalByIndex(static_cast<global_t>(g.global_index));
-		QC_parse_value_into_ptr(vm, static_cast<deftype_t>(g.id & ~TYPE_GLOBAL), value, global);
-		vm.Return(1);
+		vm.Return(0);
 		return;
 	}
 
-	vm.Return(0);
+	auto str = static_cast<string_t>((*hashed).data() - vm.string_data);
+	auto def = vm.definition_map.find(str);
+
+	if (def == vm.definition_map.end())
+	{
+		vm.Return(0);
+		return;
+	}
+
+	auto g = (*def).second;
+	auto global = vm.GetGlobalByIndex(static_cast<global_t>(g->global_index));
+	QC_parse_value_into_ptr(vm, static_cast<deftype_t>(g->id & ~TYPE_GLOBAL), value, global);
+	vm.Return(1);
 }
 
 static void QC_itoe(QCVM &vm)

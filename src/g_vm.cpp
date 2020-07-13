@@ -156,7 +156,7 @@ const char *QCVMStringList::Get(const string_t &id) const
 
 void QCVMStringList::AcquireRefCounted(const string_t &id)
 {
-	auto timer = vm.CreateTimer(StringAcquire);
+	__attribute__((unused)) auto timer = vm.CreateTimer(StringAcquire);
 
 	assert(strings.contains(id));
 
@@ -173,7 +173,7 @@ void QCVMStringList::AcquireRefCounted(const string_t &id)
 
 void QCVMStringList::ReleaseRefCounted(const string_t &id)
 {
-	auto timer = vm.CreateTimer(StringRelease);
+	__attribute__((unused)) auto timer = vm.CreateTimer(StringRelease);
 
 	assert(strings.contains(id));
 
@@ -197,7 +197,7 @@ void QCVMStringList::ReleaseRefCounted(const string_t &id)
 // increases ref count by 1 and shoves it into the list.
 void QCVMStringList::MarkRefCopy(const string_t &id, const void *ptr)
 {
-	auto timer = vm.CreateTimer(StringMark);
+	__attribute__((unused)) auto timer = vm.CreateTimer(StringMark);
 
 	if (ref_storage.contains(ptr))
 	{
@@ -226,7 +226,7 @@ void QCVMStringList::MarkRefCopy(const string_t &id, const void *ptr)
 
 void QCVMStringList::CheckRefUnset(const void *ptr, const size_t &span)
 {
-	auto timer = vm.CreateTimer(StringCheckUnset);
+	__attribute__((unused)) auto timer = vm.CreateTimer(StringCheckUnset);
 
 	for (size_t i = 0; i < span; i++)
 	{
@@ -251,7 +251,7 @@ void QCVMStringList::CheckRefUnset(const void *ptr, const size_t &span)
 
 bool QCVMStringList::HasRef(const void *ptr, string_t &id)
 {
-	auto timer = vm.CreateTimer(StringHasRef);
+	__attribute__((unused)) auto timer = vm.CreateTimer(StringHasRef);
 
 	if (ref_storage.contains(ptr))
 	{
@@ -262,19 +262,12 @@ bool QCVMStringList::HasRef(const void *ptr, string_t &id)
 	return false;
 }
 
-bool QCVMStringList::HasRef(const void *ptr, const size_t &span, std::unordered_map<string_t, size_t> &ids)
+void QCVMStringList::MarkIfHasRef(const void *src_ptr, const void *dst_ptr)
 {
-	auto timer = vm.CreateTimer(StringHasRef);
+	__attribute__((unused)) auto timer = vm.CreateTimer(StringMarkIfHasRef);
 
-	for (size_t i = 0; i < span; i++)
-	{
-		auto gptr = reinterpret_cast<const global_t *>(ptr) + i;
-
-		if (ref_storage.contains(gptr))
-			ids.emplace(ref_storage.at(gptr), i);
-	}
-
-	return ids.size();
+	if (ref_storage.contains(src_ptr))
+		MarkRefCopy(ref_storage.at(src_ptr), dst_ptr);
 }
 
 bool QCVMStringList::IsRefCounted(const string_t &id)
@@ -285,21 +278,6 @@ bool QCVMStringList::IsRefCounted(const string_t &id)
 QCVMBuiltinList::QCVMBuiltinList(QCVM &invm) :
 	vm(invm)
 {
-}
-
-void QCVMBuiltinList::SetFirstID(const int32_t &id)
-{
-	next_id = id;
-}
-
-bool QCVMBuiltinList::IsRegistered(const func_t &func)
-{
-	return builtins.contains(func);
-}
-
-QCBuiltin QCVMBuiltinList::Get(const func_t &func)
-{
-	return builtins.at(func);
 }
 
 #include <sstream>
@@ -476,7 +454,7 @@ std::string QCVM::StackEntry(const QCStack &stack)
 
 std::string QCVM::StackTrace()
 {
-	std::string str = StackEntry(state.current);
+	std::string str = StackEntry(*state.current);
 
 	for (auto it = state.stack.rbegin(); it != state.stack.rend(); it++)
 	{
@@ -506,7 +484,8 @@ void QCVM::Execute(QCFunction &function)
 	while (1)
 	{
 		// get next statement
-		const QCStatement &statement = *(++state.current.statement);
+		auto &current = *state.current;
+		const QCStatement &statement = *(++current.statement);
 
 #ifdef ALLOW_PROFILING
 		state.current.profile->fields[NumInstructions]++;
@@ -528,7 +507,7 @@ void QCVM::Execute(QCFunction &function)
 			statement.args[2]
 		};
 
-		if (enable_tracing && (state.current.statement - statements.data()) == 122641)
+		if (enable_tracing && (current.statement - statements.data()) == 122641)
 			__debugbreak();
 
 		switch (statement.opcode)
@@ -824,7 +803,7 @@ void QCVM::Execute(QCFunction &function)
 		case OP_STORE_FLD:		// integers
 		case OP_STORE_S:
 		case OP_STORE_FNC: {		// pointers
-			CopyGlobal(operands[1], operands[0], 1);
+			CopyGlobal(operands[1], operands[0]);
 
 			if (operands[1] >= global_t::PARM0 && operands[1] < global_t::QC_OFS)
 				params_from[operands[1]] = operands[0];
@@ -833,7 +812,7 @@ void QCVM::Execute(QCFunction &function)
 				PrintTrace("STORE %s -> %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceGlobal(operands[1], OpcodeType(statement.opcode)).data());
 			break; }
 		case OP_STORE_V: {
-			CopyGlobal(operands[1], operands[0], 3);
+			CopyGlobal<3>(operands[1], operands[0]);
 
 			if (operands[1] >= global_t::PARM0 && operands[1] < global_t::QC_OFS)
 				params_from[operands[1]] = operands[0];
@@ -870,10 +849,7 @@ void QCVM::Execute(QCFunction &function)
 			const auto &field = AddressToField(ent, address);
 			field_wraps.WrapField(ent, field, &value);
 
-			string_t str;
-
-			if (dynamic_strings.HasRef(&value, str))
-				dynamic_strings.MarkRefCopy(str, address_ptr);
+			dynamic_strings.MarkIfHasRef(&value, address_ptr);
 				
 			if (enable_tracing)
 				PrintTrace("STOREP %s -> %s %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceEntity(&ent).data(), TraceField(field / sizeof(global_t)).data());
@@ -892,11 +868,7 @@ void QCVM::Execute(QCFunction &function)
 			field_wraps.WrapField(ent, field + 4, &value[1]);
 			field_wraps.WrapField(ent, field + 8, &value[2]);
 
-			std::unordered_map<string_t, size_t> str;
-
-			if (dynamic_strings.HasRef(&value, 3, str))
-				for (auto &s : str)
-					dynamic_strings.MarkRefCopy(s.first, reinterpret_cast<global_t *>(address_ptr) + s.second);
+			dynamic_strings.MarkIfHasRef<3>(&value, address_ptr);
 				
 			if (enable_tracing)
 				PrintTrace("STOREP %s -> %s %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceEntity(&ent).data(), TraceField(field / sizeof(global_t)).data());
@@ -914,10 +886,7 @@ void QCVM::Execute(QCFunction &function)
 			auto &field_value = *reinterpret_cast<int32_t *>(reinterpret_cast<int32_t*>(&ent) + field_offset);
 			SetGlobal(operands[2], field_value);
 
-			string_t str;
-
-			if (dynamic_strings.HasRef(&field_value, str))
-				dynamic_strings.MarkRefCopy(str, GetGlobalByIndex(operands[2]));
+			dynamic_strings.MarkIfHasRef(&field_value, GetGlobalByIndex(operands[2]));
 
 			if (enable_tracing)
 				PrintTrace("LOAD : %s %s -> %s", TraceGlobal(operands[0], TYPE_ENTITY).data(), TraceGlobal(operands[1], TYPE_FIELD).data(), TraceGlobal(operands[2], OpcodeType(statement.opcode)).data());
@@ -928,11 +897,7 @@ void QCVM::Execute(QCFunction &function)
 			auto &field_value = *reinterpret_cast<vec3_t *>(reinterpret_cast<int32_t*>(&ent) + field_offset);
 			SetGlobal(operands[2], field_value);
 
-			std::unordered_map<string_t, size_t> str;
-
-			if (dynamic_strings.HasRef(&field_value, 3, str))
-				for (auto &s : str)
-					dynamic_strings.MarkRefCopy(s.first, GetGlobalByIndex(operands[2]) + s.second);
+			dynamic_strings.MarkIfHasRef<3>(&field_value, GetGlobalByIndex(operands[2]));
 
 			if (enable_tracing)
 				PrintTrace("LOAD : %s %s -> %s", TraceGlobal(operands[0], TYPE_ENTITY).data(), TraceGlobal(operands[1], TYPE_FIELD).data(), TraceGlobal(operands[2], OpcodeType(statement.opcode)).data());
@@ -942,9 +907,9 @@ void QCVM::Execute(QCFunction &function)
 		case OP_IFNOT:
 			if (!GetGlobal<int32_t>(operands[0]))
 			{
-				state.current.statement += static_cast<int16_t>(statement.args[1]) - 1;
+				current.statement += static_cast<int16_t>(statement.args[1]) - 1;
 #ifdef ALLOW_PROFILING
-				state.current.profile->fields[NumConditionalJumps]++;
+				current.profile->fields[NumConditionalJumps]++;
 #endif
 			}
 			if (enable_tracing)
@@ -954,9 +919,9 @@ void QCVM::Execute(QCFunction &function)
 		case OP_IF:
 			if (GetGlobal<int32_t>(operands[0]))
 			{
-				state.current.statement += static_cast<int16_t>(statement.args[1]) - 1;
+				current.statement += static_cast<int16_t>(statement.args[1]) - 1;
 #ifdef ALLOW_PROFILING
-				state.current.profile->fields[NumConditionalJumps]++;
+				current.profile->fields[NumConditionalJumps]++;
 #endif
 			}
 			if (enable_tracing)
@@ -964,10 +929,10 @@ void QCVM::Execute(QCFunction &function)
 			break;
 
 		case OP_GOTO:
-			state.current.statement += static_cast<int16_t>(statement.args[0]) - 1;
+			current.statement += static_cast<int16_t>(statement.args[0]) - 1;
 
 #ifdef ALLOW_PROFILING
-			state.current.profile->fields[NumUnconditionalJumps]++;
+			current.profile->fields[NumUnconditionalJumps]++;
 #endif
 
 			if (enable_tracing)
@@ -990,7 +955,7 @@ void QCVM::Execute(QCFunction &function)
 					Error("NULL function");
 
 #ifdef ALLOW_PROFILING
-				state.current.profile->fields[NumFuncCalls]++;
+				current.profile->fields[NumFuncCalls]++;
 #endif
 
 				QCFunction &call = functions[enter_func];
@@ -1016,13 +981,13 @@ void QCVM::Execute(QCFunction &function)
 		case OP_DONE:
 		case OP_RETURN:
 #ifdef ALLOW_PROFILING
-			state.current.profile->fields[NumConditionalJumps]++;
+			current.profile->fields[NumConditionalJumps]++;
 #endif
 
 			if (operands[0].arg)
 			{
-				CopyGlobal(global_t::RETURN, operands[0], 3);
-					
+				CopyGlobal<3>(global_t::RETURN, operands[0]);
+
 				if (enable_tracing)
 					PrintTrace("RETURN %s", TraceGlobal(operands[0]).data());
 			}
@@ -1077,6 +1042,23 @@ void InitVM()
 
 	stream.seekg(header.sections.string.offset);
 	stream.read(qvm.string_data, header.sections.string.size);
+	
+	// create immutable string map, for fast hash action
+	for (size_t i = 0; i < qvm.string_size; i++)
+	{
+		const char *s = qvm.string_data + i;
+
+		if (!*s)
+			continue;
+
+		auto view = std::string_view(s);
+		i += view.length();
+
+		if (qvm.string_hashes.contains(view))
+			continue;
+
+		qvm.string_hashes.emplace(std::move(view));
+	}
 
 	qvm.statements.resize(header.sections.statement.size);
 
@@ -1087,11 +1069,18 @@ void InitVM()
 
 	stream.seekg(header.sections.definition.offset);
 	stream.read(reinterpret_cast<char *>(qvm.definitions.data()), header.sections.definition.size * sizeof(QCDefinition));
+	
+	for (auto &definition : qvm.definitions)
+		if (definition.name_index != string_t::STRING_EMPTY)
+			qvm.definition_map.emplace(definition.name_index, &definition);
 
 	qvm.fields.resize(header.sections.field.size);
 
 	stream.seekg(header.sections.field.offset);
 	stream.read(reinterpret_cast<char *>(qvm.fields.data()), header.sections.field.size * sizeof(QCDefinition));
+
+	for (auto &field : qvm.fields)
+		qvm.field_map.emplace(field.global_index, &field);
 
 	qvm.functions.resize(header.sections.function.size);
 #ifdef ALLOW_PROFILING

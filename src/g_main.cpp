@@ -194,6 +194,82 @@ static void SpawnEntities(const char *mapname, const char *entities, const char 
 	qvm.Execute(*func);
 }
 
+static qboolean ClientConnect(edict_t *e, char *userinfo)
+{
+	auto func = qvm.FindFunction(qce.ClientConnect);
+	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
+	string_t str = qvm.SetGlobal(global_t::PARM1, std::string(userinfo));
+	qvm.dynamic_strings.AcquireRefCounted(str);
+	qvm.Execute(*func);
+
+	Q_strlcpy(userinfo, qvm.GetString(str), MAX_INFO_STRING);
+	qvm.dynamic_strings.ReleaseRefCounted(str);
+
+	return qvm.GetGlobal<qboolean>(global_t::RETURN);
+}
+
+static void ClientBegin(edict_t *e)
+{
+	auto func = qvm.FindFunction(qce.ClientBegin);
+	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
+	qvm.Execute(*func);
+}
+
+static void ClientUserinfoChanged(edict_t *e, char *userinfo)
+{
+	auto func = qvm.FindFunction(qce.ClientUserinfoChanged);
+	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
+	qvm.SetGlobal(global_t::PARM1, std::string(userinfo));
+	qvm.Execute(*func);
+}
+
+static void ClientDisconnect(edict_t *e)
+{
+	auto func = qvm.FindFunction(qce.ClientDisconnect);
+	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
+	qvm.Execute(*func);
+}
+
+static void ClientCommand(edict_t *e)
+{
+	auto func = qvm.FindFunction(qce.ClientCommand);
+	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
+	qvm.Execute(*func);
+}
+
+static void ClientThink(edict_t *e, usercmd_t *ucmd)
+{
+	auto func = qvm.FindFunction(qce.ClientThink);
+	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
+
+	QC_usercmd_t cmd = {
+		ucmd->msec,
+		ucmd->buttons,
+		{ ucmd->angles[0], ucmd->angles[1], ucmd->angles[2] },
+		ucmd->forwardmove,
+		ucmd->sidemove,
+		ucmd->upmove,
+		ucmd->impulse,
+		ucmd->lightlevel
+	};
+
+	qvm.SetGlobal(global_t::PARM1, cmd);
+
+	qvm.Execute(*func);
+}
+
+static void RunFrame()
+{
+	auto func = qvm.FindFunction(qce.RunFrame);
+	qvm.Execute(*func);
+}
+
+static void ServerCommand()
+{
+	auto func = qvm.FindFunction(qce.ServerCommand);
+	qvm.Execute(*func);
+}
+
 game_export_t globals = {
 	.apiversion = 3,
 
@@ -216,80 +292,16 @@ game_export_t globals = {
 	{
 	},
 	
-	.ClientConnect = [](edict_t *e, char *userinfo) -> qboolean
-	{
-		//qvm.EnableTrace();
-		auto func = qvm.FindFunction(qce.ClientConnect);
-		qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
-		string_t str = qvm.SetGlobal(global_t::PARM1, std::string(userinfo));
-		qvm.dynamic_strings.AcquireRefCounted(str);
-		qvm.Execute(*func);
+	.ClientConnect = ClientConnect,
+	.ClientBegin = ClientBegin,
+	.ClientUserinfoChanged = ClientUserinfoChanged,
+	.ClientDisconnect = ClientDisconnect,
+	.ClientCommand = ClientCommand,
+	.ClientThink = ClientThink,
 
-		Q_strlcpy(userinfo, qvm.GetString(str), MAX_INFO_STRING);
-		qvm.dynamic_strings.ReleaseRefCounted(str);
-		//qvm.PauseTrace();
+	.RunFrame = RunFrame,
 
-		return qvm.GetGlobal<qboolean>(global_t::RETURN);
-	},
-	.ClientBegin = [](edict_t *e)
-	{
-		//qvm.ResumeTrace();
-		auto func = qvm.FindFunction(qce.ClientBegin);
-		qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
-		qvm.Execute(*func);
-		//qvm.StopTrace();
-	},
-	.ClientUserinfoChanged = [](edict_t *e, char *userinfo)
-	{
-		auto func = qvm.FindFunction(qce.ClientUserinfoChanged);
-		qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
-		qvm.SetGlobal(global_t::PARM1, std::string(userinfo));
-		qvm.Execute(*func);
-	},
-	.ClientDisconnect = [](edict_t *e)
-	{
-		auto func = qvm.FindFunction(qce.ClientDisconnect);
-		qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
-		qvm.Execute(*func);
-	},
-	.ClientCommand = [](edict_t *e)
-	{
-		auto func = qvm.FindFunction(qce.ClientCommand);
-		qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
-		qvm.Execute(*func);
-	},
-	.ClientThink = [](edict_t *e, usercmd_t *ucmd)
-	{
-		auto func = qvm.FindFunction(qce.ClientThink);
-		qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
-
-		QC_usercmd_t cmd = {
-			ucmd->msec,
-			ucmd->buttons,
-			{ ucmd->angles[0], ucmd->angles[1], ucmd->angles[2] },
-			ucmd->forwardmove,
-			ucmd->sidemove,
-			ucmd->upmove,
-			ucmd->impulse,
-			ucmd->lightlevel
-		};
-
-		qvm.SetGlobal(global_t::PARM1, cmd);
-
-		qvm.Execute(*func);
-	},
-
-	.RunFrame = []()
-	{
-		auto func = qvm.FindFunction(qce.RunFrame);
-		qvm.Execute(*func);
-	},
-
-	.ServerCommand = []()
-	{
-		auto func = qvm.FindFunction(qce.ServerCommand);
-		qvm.Execute(*func);
-	}
+	.ServerCommand = ServerCommand
 };
 
 game_import_t gi;

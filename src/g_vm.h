@@ -222,6 +222,7 @@ enum profile_timer_type_t
 	StringMark,
 	StringCheckUnset,
 	StringHasRef,
+	StringMarkIfHasRef,
 
 	TotalTimerFields
 };
@@ -232,7 +233,8 @@ constexpr const char *timer_type_names[TotalTimerFields] =
 	"String Release",
 	"String Mark",
 	"String Check Unset",
-	"String HasRef"
+	"String HasRef",
+	"String MarkIfHasRef"
 };
 
 struct profile_timer_t
@@ -267,15 +269,17 @@ struct QCProfile
 };
 
 using profile_key = std::tuple<int, int>;
+#else
+#define CreateTimer(...) \
+		Timer_()
 #endif
 
 struct QCStack
 {
-	QCFunction								*function = nullptr;
-	const QCStatement						*statement = nullptr;
-	std::unordered_map<global_t, global_t>	locals;
-	std::vector<string_t>					ref_strings;
-	std::unordered_set<string_t>			parm_strings;
+	QCFunction									*function = nullptr;
+	const QCStatement							*statement = nullptr;
+	std::vector<std::tuple<global_t, global_t>>	locals;
+	std::vector<string_t>						ref_strings;
 
 #ifdef ALLOW_PROFILING
 	QCProfile				*profile;
@@ -347,7 +351,49 @@ public:
 
 	bool HasRef(const void *ptr, string_t &id);
 
-	bool HasRef(const void *ptr, const size_t &span, std::unordered_map<string_t, size_t> &ids);
+	inline bool HasRef(const void *ptr, const size_t &span, std::unordered_map<string_t, size_t> &ids)
+	{
+		for (size_t i = 0; i < span; i++)
+		{
+			string_t str;
+
+			if (HasRef(reinterpret_cast<const global_t *>(ptr) + i, str))
+				ids.emplace(str, i);
+		}
+
+		return ids.size();
+	}
+
+	template<size_t span>
+	bool HasRef(const void *ptr, std::unordered_map<string_t, size_t> &ids)
+	{
+		for (size_t i = 0; i < span; i++)
+		{
+			string_t str;
+
+			if (HasRef(reinterpret_cast<const global_t *>(ptr) + i, str))
+				ids.emplace(str, i);
+		}
+
+		return ids.size();
+	}
+
+	void MarkIfHasRef(const void *src_ptr, const void *dst_ptr);
+
+	template<size_t span>
+	void MarkIfHasRef(const void *src_ptr, const void *dst_ptr)
+	{
+		__attribute__((unused)) auto timer = vm.CreateTimer(StringMarkIfHasRef);
+
+		for (size_t i = 0; i < span; i++)
+		{
+			auto src_gptr = reinterpret_cast<const global_t *>(src_ptr) + i;
+			auto dst_gptr = reinterpret_cast<const global_t *>(dst_ptr) + i;
+
+			if (ref_storage.contains(src_gptr))
+				MarkRefCopy(ref_storage.at(src_gptr), dst_gptr);
+		}
+	}
 
 	bool IsRefCounted(const string_t &id);
 };
@@ -360,12 +406,22 @@ class QCVMBuiltinList
 
 public:
 	QCVMBuiltinList(struct QCVM &invm);
+	
+	inline void SetFirstID(const int32_t &id)
+	{
+		next_id = id;
+	}
 
-	void SetFirstID(const int32_t &id);
+	inline bool IsRegistered(const func_t &func, QCBuiltin &builtin) const
+	{
+		auto found = builtins.find(func);
 
-	bool IsRegistered(const func_t &func);
+		if (found == builtins.end())
+			return false;
 
-	QCBuiltin Get(const func_t &func);
+		builtin = (*found).second;
+		return true;
+	}
 
 	void Register(const char *name, QCBuiltin builtin);
 };
@@ -412,7 +468,9 @@ struct QCVM
 {
 	// loaded from progs.dat
 	std::vector<QCDefinition>					definitions;
+	std::unordered_map<string_t, QCDefinition*>	definition_map;
 	std::vector<QCDefinition>					fields;
+	std::unordered_map<uint16_t, QCDefinition*>	field_map;
 	std::vector<QCStatement>					statements;
 	std::vector<QCFunction>						functions;
 #ifdef ALLOW_PROFILING
@@ -422,6 +480,7 @@ struct QCVM
 	global_t									*global_data = nullptr;
 	char										*string_data = nullptr;
 	size_t										string_size;
+	std::unordered_set<std::string_view>		string_hashes;
 	QCVMStringList								dynamic_strings;
 	QCVMBuiltinList								builtins;
 	QCVMFieldWrapList							field_wraps;
@@ -631,9 +690,6 @@ struct QCVM
 #else
 	// no-op
 	constexpr nullptr_t Timer_() { return nullptr; }
-
-#define CreateTimer(...) \
-		Timer_()
 #endif
 
 	inline const global_t *GetGlobalByIndex(const global_t &g) const
@@ -689,7 +745,8 @@ struct QCVM
 	}
 
 	// safe way of copying globals between other globals
-	inline void CopyGlobal(const global_t &dst, const global_t &src, const size_t &count)
+	template<size_t count = 1>
+	inline void CopyGlobal(const global_t &dst, const global_t &src)
 	{
 		const auto src_ptr = GetGlobalByIndex(src);
 		auto dst_ptr = GetGlobalByIndex(dst);
@@ -699,11 +756,7 @@ struct QCVM
 
 		// if there were any ref strings in src, make sure they are
 		// reffed in dst too
-		std::unordered_map<string_t, size_t> ids;
-
-		if (dynamic_strings.HasRef(src_ptr, count, ids))
-			for (auto &s : ids)
-				dynamic_strings.MarkRefCopy(s.first, dst_ptr + s.second);
+		dynamic_strings.MarkIfHasRef<count>(src_ptr, dst_ptr);
 
 		if (enable_tracing)
 			PrintTrace("  CopyGlobal: %i:%u -> %i (%s)", src, count, dst, TraceGlobal(dst).data());
@@ -831,11 +884,10 @@ struct QCVM
 
 	inline string_t StoreOrFind(const std::string_view &value)
 	{
-		// TODO: hash dis
 		// check built-ins
-		for (const char *s = string_data; s < string_data + string_size; s += strlen(s) + 1)
-			if (value.compare(s) == 0)
-				return static_cast<string_t>(s - string_data);
+		auto builtin = string_hashes.find(value);
+		if (builtin != string_hashes.end())
+			return static_cast<string_t>((*builtin).data() - string_data);
 		
 		// check temp strings
 		for (auto &s : dynamic_strings.GetStrings())
@@ -849,28 +901,36 @@ struct QCVM
 		return dynamic_strings.StoreRefCounted(std::string(value));
 	}
 
-	struct {
-		std::deque<QCStack>			stack;
-		QCStack						current;
-		uint8_t						argc = 0;
+	struct QCVMState {
+		std::list<QCStack>				stack;
+		std::list<QCStack>::iterator	current;
+		uint8_t							argc = 0;
+
+		QCVMState()
+		{
+			stack.resize(16);
+			current = stack.begin();
+		}
 	} state;
 
 	inline void Enter(QCFunction &function)
 	{
+		auto &cur_stack = *state.current;
+
 		// save current stack space that will be overwritten by the new function
-		if (state.current.function && state.current.function->num_args_and_locals)
+		if (function.num_args_and_locals)
 		{
-			state.current.locals.reserve(function.num_args_and_locals);
+			cur_stack.locals.reserve(function.num_args_and_locals);
 
 			for (size_t i = 0, arg = static_cast<size_t>(function.first_arg); i < static_cast<size_t>(function.num_args_and_locals); i++, arg++)
 			{
-				state.current.locals[static_cast<global_t>(arg)] = GetGlobal<global_t>(static_cast<global_t>(arg));
+				cur_stack.locals.push_back(std::make_tuple(static_cast<global_t>(arg), GetGlobal<global_t>(static_cast<global_t>(arg))));
 
 				string_t str;
 
 				if (dynamic_strings.HasRef(GetGlobalByIndex(static_cast<global_t>(arg)), str))
 				{
-					state.current.ref_strings.push_back(str);
+					cur_stack.ref_strings.push_back(str);
 					dynamic_strings.AcquireRefCounted(str);
 				}
 			}
@@ -878,56 +938,51 @@ struct QCVM
 			PrintTrace("Backup locals %u -> %u", function.first_arg, static_cast<uint32_t>(function.first_arg) + function.num_args_and_locals);
 		}
 
-		state.stack.push_back(std::move(state.current));
+		auto &new_stack = *(++state.current);
 
 		// set up current stack
-		state.current.function = &function;
-		state.current.statement = &statements[function.id - 1];
+		new_stack.function = &function;
+		new_stack.statement = &statements[function.id - 1];
 
 		// copy parameters
 		for (size_t i = 0, arg_id = static_cast<size_t>(function.first_arg); i < static_cast<size_t>(function.num_args); i++)
 			for (size_t s = 0; s < function.arg_sizes[i]; s++, arg_id++)
-				CopyGlobal(static_cast<global_t>(arg_id), GlobalOffset(global_t::PARM0, (i * 3) + s), 1);
+				CopyGlobal(static_cast<global_t>(arg_id), GlobalOffset(global_t::PARM0, (i * 3) + s));
 
 #ifdef ALLOW_PROFILING
-		state.current.profile = &profile_data[&function - functions.data()];
-		state.current.profile->fields[NumSelfCalls]++;
-		state.current.start = perf_time();
+		new_stack.profile = &profile_data[&function - functions.data()];
+		new_stack.profile->fields[NumSelfCalls]++;
+		new_stack.start = perf_time();
 #endif
 	}
 
 	inline void Leave()
 	{
 		// restore stack
-		auto prev_stack = std::move(state.stack.back());
-		state.stack.pop_back();
+		auto &prev_stack = *(--state.current);
 
-		if (prev_stack.function)
+		if (prev_stack.locals.size())
 		{
-			auto &current_func = *state.current.function;
-
-			for (size_t i = 0, arg = static_cast<size_t>(current_func.first_arg); i < static_cast<size_t>(current_func.num_args_and_locals); i++, arg++)
-				SetGlobal(static_cast<global_t>(arg), prev_stack.locals[static_cast<global_t>(arg)]);
+			for (auto &local : prev_stack.locals)
+				SetGlobal(std::get<0>(local), std::get<1>(local));
 
 			for (auto &str : prev_stack.ref_strings)
 				dynamic_strings.ReleaseRefCounted(str);
 
 			prev_stack.ref_strings.clear();
+			prev_stack.locals.clear();
 
 			PrintTrace("Restore locals %u -> %u", current_func.first_arg, static_cast<uint32_t>(current_func.first_arg) + current_func.num_args_and_locals);
 		}
 		
 #ifdef ALLOW_PROFILING
-		auto time_spent = perf_time() - state.current.start;
-		state.current.profile->total += time_spent;
+		auto time_spent = perf_time() - current_stack.start;
+		current_stack.profile->total += time_spent;
 
 		// add time we spent in this function into the parent's call_into time
 		if (prev_stack.profile)
 			prev_stack.profile->call_into += time_spent;
 #endif
-
-		// copy it over
-		state.current = std::move(prev_stack);
 	}
 
 	inline QCFunction *FindFunction(const char *name)
@@ -1043,8 +1098,9 @@ struct QCVM
 	inline void CallBuiltin(QCFunction &function)
 	{
 		const func_t builtin = static_cast<func_t>(function.id);
+		QCBuiltin func;
 
-		if (!builtins.IsRegistered(builtin))
+		if (!builtins.IsRegistered(builtin, func))
 			Error("Bad builtin call number");
 
 #ifdef ALLOW_PROFILING
@@ -1053,7 +1109,7 @@ struct QCVM
 		auto start = perf_time();
 #endif
 
-		builtins.Get(builtin)(*this);
+		func(*this);
 
 #ifdef ALLOW_PROFILING
 		auto time_spent = perf_time() - start;

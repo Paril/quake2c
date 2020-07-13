@@ -141,6 +141,18 @@ static void QC_Info_SetValueForKey(QCVM &vm)
 	vm.Return(Info_SetValueForKey(const_cast<char *>(userinfo), key, value));
 }
 
+static void QC_localtime(QCVM &vm)
+{
+	static tm empty_ltime;
+	time_t gmtime = time(NULL);
+	const tm *ltime = localtime(&gmtime);
+
+	if (!ltime)
+		ltime = &empty_ltime;
+
+	vm.SetGlobal(global_t::PARM0, *ltime);
+}
+
 void InitStringBuiltins(QCVM &vm)
 {
 	RegisterBuiltin(va);
@@ -160,4 +172,6 @@ void InitStringBuiltins(QCVM &vm)
 
 	RegisterBuiltin(Info_ValueForKey);
 	RegisterBuiltin(Info_SetValueForKey);
+
+	RegisterBuiltin(localtime);
 }
