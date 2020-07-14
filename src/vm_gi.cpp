@@ -123,7 +123,7 @@ static void QC_configstring(QCVM &vm)
 	gi.configstring(id, str);
 }
 
-static void QC_error(QCVM &vm)
+[[noreturn]] static void QC_error(QCVM &vm)
 {
 	const auto &fmt = vm.ArgvString(0);
 	vm.Error(ParseFormat(fmt, vm, 1).data());
@@ -337,10 +337,11 @@ struct QC_pmove_t
 	// in
 	QC_usercmd_t	cmd;
 	bool			snapinitial;
+
+	int				ent_next, ent_prev;
 	
 	// out
-	int		numtouch;
-	ent_t	touchents[MAX_TOUCH];
+	ent_t	touch_head;
 	
 	vec3_t	viewangles;
 	float	viewheight;
@@ -427,10 +428,38 @@ static void QC_Pmove(QCVM &vm)
 	qc_pm.s.pm_time = pm.s.pm_time;
 	qc_pm.s.gravity = pm.s.gravity;
 
-	qc_pm.numtouch = pm.numtouch;
+	qc_pm.touch_head = ent_t::ENT_INVALID;
+
+	std::unordered_set<edict_t *>	touchents;
 
 	for (int32_t i = 0; i < pm.numtouch; i++)
-		qc_pm.touchents[i] = vm.EntityToEnt(pm.touchents[i]);
+		touchents.emplace(pm.touchents[i]);
+
+	edict_t *prev = nullptr;
+
+	for (auto it = touchents.begin(); it != touchents.end(); it++)
+	{
+		auto next = it;
+		next++;
+		
+		auto *cur_next = reinterpret_cast<ent_t *>(vm.GetEntityFieldPointer(*(*it), qc_pm.ent_next));
+		auto *cur_prev = reinterpret_cast<ent_t *>(vm.GetEntityFieldPointer(*(*it), qc_pm.ent_prev));
+
+		if (!prev)
+			*cur_prev = ent_t::ENT_INVALID;
+		else
+			*cur_prev = qvm.EntityToEnt(prev);
+
+		if (next == touchents.end())
+			*cur_next = ent_t::ENT_INVALID;
+		else
+			*cur_next = qvm.EntityToEnt(*next);
+
+		if (qc_pm.touch_head == ent_t::ENT_INVALID)
+			qc_pm.touch_head = qvm.EntityToEnt(*it);
+
+		prev = *it;
+	}
 
 	qc_pm.viewangles = pm.viewangles;
 	qc_pm.viewheight = pm.viewheight;

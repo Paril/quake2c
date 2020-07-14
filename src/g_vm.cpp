@@ -344,8 +344,6 @@ std::string ParseFormat(const char *format, QCVM &vm, const uint8_t &start)
 				state = ParseToken::Skip;
 				continue;
 			}
-
-			vm.Error("invalid format code detected: %x", *next);
 		}
 
 		if (state == ParseToken::Specifier)
