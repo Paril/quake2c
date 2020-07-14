@@ -126,7 +126,7 @@ static void QC_configstring(QCVM &vm)
 static void QC_error(QCVM &vm)
 {
 	const auto &fmt = vm.ArgvString(0);
-	gi.error("%s", ParseFormat(fmt, vm, 1).data());
+	vm.Error(ParseFormat(fmt, vm, 1).data());
 }
 
 static void QC_modelindex(QCVM &vm)
@@ -525,7 +525,6 @@ static void QC_WriteAngle(QCVM &vm)
 
 	gi.WriteAngle(val);
 }
-
 static void QC_argv(QCVM &vm)
 {
 	const auto &n = vm.ArgvInt32(0);
@@ -541,6 +540,12 @@ static void QC_args(QCVM &vm)
 {
 	vm.Return(std::string(gi.args()));
 }
+
+static void QC_AddCommandString(QCVM &vm)
+{
+	gi.AddCommandString(vm.ArgvString(0));
+}
+
 
 static void QC_bprintf(QCVM &vm)
 {
@@ -622,6 +627,8 @@ void InitGIBuiltins(QCVM &vm)
 	RegisterBuiltin(argv);
 	RegisterBuiltin(argc);
 	RegisterBuiltin(args);
+
+	RegisterBuiltin(AddCommandString);
 	
 	RegisterBuiltin(box_edicts_length);
 	RegisterBuiltin(box_edicts_get);

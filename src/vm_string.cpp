@@ -124,6 +124,24 @@ static void QC_strconcat(QCVM &vm)
 	vm.Return(str);
 }
 
+static void QC_strstr(QCVM &vm)
+{
+	const auto &a = vm.ArgvString(0);
+	const auto &b = vm.ArgvString(1);
+	const char *c = strstr(a, b);
+
+	vm.Return(c == nullptr ? -1 : (c - a));
+}
+
+static void QC_strchr(QCVM &vm)
+{
+	const auto &a = vm.ArgvString(0);
+	const auto &b = vm.ArgvInt32(1);
+	const char *c = strchr(a, b);
+	
+	vm.Return(c == nullptr ? -1 : (c - a));
+}
+
 static void QC_Info_ValueForKey(QCVM &vm)
 {
 	const auto &userinfo = vm.ArgvString(0);
@@ -169,6 +187,8 @@ void InitStringBuiltins(QCVM &vm)
 	RegisterBuiltin(substr);
 	RegisterBuiltin(strncmp);
 	RegisterBuiltin(strconcat);
+	RegisterBuiltin(strstr);
+	RegisterBuiltin(strchr);
 
 	RegisterBuiltin(Info_ValueForKey);
 	RegisterBuiltin(Info_SetValueForKey);

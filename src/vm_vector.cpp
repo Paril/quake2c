@@ -81,6 +81,32 @@ static void QC_VectorLength(QCVM &vm)
 	vm.Return(VectorLength(a));
 }
 
+static void AddPointToBounds(const vec3_t &v, vec3_t &mins, vec3_t &maxs)
+{
+	int        i;
+	vec_t    val;
+
+	for (i = 0; i < 3; i++)
+	{
+		val = v[i];
+		mins[i] = min(mins[i], val);
+		maxs[i] = max(maxs[i], val);
+	}
+}
+
+static void QC_AddPointToBounds(QCVM &vm)
+{
+	auto &v = vm.ArgvVector(0);
+	auto min = vm.ArgvVector(1);
+	auto max = vm.ArgvVector(2);
+
+	AddPointToBounds(v, min, max);
+	
+	vm.SetGlobal(global_t::PARM1, min);
+	vm.SetGlobal(global_t::PARM2, max);
+}
+
+
 void InitVectorBuiltins(QCVM &vm)
 {
 	RegisterBuiltin(AngleVectors);
@@ -88,4 +114,5 @@ void InitVectorBuiltins(QCVM &vm)
 	RegisterBuiltin(vectoangles);
 	RegisterBuiltin(CrossProduct);
 	RegisterBuiltin(VectorLength);
+	RegisterBuiltin(AddPointToBounds);
 }

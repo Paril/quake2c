@@ -129,6 +129,8 @@ is loaded.
 */
 static void InitGame ()
 {
+	Q_srand(time(NULL));
+
 	InitVM();
 
 	InitBuiltins();
