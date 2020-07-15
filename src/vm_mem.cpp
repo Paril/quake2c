@@ -27,101 +27,33 @@ static void QC_memcpy(QCVM &vm)
 		vm.dynamic_strings.MarkRefCopy(s.first, reinterpret_cast<global_t *>(dst_ptr) + s.second);
 }
 
-static void QC_memset(QCVM &vm)
+static void QC_memclear(QCVM &vm)
 {
 	const auto &dst = vm.ArgvInt32(0);
-	const auto &val = vm.ArgvInt32(1);
-	const auto &sz = vm.ArgvInt32(2);
-	
-	auto dst_ptr = vm.AddressToEntityField(dst);
-
-	memset(dst_ptr, val, sz);
-
-	vm.dynamic_strings.CheckRefUnset(dst_ptr, sz / sizeof(global_t));
-}
-
-static void QC_struct_copy_to(QCVM &vm)
-{
-	const auto &src = vm.ArgvInt32(0);
-	const auto &dst = vm.params_from.at(global_t::PARM1);
-	const auto &sz = vm.ArgvInt32(2);
-	
-	auto src_ptr = vm.AddressToEntityField(src);
-	auto dst_ptr = const_cast<uint8_t *>(&vm.GetGlobal<uint8_t>(dst));
-
-	memcpy(dst_ptr, src_ptr, sz);
-
-	// unref any strings that were in dst
-	vm.dynamic_strings.CheckRefUnset(dst_ptr, sz / sizeof(global_t));
-
-	// grab list of fields that have strings
-	std::unordered_map<string_t, size_t> ids;
-
-	if (!vm.dynamic_strings.HasRef(src_ptr, sz / sizeof(global_t), ids))
-		return;
-
-	// mark them as being inside of src as well now
-	for (auto &s : ids)
-		vm.dynamic_strings.MarkRefCopy(s.first, reinterpret_cast<global_t *>(dst_ptr) + s.second);
-}
-
-static void QC_struct_copy_from(QCVM &vm)
-{
-	const auto &src = vm.params_from.at(global_t::PARM0);
-	const auto &dst = vm.ArgvInt32(1);
-	const auto &sz = vm.ArgvInt32(2);
-	
-	auto src_ptr = &vm.GetGlobal<uint8_t>(src);
-	auto dst_ptr = vm.AddressToEntityField(dst);
-
-	memcpy(dst_ptr, src_ptr, sz);
-
-	vm.dynamic_strings.CheckRefUnset(dst_ptr, sz / sizeof(global_t));
-
-	// unref any strings that were in dst
-	vm.dynamic_strings.CheckRefUnset(dst_ptr, sz / sizeof(global_t));
-
-	// grab list of fields that have strings
-	std::unordered_map<string_t, size_t> ids;
-
-	if (!vm.dynamic_strings.HasRef(src_ptr, sz / sizeof(global_t), ids))
-		return;
-
-	// mark them as being inside of src as well now
-	for (auto &s : ids)
-		vm.dynamic_strings.MarkRefCopy(s.first, reinterpret_cast<global_t *>(dst_ptr) + s.second);
-}
-
-static void QC_struct_cmp_to(QCVM &vm)
-{
-	const auto &src = vm.ArgvInt32(0);
-	const auto &dst = vm.params_from.at(global_t::PARM1);
-	const auto &sz = vm.ArgvInt32(2);
-	
-	auto src_ptr = vm.AddressToEntityField(src);
-	auto dst_ptr = &vm.GetGlobal<uint8_t>(dst);
-
-	vm.Return(memcmp(dst_ptr, src_ptr, sz));
-}
-
-static void QC_struct_clear(QCVM &vm)
-{
-	const auto &dst = vm.params_from.at(global_t::PARM0);
 	const auto &sz = vm.ArgvInt32(1);
 	
-	auto dst_ptr = const_cast<uint8_t *>(&vm.GetGlobal<uint8_t>(dst));
+	auto dst_ptr = vm.AddressToEntityField(dst);
 
 	memset(dst_ptr, 0, sz);
 
 	vm.dynamic_strings.CheckRefUnset(dst_ptr, sz / sizeof(global_t));
 }
 
+static void QC_memcmp(QCVM &vm)
+{
+	const auto &src = vm.ArgvInt32(0);
+	const auto &dst = vm.ArgvInt32(1);
+	const auto &sz = vm.ArgvInt32(2);
+	
+	auto src_ptr = vm.AddressToEntityField(src);
+	auto dst_ptr = vm.AddressToEntityField(dst);
+
+	vm.Return(memcmp(dst_ptr, src_ptr, sz));
+}
+
 void InitMemBuiltins(QCVM &vm)
 {
 	RegisterBuiltin(memcpy);
-	RegisterBuiltin(memset);
-	RegisterBuiltin(struct_copy_to);
-	RegisterBuiltin(struct_copy_from);
-	RegisterBuiltin(struct_cmp_to);
-	RegisterBuiltin(struct_clear);
+	RegisterBuiltin(memclear);
+	RegisterBuiltin(memcmp);
 }

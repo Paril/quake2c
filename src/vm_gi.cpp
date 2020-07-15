@@ -215,7 +215,7 @@ static void QC_trace(QCVM &vm)
 
 static void QC_trace_result(QCVM &vm)
 {
-	QC_trace_t out;
+	auto &out = *vm.GetGlobalPtr<QC_trace_t>(global_t::PARM0);
 	out.allsolid = trace_result.allsolid;
 	out.startsolid = trace_result.startsolid;
 	out.fraction = trace_result.fraction;
@@ -224,7 +224,7 @@ static void QC_trace_result(QCVM &vm)
 	out.surface = static_cast<QC_csurface_t>(reinterpret_cast<int32_t>(trace_result.surface));
 	out.contents = trace_result.contents;
 	out.ent = vm.EntityToEnt(trace_result.ent);
-	vm.SetGlobal(global_t::PARM0, out);
+	vm.dynamic_strings.CheckRefUnset(vm.GetGlobalByIndex(global_t::PARM0), sizeof(QC_trace_t) / sizeof(global_t));
 }
 
 static void QC_pointcontents(QCVM &vm)
@@ -383,8 +383,7 @@ static trace_t QC_pm_trace(const vec3_t &start, const vec3_t &mins, const vec3_t
 
 static void QC_Pmove(QCVM &vm)
 {
-	auto pm_from = vm.params_from.at(global_t::PARM0);
-	auto qc_pm = vm.GetGlobal<QC_pmove_t>(pm_from);
+	auto &qc_pm = *vm.GetGlobalPtr<QC_pmove_t>(global_t::PARM0);
 
 	pmove_t pm;
 
@@ -473,7 +472,7 @@ static void QC_Pmove(QCVM &vm)
 		qc_pm.groundentity = vm.EntityToEnt(pm.groundentity);
 	qc_pm.watertype = pm.watertype;
 	qc_pm.waterlevel = pm.waterlevel;
-	vm.SetGlobal(pm_from, qc_pm);
+	vm.dynamic_strings.CheckRefUnset(&qc_pm, sizeof(qc_pm) / sizeof(global_t));
 }
 
 static void QC_multicast(QCVM &vm)

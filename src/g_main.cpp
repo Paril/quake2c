@@ -129,7 +129,7 @@ is loaded.
 */
 static void InitGame ()
 {
-	Q_srand(time(NULL));
+	Q_srand(static_cast<uint32_t>(time(NULL)));
 
 	InitVM();
 
@@ -215,6 +215,7 @@ static void ClientBegin(edict_t *e)
 	auto func = qvm.FindFunction(qce.ClientBegin);
 	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 	qvm.Execute(*func);
+	SyncPlayerState(qvm, e);
 }
 
 static void ClientUserinfoChanged(edict_t *e, char *userinfo)
@@ -223,6 +224,7 @@ static void ClientUserinfoChanged(edict_t *e, char *userinfo)
 	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 	qvm.SetGlobal(global_t::PARM1, std::string(userinfo));
 	qvm.Execute(*func);
+	SyncPlayerState(qvm, e);
 }
 
 static void ClientDisconnect(edict_t *e)
@@ -230,6 +232,7 @@ static void ClientDisconnect(edict_t *e)
 	auto func = qvm.FindFunction(qce.ClientDisconnect);
 	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 	qvm.Execute(*func);
+	SyncPlayerState(qvm, e);
 }
 
 static void ClientCommand(edict_t *e)
@@ -237,6 +240,7 @@ static void ClientCommand(edict_t *e)
 	auto func = qvm.FindFunction(qce.ClientCommand);
 	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 	qvm.Execute(*func);
+	SyncPlayerState(qvm, e);
 }
 
 static void ClientThink(edict_t *e, usercmd_t *ucmd)
@@ -258,12 +262,16 @@ static void ClientThink(edict_t *e, usercmd_t *ucmd)
 	qvm.SetGlobal(global_t::PARM1, cmd);
 
 	qvm.Execute(*func);
+	SyncPlayerState(qvm, e);
 }
 
 static void RunFrame()
 {
 	auto func = qvm.FindFunction(qce.RunFrame);
 	qvm.Execute(*func);
+
+	for (size_t i = 0; i < game.clients.size(); i++)
+		SyncPlayerState(qvm, &game.entity(1 + i));
 }
 
 static void ServerCommand()

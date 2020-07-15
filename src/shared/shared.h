@@ -64,7 +64,88 @@ enum : size_t
 };
 
 using vec_t = float;
-using vec3_t = std::array<vec_t, 3>;
+
+struct vec3_t : std::array<vec_t, 3>
+{
+	constexpr vec_t operator*(const vec3_t &r) const
+	{
+		return this->at(0) * r.at(0) + this->at(1) * r.at(1) + this->at(2) * r.at(2);
+	}
+
+	constexpr vec3_t operator+(const vec3_t &r) const
+	{
+		return {
+			this->at(0) + r.at(0),
+			this->at(1) + r.at(1),
+			this->at(2) + r.at(2)
+		};
+	}
+
+	constexpr vec3_t operator-(const vec3_t &r) const
+	{
+		return {
+			this->at(0) - r.at(0),
+			this->at(1) - r.at(1),
+			this->at(2) - r.at(2)
+		};
+	}
+
+	constexpr bool operator!() const
+	{
+		return !this->at(0) && !this->at(1) && !this->at(2);
+	}
+
+
+	template<typename TR>
+	constexpr vec3_t operator*(const TR &r) const
+	{
+		return {
+			this->at(0) * r,
+			this->at(1) * r,
+			this->at(2) * r 
+		};
+	}
+
+	template<typename TR>
+	constexpr vec3_t operator/(const TR &r) const
+	{
+		return {
+			this->at(0) / r,
+			this->at(1) / r,
+			this->at(2) / r 
+		};
+	}
+
+	constexpr vec3_t &operator*=(const vec_t &r)
+	{
+		*this = *this * r;
+		return *this;
+	}
+
+	constexpr vec3_t &operator/=(const vec_t &r)
+	{
+		*this = *this / r;
+		return *this;
+	}
+
+	constexpr vec3_t &operator+=(const vec3_t &r)
+	{
+		*this = *this + r;
+		return *this;
+	}
+
+	constexpr vec3_t &operator-=(const vec3_t &r)
+	{
+		*this = *this - r;
+		return *this;
+	}
+};
+
+template<typename TR>
+constexpr vec3_t operator*(const TR &l, const vec3_t &r)
+{
+	return r * l;
+}
 
 constexpr vec3_t vec3_origin { 0, 0, 0 };
 
@@ -80,7 +161,7 @@ constexpr vec_t RAD2DEG(const vec_t &a)
 
 constexpr vec_t DotProduct(const vec3_t &x, const vec3_t &y)
 {
-	return x[0] * y[0] + x[1] * y[1] + x[2] * y[2];
+	return x * y;
 }
 
 constexpr void CrossProduct(const vec3_t &v1, const vec3_t &v2, vec3_t &cross)

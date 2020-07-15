@@ -467,6 +467,704 @@ std::string QCVM::StackTrace()
 	return str;
 }
 
+struct operand
+{
+	uint16_t	arg;
+
+	inline operator global_t() const
+	{
+		return static_cast<global_t>(arg);
+	}
+};
+
+using OPCodeFunc = void(*)(QCVM &vm, const std::array<operand, 3> &operands, int &depth);
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_MUL(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = vm.GetGlobal<TRight>(operands[1]);
+
+	vm.SetGlobal<TResult>(operands[2], a * b);
+}
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_DIV(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = vm.GetGlobal<TRight>(operands[1]);
+
+	vm.SetGlobal<TResult>(operands[2], a / b);
+}
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_ADD(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = vm.GetGlobal<TRight>(operands[1]);
+
+	vm.SetGlobal<TResult>(operands[2], a + b);
+}
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_SUB(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = vm.GetGlobal<TRight>(operands[1]);
+
+	vm.SetGlobal<TResult>(operands[2], a - b);
+}
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_EQ(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = vm.GetGlobal<TRight>(operands[1]);
+
+	vm.SetGlobal<TResult>(operands[2], a == b);
+}
+
+template<>
+inline void F_OP_EQ<string_t, string_t, vec_t>(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<string_t>(operands[0]);
+	const auto &b = vm.GetGlobal<string_t>(operands[1]);
+
+	if (a == b)
+		vm.SetGlobal<vec_t>(operands[2], 1);
+	else
+		vm.SetGlobal<vec_t>(operands[2], !strcmp(vm.GetString(a), vm.GetString(b)));
+}
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_NE(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = vm.GetGlobal<TRight>(operands[1]);
+
+	vm.SetGlobal<TResult>(operands[2], a != b);
+}
+
+template<>
+inline void F_OP_NE<string_t, string_t, vec_t>(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<string_t>(operands[0]);
+	const auto &b = vm.GetGlobal<string_t>(operands[1]);
+
+	if (a == b)
+		vm.SetGlobal<vec_t>(operands[2], 0);
+	else
+		vm.SetGlobal<vec_t>(operands[2], !!strcmp(vm.GetString(a), vm.GetString(b)));
+}
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_LE(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = vm.GetGlobal<TRight>(operands[1]);
+
+	vm.SetGlobal<TResult>(operands[2], a <= b);
+}
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_GE(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = vm.GetGlobal<TRight>(operands[1]);
+
+	vm.SetGlobal<TResult>(operands[2], a >= b);
+}
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_LT(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = vm.GetGlobal<TRight>(operands[1]);
+
+	vm.SetGlobal<TResult>(operands[2], a < b);
+}
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_GT(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = vm.GetGlobal<TRight>(operands[1]);
+
+	vm.SetGlobal<TResult>(operands[2], a > b);
+}
+
+template<typename TType>
+inline void F_OP_LOAD(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	auto &ent = *vm.EntToEntity(vm.GetGlobal<ent_t>(operands[0]), true);
+	auto &field_offset = vm.GetGlobal<int32_t>(operands[1]);
+	auto &field_value = *reinterpret_cast<TType *>(reinterpret_cast<int32_t*>(&ent) + field_offset);
+	vm.SetGlobal(operands[2], field_value);
+
+	vm.dynamic_strings.MarkIfHasRef<sizeof(TType) / sizeof(global_t)>(&field_value, vm.GetGlobalByIndex(operands[2]));
+}
+
+inline void F_OP_ADDRESS(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	auto &ent = *vm.EntToEntity(vm.GetGlobal<ent_t>(operands[0]), true);
+	auto field = vm.GetGlobal<int32_t>(operands[1]);
+	vm.SetGlobal(operands[2], vm.EntityFieldAddress(ent, field));
+}
+
+template<typename TType>
+inline void F_OP_STORE(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	vm.CopyGlobal<TType>(operands[1], operands[0]);
+}
+
+template<typename TType, typename TResult>
+inline void F_OP_STORE(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	vm.CopyGlobal<TType, TResult>(operands[1], operands[0]);
+}
+
+template<typename TType, typename TResult = TType>
+inline void F_OP_STOREP(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &address = vm.GetGlobal<int32_t>(operands[1]);
+	const auto &value = vm.GetGlobal<TType>(operands[0]);
+
+	if (!vm.PointerValid(address, sizeof(TResult)))
+		vm.Error("invalid address");
+
+	constexpr size_t span = sizeof(TType) / sizeof(global_t);
+
+	auto address_ptr = reinterpret_cast<TResult *>(address);
+	*address_ptr = value;
+	vm.dynamic_strings.CheckRefUnset(address_ptr, span);
+				
+	auto &ent = vm.AddressToEntity(address);
+	const auto &field = vm.AddressToField(ent, address);
+
+	for (size_t i = 0; i < span; i++)
+		vm.field_wraps.WrapField(ent, field + (i * sizeof(global_t)), &value + i);
+
+	vm.dynamic_strings.MarkIfHasRef<span>(&value, address_ptr);
+}
+
+template<typename TType, typename TResult>
+inline void F_NOT(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<TType>(operands[0]);
+
+	vm.SetGlobal<TResult>(operands[2], !a);
+}
+
+template<>
+inline void F_NOT<string_t, vec_t>(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<string_t>(operands[0]);
+
+	vm.SetGlobal<vec_t>(operands[2], a == string_t::STRING_EMPTY || !*vm.GetString(a));
+}
+
+template<typename TType>
+inline void F_IF(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	if (vm.GetGlobal<TType>(operands[0]))
+	{
+		auto &current = *(vm.state.current);
+		current.statement += static_cast<int16_t>(current.statement->args[1]) - 1;
+	}
+}
+
+template<>
+inline void F_IF<string_t>(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &s = vm.GetGlobal<string_t>(operands[0]);
+
+	if (s != string_t::STRING_EMPTY && *vm.GetString(s))
+	{
+		auto &current = *(vm.state.current);
+		current.statement += static_cast<int16_t>(current.statement->args[1]) - 1;
+	}
+}
+
+template<typename TType>
+inline void F_IFNOT(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	if (!vm.GetGlobal<TType>(operands[0]))
+	{
+		auto &current = *(vm.state.current);
+		current.statement += static_cast<int16_t>(current.statement->args[1]) - 1;
+	}
+}
+
+template<>
+inline void F_IFNOT<string_t>(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &s = vm.GetGlobal<string_t>(operands[0]);
+
+	if (s == string_t::STRING_EMPTY || !*vm.GetString(s))
+	{
+		auto &current = *(vm.state.current);
+		current.statement += static_cast<int16_t>(current.statement->args[1]) - 1;
+	}
+}
+
+template<size_t argc, bool hexen>
+inline void F_CALL(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	if constexpr (argc >= 2 && hexen)
+		vm.CopyGlobal<std::array<global_t, 3>>(global_t::PARM1, operands[2]);
+
+	if constexpr (argc >= 1 && hexen)
+		vm.CopyGlobal<std::array<global_t, 3>>(global_t::PARM0, operands[1]);
+
+	const int32_t &enter_func = vm.GetGlobal<int32_t>(operands[0]);
+
+	vm.state.argc = argc;
+	if (!enter_func)
+		vm.Error("NULL function");
+
+#ifdef ALLOW_PROFILING
+	auto &current = *(vm.state.current);
+	current.profile->fields[NumFuncCalls]++;
+#endif
+
+	QCFunction &call = vm.functions[enter_func];
+
+	if (!call.id)
+		vm.Error("Tried to call missing function %s", vm.GetString(call.name_index));
+
+	if (call.id < 0)
+	{
+		// negative statements are built in functions
+		vm.CallBuiltin(call);
+		return;
+	}
+
+	depth++;
+	vm.Enter(call);
+}
+
+inline void F_GOTO(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	auto &current = *(vm.state.current);
+	current.statement += static_cast<int16_t>(current.statement->args[0]) - 1;
+}
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_AND(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = vm.GetGlobal<TRight>(operands[1]);
+
+	vm.SetGlobal<TResult>(operands[2], a && b);
+}
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_OR(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = vm.GetGlobal<TRight>(operands[1]);
+
+	vm.SetGlobal<TResult>(operands[2], a || b);
+}
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_BITAND(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = static_cast<int32_t>(vm.GetGlobal<TLeft>(operands[0]));
+	const auto &b = static_cast<int32_t>(vm.GetGlobal<TRight>(operands[1]));
+
+	vm.SetGlobal<TResult>(operands[2], a & b);
+}
+
+template<typename TLeft, typename TRight, typename TResult>
+inline void F_OP_BITOR(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = static_cast<int32_t>(vm.GetGlobal<TLeft>(operands[0]));
+	const auto &b = static_cast<int32_t>(vm.GetGlobal<TRight>(operands[1]));
+
+	vm.SetGlobal<TResult>(operands[2], a | b);
+}
+
+inline void F_OP_ITOF(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	vm.SetGlobal<vec_t>(operands[2], vm.GetGlobal<int32_t>(operands[0]));
+}
+
+inline void F_OP_FTOI(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	vm.SetGlobal<int32_t>(operands[2], vm.GetGlobal<vec_t>(operands[0]));
+}
+
+inline void F_OP_P_ITOF(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &address = vm.GetGlobal<int32_t>(operands[0]);
+
+	if (!vm.PointerValid(address))
+		vm.Error("invalid address");
+
+	vm.SetGlobal<vec_t>(operands[2], *reinterpret_cast<int32_t *>(address));
+}
+
+inline void F_OP_P_FTOI(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &address = vm.GetGlobal<int32_t>(operands[0]);
+
+	if (!vm.PointerValid(address))
+		vm.Error("invalid address");
+
+	vm.SetGlobal<int32_t>(operands[2], *reinterpret_cast<vec_t *>(address));
+}
+
+inline void F_OP_BITXOR(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<int32_t>(operands[0]);
+	const auto &b = vm.GetGlobal<int32_t>(operands[1]);
+
+	vm.SetGlobal<int32_t>(operands[2], a ^ b);
+}
+
+inline void F_OP_RSHIFT(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<int32_t>(operands[0]);
+	const auto &b = vm.GetGlobal<int32_t>(operands[1]);
+
+	vm.SetGlobal<int32_t>(operands[2], a >> b);
+}
+
+inline void F_OP_LSHIFT(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<int32_t>(operands[0]);
+	const auto &b = vm.GetGlobal<int32_t>(operands[1]);
+
+	vm.SetGlobal<int32_t>(operands[2], a << b);
+}
+
+inline void F_OP_GLOBALADDRESS(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	vm.SetGlobal(operands[2], reinterpret_cast<int32_t>(&vm.GetGlobal<int32_t>(operands[0]) + vm.GetGlobal<int32_t>(operands[1])));
+}
+
+inline void F_OP_ADD_PIW(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<int32_t>(operands[0]);
+	const auto &b = vm.GetGlobal<int32_t>(operands[1]);
+	const ptrdiff_t address = a + (b * sizeof(float));
+
+	vm.SetGlobal(operands[2], address);
+}
+
+template<typename TType>
+inline void F_OP_LOADA(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const ptrdiff_t address = operands[0].arg + vm.GetGlobal<int32_t>(operands[1]);
+			
+	if (!vm.PointerValid(reinterpret_cast<ptrdiff_t>(vm.global_data + address), sizeof(TType)))
+		vm.Error("Invalid pointer %x", address);
+
+	constexpr size_t span = sizeof(TType) / sizeof(global_t);
+			
+	auto &field_value = *reinterpret_cast<TType *>(vm.global_data + address);
+	vm.SetGlobal(operands[2], field_value);
+
+	vm.dynamic_strings.MarkIfHasRef<span>(&field_value, vm.GetGlobalByIndex(operands[2]));
+}
+
+template<typename TType>
+inline void F_OP_LOADP(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const ptrdiff_t address = vm.GetGlobal<int32_t>(operands[0]) + (vm.GetGlobal<int32_t>(operands[1]) * 4);
+
+	if (!vm.PointerValid(address, sizeof(TType)))
+		vm.Error("Invalid pointer %x", address);
+
+	constexpr size_t span = sizeof(TType) / sizeof(global_t);
+			
+	auto &field_value = *reinterpret_cast<TType *>(address);
+	vm.SetGlobal(operands[2], field_value);
+
+	vm.dynamic_strings.MarkIfHasRef<span>(&field_value, vm.GetGlobalByIndex(operands[2]));
+}
+
+inline void F_OP_BOUNDCHECK(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+#if _DEBUG
+	const auto &a = vm.GetGlobal<uint32_t>(operands[0]);
+	const auto &b = operands[1].arg;
+	const auto &c = operands[2].arg;
+
+	if (a < c || a >= b)
+		vm.Error("bounds check failed");
+#endif
+}
+
+template<typename TType, typename TMul>
+inline void F_OP_MULSTOREP(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &address = vm.GetGlobal<int32_t>(operands[1]);
+
+	if (!vm.PointerValid(address))
+		vm.Error("bad pointer");
+
+	TType *f = reinterpret_cast<TType *>(address);
+
+	const auto &a = vm.GetGlobal<TMul>(operands[0]);
+
+	vm.SetGlobal<TType>(operands[2], (*f) *= a);
+}
+
+template<typename TType, typename TMul>
+inline void F_OP_DIVSTOREP(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &address = vm.GetGlobal<int32_t>(operands[1]);
+
+	if (!vm.PointerValid(address))
+		vm.Error("bad pointer");
+
+	TType *f = reinterpret_cast<TType *>(address);
+
+	const auto &a = vm.GetGlobal<TMul>(operands[0]);
+
+	vm.SetGlobal<TType>(operands[2], (*f) /= a);
+}
+
+template<typename TType, typename TMul>
+inline void F_OP_SUBSTOREP(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &address = vm.GetGlobal<int32_t>(operands[1]);
+
+	if (!vm.PointerValid(address))
+		vm.Error("bad pointer");
+
+	TType *f = reinterpret_cast<TType *>(address);
+
+	const auto &a = vm.GetGlobal<TMul>(operands[0]);
+
+	vm.SetGlobal<TType>(operands[2], (*f) -= a);
+}
+
+template<typename TType, typename TMul>
+inline void F_OP_ADDSTOREP(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &address = vm.GetGlobal<int32_t>(operands[1]);
+
+	if (!vm.PointerValid(address))
+		vm.Error("bad pointer");
+
+	TType *f = reinterpret_cast<TType *>(address);
+
+	const auto &a = vm.GetGlobal<TMul>(operands[0]);
+
+	vm.SetGlobal<TType>(operands[2], (*f) += a);
+}
+
+static OPCodeFunc codeFuncs[] = {
+	[OP_DONE] = [](auto vm, auto operands, auto depth) { vm.Leave(); depth--; },
+
+	[OP_MUL_F] = F_OP_MUL<vec_t, vec_t, vec_t>,
+	[OP_MUL_V] = F_OP_MUL<vec3_t, vec3_t, vec_t>,
+	[OP_MUL_FV] = F_OP_MUL<vec_t, vec3_t, vec3_t>,
+	[OP_MUL_VF] = F_OP_MUL<vec3_t, vec_t, vec3_t>,
+	[OP_MUL_I] = F_OP_MUL<int32_t, int32_t, int32_t>,
+	[OP_MUL_IF] = F_OP_MUL<int32_t, vec_t, vec_t>,
+	[OP_MUL_FI] = F_OP_MUL<vec_t, int32_t, vec_t>,
+	[OP_MUL_VI] = F_OP_MUL<vec3_t, int32_t, vec3_t>,
+	[OP_MUL_IV] = F_OP_MUL<int32_t, vec3_t, vec3_t>,
+	
+	[OP_DIV_F] = F_OP_DIV<vec_t, vec_t, vec_t>,
+	[OP_DIV_I] = F_OP_DIV<int32_t, int32_t, int32_t>,
+	[OP_DIV_VF] = F_OP_DIV<vec3_t, vec_t, vec3_t>,
+	[OP_DIV_IF] = F_OP_DIV<int32_t, vec_t, vec_t>,
+	[OP_DIV_FI] = F_OP_DIV<vec_t, int32_t, vec_t>,
+	
+	[OP_ADD_F] = F_OP_ADD<vec_t, vec_t, vec_t>,
+	[OP_ADD_V] = F_OP_ADD<vec3_t, vec3_t, vec3_t>,
+	[OP_ADD_I] = F_OP_ADD<int32_t, int32_t, int32_t>,
+	[OP_ADD_FI] = F_OP_ADD<vec_t, int32_t, vec_t>,
+	[OP_ADD_IF] = F_OP_ADD<int32_t, vec_t, vec_t>,
+	
+	[OP_SUB_F] = F_OP_SUB<vec_t, vec_t, vec_t>,
+	[OP_SUB_V] = F_OP_SUB<vec3_t, vec3_t, vec3_t>,
+	[OP_SUB_I] = F_OP_SUB<int32_t, int32_t, int32_t>,
+	[OP_SUB_FI] = F_OP_SUB<vec_t, int32_t, vec_t>,
+	[OP_SUB_IF] = F_OP_SUB<int32_t, vec_t, vec_t>,
+	
+	[OP_EQ_F] = F_OP_EQ<vec_t, vec_t, vec_t>,
+	[OP_EQ_V] = F_OP_EQ<vec3_t, vec3_t, vec_t>,
+	[OP_EQ_S] = F_OP_EQ<string_t, string_t, vec_t>,
+	[OP_EQ_E] = F_OP_EQ<ent_t, ent_t, vec_t>,
+	[OP_EQ_FNC] = F_OP_EQ<func_t, func_t, vec_t>,
+	[OP_EQ_I] = F_OP_EQ<int32_t, int32_t, int32_t>,
+	[OP_EQ_IF] = F_OP_EQ<int32_t, vec_t, int32_t>,
+	[OP_EQ_FI] = F_OP_EQ<vec_t, int32_t, int32_t>,
+
+	[OP_NE_F] = F_OP_NE<vec_t, vec_t, vec_t>,
+	[OP_NE_V] = F_OP_NE<vec3_t, vec3_t, vec_t>,
+	[OP_NE_S] = F_OP_NE<string_t, string_t, vec_t>,
+	[OP_NE_E] = F_OP_NE<ent_t, ent_t, vec_t>,
+	[OP_NE_FNC] = F_OP_NE<func_t, func_t, vec_t>,
+	[OP_NE_I] = F_OP_NE<int32_t, int32_t, int32_t>,
+	[OP_NE_IF] = F_OP_NE<int32_t, vec_t, int32_t>,
+	[OP_NE_FI] = F_OP_NE<vec_t, int32_t, int32_t>,
+	
+	[OP_LE_F] = F_OP_LE<vec_t, vec_t, vec_t>,
+	[OP_LE_I] = F_OP_LE<int32_t, int32_t, int32_t>,
+	[OP_LE_IF] = F_OP_LE<int32_t, vec_t, int32_t>,
+	[OP_LE_FI] = F_OP_LE<vec_t, int32_t, int32_t>,
+	
+	[OP_GE_F] = F_OP_GE<vec_t, vec_t, vec_t>,
+	[OP_GE_I] = F_OP_GE<int32_t, int32_t, int32_t>,
+	[OP_GE_IF] = F_OP_GE<int32_t, vec_t, int32_t>,
+	[OP_GE_FI] = F_OP_GE<vec_t, int32_t, int32_t>,
+	
+	[OP_LT_F] = F_OP_LT<vec_t, vec_t, vec_t>,
+	[OP_LT_I] = F_OP_LT<int32_t, int32_t, int32_t>,
+	[OP_LT_IF] = F_OP_LT<int32_t, vec_t, int32_t>,
+	[OP_LT_FI] = F_OP_LT<vec_t, int32_t, int32_t>,
+	
+	[OP_GT_F] = F_OP_GT<vec_t, vec_t, vec_t>,
+	[OP_GT_I] = F_OP_GT<int32_t, int32_t, int32_t>,
+	[OP_GT_IF] = F_OP_GT<int32_t, vec_t, int32_t>,
+	[OP_GT_FI] = F_OP_GT<vec_t, int32_t, int32_t>,
+	
+	[OP_LOAD_F] = F_OP_LOAD<int32_t>,
+	[OP_LOAD_V] = F_OP_LOAD<vec3_t>,
+	[OP_LOAD_S] = F_OP_LOAD<string_t>,
+	[OP_LOAD_ENT] = F_OP_LOAD<ent_t>,
+	[OP_LOAD_FLD] = F_OP_LOAD<int32_t>,
+	[OP_LOAD_FNC] = F_OP_LOAD<func_t>,
+	[OP_LOAD_I] = F_OP_LOAD<int32_t>,
+	[OP_LOAD_P] = F_OP_LOAD<int32_t>,
+
+	[OP_ADDRESS] = F_OP_ADDRESS,
+	
+	[OP_STORE_F] = F_OP_STORE<int32_t>,
+	[OP_STORE_V] = F_OP_STORE<vec3_t>,
+	[OP_STORE_S] = F_OP_STORE<string_t>,
+	[OP_STORE_ENT] = F_OP_STORE<ent_t>,
+	[OP_STORE_FLD] = F_OP_STORE<int32_t>,
+	[OP_STORE_FNC] = F_OP_STORE<func_t>,
+	[OP_STORE_I] = F_OP_STORE<int32_t>,
+	[OP_STORE_IF] = F_OP_STORE<int32_t, vec_t>,
+	[OP_STORE_FI] = F_OP_STORE<vec_t, int32_t>,
+	[OP_STORE_P] = F_OP_STORE<int32_t>,
+	
+	[OP_STOREP_F] = F_OP_STOREP<vec_t>,
+	[OP_STOREP_V] = F_OP_STOREP<vec3_t>,
+	[OP_STOREP_S] = F_OP_STOREP<string_t>,
+	[OP_STOREP_ENT] = F_OP_STOREP<ent_t>,
+	[OP_STOREP_FLD] = F_OP_STOREP<int32_t>,
+	[OP_STOREP_FNC] = F_OP_STOREP<func_t>,
+	[OP_STOREP_I] = F_OP_STOREP<int32_t>,
+	[OP_STOREP_IF] = F_OP_STOREP<int32_t, vec_t>,
+	[OP_STOREP_FI] = F_OP_STOREP<vec_t, int32_t>,
+
+	[OP_RETURN] = [](auto vm, auto operands, auto depth)
+	{
+		if (operands[0].arg)
+			vm.template CopyGlobal<std::array<global_t, 3>>(global_t::RETURN, operands[0]);
+
+		vm.Leave();
+		depth--;
+	},
+		
+	[OP_MULSTOREP_F] = F_OP_MULSTOREP<vec_t, vec_t>,
+	[OP_MULSTOREP_VF] = F_OP_MULSTOREP<vec3_t, vec_t>,
+		
+	[OP_DIVSTOREP_F] = F_OP_DIVSTOREP<vec_t, vec_t>,
+		
+	[OP_ADDSTOREP_F] = F_OP_ADDSTOREP<vec_t, vec_t>,
+	[OP_ADDSTOREP_V] = F_OP_ADDSTOREP<vec3_t, vec3_t>,
+		
+	[OP_SUBSTOREP_F] = F_OP_SUBSTOREP<vec_t, vec_t>,
+	[OP_SUBSTOREP_V] = F_OP_SUBSTOREP<vec3_t, vec3_t>,
+		
+	[OP_NOT_F] = F_NOT<vec_t, vec_t>,
+	[OP_NOT_V] = F_NOT<vec3_t, vec_t>,
+	[OP_NOT_S] = F_NOT<string_t, vec_t>,
+	[OP_NOT_FNC] = F_NOT</*func_t*/int32_t, vec_t>,
+	[OP_NOT_ENT] = F_NOT</*ent_t*/int32_t, vec_t>,
+	[OP_NOT_I] = F_NOT<int32_t, int32_t>,
+		
+	[OP_IF_I] = F_IF<int32_t>,
+	[OP_IF_S] = F_IF<string_t>,
+	[OP_IF_F] = F_IF<vec_t>,
+		
+	[OP_IFNOT_I] = F_IFNOT<int32_t>,
+	[OP_IFNOT_S] = F_IFNOT<string_t>,
+	[OP_IFNOT_F] = F_IFNOT<vec_t>,
+		
+	[OP_CALL0] = F_CALL<0, false>,
+	[OP_CALL1] = F_CALL<1, false>,
+	[OP_CALL2] = F_CALL<2, false>,
+	[OP_CALL3] = F_CALL<3, false>,
+	[OP_CALL4] = F_CALL<4, false>,
+	[OP_CALL5] = F_CALL<5, false>,
+	[OP_CALL6] = F_CALL<6, false>,
+	[OP_CALL7] = F_CALL<7, false>,
+	[OP_CALL8] = F_CALL<8, false>,
+		
+	[OP_CALL1H] = F_CALL<1, true>,
+	[OP_CALL2H] = F_CALL<2, true>,
+	[OP_CALL3H] = F_CALL<3, true>,
+	[OP_CALL4H] = F_CALL<4, true>,
+	[OP_CALL5H] = F_CALL<5, true>,
+	[OP_CALL6H] = F_CALL<6, true>,
+	[OP_CALL7H] = F_CALL<7, true>,
+	[OP_CALL8H] = F_CALL<8, true>,
+
+	[OP_GOTO] = F_GOTO,
+		
+	[OP_AND_F] = F_OP_AND<vec_t, vec_t, vec_t>,
+	[OP_AND_I] = F_OP_AND<int32_t, int32_t, int32_t>,
+	[OP_AND_IF] = F_OP_AND<int32_t, vec_t, int32_t>,
+	[OP_AND_FI] = F_OP_AND<vec_t, int32_t, int32_t>,
+		
+	[OP_OR_F] = F_OP_OR<vec_t, vec_t, vec_t>,
+	[OP_OR_I] = F_OP_OR<int32_t, int32_t, int32_t>,
+	[OP_OR_IF] = F_OP_OR<int32_t, vec_t, int32_t>,
+	[OP_OR_FI] = F_OP_OR<vec_t, int32_t, int32_t>,
+		
+	[OP_BITAND_F] = F_OP_BITAND<vec_t, vec_t, vec_t>,
+	[OP_BITAND_I] = F_OP_BITAND<int32_t, int32_t, int32_t>,
+	[OP_BITAND_IF] = F_OP_BITAND<int32_t, vec_t, int32_t>,
+	[OP_BITAND_FI] = F_OP_BITAND<vec_t, int32_t, int32_t>,
+		
+	[OP_BITOR_F] = F_OP_BITOR<vec_t, vec_t, vec_t>,
+	[OP_BITOR_I] = F_OP_BITOR<int32_t, int32_t, int32_t>,
+	[OP_BITOR_IF] = F_OP_BITOR<int32_t, vec_t, int32_t>,
+	[OP_BITOR_FI] = F_OP_BITOR<vec_t, int32_t, int32_t>,
+		
+	[OP_CONV_ITOF] = F_OP_ITOF,
+	[OP_CONV_FTOI] = F_OP_FTOI,
+	[OP_CP_ITOF] = F_OP_P_ITOF,
+	[OP_CP_FTOI] = F_OP_P_FTOI,
+		
+	[OP_BITXOR_I] = F_OP_BITXOR,
+	[OP_RSHIFT_I] = F_OP_RSHIFT,
+	[OP_LSHIFT_I] = F_OP_LSHIFT,
+
+	[OP_GLOBALADDRESS] = F_OP_GLOBALADDRESS,
+	[OP_ADD_PIW] = F_OP_ADD_PIW,
+		
+	[OP_LOADA_F] = F_OP_LOADA<vec_t>,
+	[OP_LOADA_V] = F_OP_LOADA<vec3_t>,
+	[OP_LOADA_S] = F_OP_LOADA<string_t>,
+	[OP_LOADA_ENT] = F_OP_LOADA<ent_t>,
+	[OP_LOADA_FLD] = F_OP_LOADA<int32_t>,
+	[OP_LOADA_FNC] = F_OP_LOADA<func_t>,
+	[OP_LOADA_I] = F_OP_LOADA<int32_t>,
+		
+	[OP_LOADP_F] = F_OP_LOADP<vec_t>,
+	[OP_LOADP_V] = F_OP_LOADP<vec3_t>,
+	[OP_LOADP_S] = F_OP_LOADP<string_t>,
+	[OP_LOADP_ENT] = F_OP_LOADP<ent_t>,
+	[OP_LOADP_FLD] = F_OP_LOADP<int32_t>,
+	[OP_LOADP_FNC] = F_OP_LOADP<func_t>,
+	[OP_LOADP_I] = F_OP_LOADP<int32_t>,
+
+	[OP_BOUNDCHECK] = F_OP_BOUNDCHECK
+};
+
 void QCVM::Execute(QCFunction &function)
 {
 	if (function.id < 0)
@@ -484,20 +1182,11 @@ void QCVM::Execute(QCFunction &function)
 		// get next statement
 		auto &current = *state.current;
 		const QCStatement &statement = *(++current.statement);
+		__attribute__((unused)) auto timer = CreateOpcodeTimer(statement.opcode);
 
 #ifdef ALLOW_PROFILING
-		state.current.profile->fields[NumInstructions]++;
+		(*state.current).profile->fields[NumInstructions]++;
 #endif
-
-		struct operand
-		{
-			uint16_t	arg;
-
-			inline operator global_t() const
-			{
-				return static_cast<global_t>(arg);
-			}
-		};
 
 		const std::array<operand, 3> operands = {
 			statement.args[0],
@@ -505,510 +1194,18 @@ void QCVM::Execute(QCFunction &function)
 			statement.args[2]
 		};
 
-		if (enable_tracing && (current.statement - statements.data()) == 122641)
-			__debugbreak();
+		if (statement.opcode > std::extent_v<decltype(codeFuncs)>)
+			Error("unsupported opcode %i", statement.opcode);
 
-		switch (statement.opcode)
-		{
-		case OP_ADD_F: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
+		auto func = codeFuncs[statement.opcode];
 
-			SetGlobal(operands[2], a + b);
+		if (!func)
+			Error("unsupported opcode %i", statement.opcode);
 
-			if (enable_tracing)
-				PrintTrace("ADD_F %s + %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_ADD_V: {
-			vec3_t out;
-			const auto &a = GetGlobal<vec3_t>(operands[0]);
-			const auto &b = GetGlobal<vec3_t>(operands[1]);
+		func(*this, operands, enter_depth);
 
-			for (size_t i = 0; i < out.size(); i++)
-				out.at(i) = a.at(i) + b.at(i);
-
-			SetGlobal(operands[2], out);
-				
-			if (enable_tracing)
-				PrintTrace("ADD_V %s + %s = %s", TraceGlobal(operands[0], TYPE_VECTOR).data(), TraceGlobal(operands[1], TYPE_VECTOR).data(), TraceGlobal(operands[2], TYPE_VECTOR).data());
-			break; }
-
-		case OP_SUB_F: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-				
-			SetGlobal(operands[2], a - b);
-				
-			if (enable_tracing)
-				PrintTrace("SUB_F %s - %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_SUB_V: {
-			vec3_t out;
-			const auto &a = GetGlobal<vec3_t>(operands[0]);
-			const auto &b = GetGlobal<vec3_t>(operands[1]);
-
-			for (size_t i = 0; i < out.size(); i++)
-				out.at(i) = a.at(i) - b.at(i);
-
-			SetGlobal(operands[2], out);
-				
-			if (enable_tracing)
-				PrintTrace("SUB_V %s - %s = %s", TraceGlobal(operands[0], TYPE_VECTOR).data(), TraceGlobal(operands[1], TYPE_VECTOR).data(), TraceGlobal(operands[2], TYPE_VECTOR).data());
-			break; }
-
-		case OP_MUL_F: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-
-			SetGlobal(operands[2], a * b);
-				
-			if (enable_tracing)
-				PrintTrace("MUL_F %s * %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_MUL_V: {
-			const auto &a = GetGlobal<vec3_t>(operands[0]);
-			const auto &b = GetGlobal<vec3_t>(operands[1]);
-
-			SetGlobal(operands[2], DotProduct(a, b));
-				
-			if (enable_tracing)
-				PrintTrace("MUL_V %s * %s = %s", TraceGlobal(operands[0], TYPE_VECTOR).data(), TraceGlobal(operands[1], TYPE_VECTOR).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-
-		case OP_MUL_FV: {
-			vec3_t out;
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec3_t>(operands[1]);
-
-			for (size_t i = 0; i < out.size(); i++)
-				out.at(i) = b.at(i) * a;
-
-			SetGlobal(operands[2], out);
-				
-			if (enable_tracing)
-				PrintTrace("MUL_FV %s * %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_VECTOR).data(), TraceGlobal(operands[2], TYPE_VECTOR).data());
-			break; }
-		case OP_MUL_VF: {
-			vec3_t out;
-			const auto &a = GetGlobal<vec3_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-
-			for (size_t i = 0; i < out.size(); i++)
-				out.at(i) = a.at(i) * b;
-
-			SetGlobal(operands[2], out);
-				
-			if (enable_tracing)
-				PrintTrace("MUL_VF %s * %s = %s", TraceGlobal(operands[0], TYPE_VECTOR).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_VECTOR).data());
-			break; }
-
-		case OP_DIV_F: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-
-			SetGlobal(operands[2], a / b);
-				
-			if (enable_tracing)
-				PrintTrace("DIV_F %s / %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-
-		case OP_BITAND: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-
-			SetGlobal<vec_t>(operands[2], static_cast<int32_t>(a) & static_cast<int32_t>(b));
-				
-			if (enable_tracing)
-				PrintTrace("BITAND %s & %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_BITOR: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-
-			SetGlobal<vec_t>(operands[2], static_cast<int32_t>(a) | static_cast<int32_t>(b));
-				
-			if (enable_tracing)
-				PrintTrace("BITOR %s | %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-				
-		case OP_GE: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-
-			SetGlobal<vec_t>(operands[2], a >= b);
-				
-			if (enable_tracing)
-				PrintTrace("GE %s >= %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_LE: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-
-			SetGlobal<vec_t>(operands[2], a <= b);
-				
-			if (enable_tracing)
-				PrintTrace("LE %s <= %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_GT: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-
-			SetGlobal<vec_t>(operands[2], a > b);
-				
-			if (enable_tracing)
-				PrintTrace("GT %s > %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_LT: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-
-			SetGlobal<vec_t>(operands[2], a < b);
-				
-			if (enable_tracing)
-				PrintTrace("LT %s < %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_AND: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-
-			SetGlobal<vec_t>(operands[2], a && b);
-				
-			if (enable_tracing)
-				PrintTrace("AND %s && %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_OR: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-
-			SetGlobal<vec_t>(operands[2], a || b);
-				
-			if (enable_tracing)
-				PrintTrace("OR %s || %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		
-		case OP_NOT_F: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-
-			SetGlobal<vec_t>(operands[2], !a);
-
-			if (enable_tracing)
-				PrintTrace("NOT_F !%s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_NOT_V: {
-			const auto &a = GetGlobal<vec3_t>(operands[0]);
-
-			SetGlobal<vec_t>(operands[2], a == vec3_origin);
-				
-			if (enable_tracing)
-				PrintTrace("NOT_V !%s = %s", TraceGlobal(operands[0], TYPE_VECTOR).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_NOT_S: {
-			const auto &a = GetGlobal<string_t>(operands[0]);
-
-			SetGlobal<vec_t>(operands[2], a == string_t::STRING_EMPTY || !*GetString(a));
-				
-			if (enable_tracing)
-				PrintTrace("NOT_S !%s = %s", TraceGlobal(operands[0], TYPE_STRING).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_NOT_ENT:
-		case OP_NOT_FNC: {
-			const auto &a = GetGlobal<int32_t>(operands[0]);
-
-			SetGlobal<vec_t>(operands[2], a == 0);
-				
-			if (enable_tracing)
-				PrintTrace("NOT !%s = %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-
-		case OP_EQ_F: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-
-			SetGlobal<vec_t>(operands[2], a == b);
-				
-			if (enable_tracing)
-				PrintTrace("EQ_F %s == %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_EQ_V: {
-			const auto &a = GetGlobal<vec3_t>(operands[0]);
-			const auto &b = GetGlobal<vec3_t>(operands[1]);
-				
-			SetGlobal<vec_t>(operands[2], a == b);
-				
-			if (enable_tracing)
-				PrintTrace("EQ_V %s == %s = %s", TraceGlobal(operands[0], TYPE_VECTOR).data(), TraceGlobal(operands[1], TYPE_VECTOR).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_EQ_S: {
-			const auto &l = GetString(GetGlobal<string_t>(operands[0]));
-			const auto &r = GetString(GetGlobal<string_t>(operands[1]));
-
-			SetGlobal<vec_t>(operands[2], !strcmp(l, r));
-
-			if (enable_tracing)
-				PrintTrace("EQ_S %s == %s = %s", TraceGlobal(operands[0], TYPE_STRING).data(), TraceGlobal(operands[1], TYPE_STRING).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_EQ_E:
-		case OP_EQ_FNC: {
-			const auto &a = GetGlobal<int32_t>(operands[0]);
-			const auto &b = GetGlobal<int32_t>(operands[1]);
-
-			SetGlobal<vec_t>(operands[2], a == b);
-
-			if (enable_tracing)
-				PrintTrace("EQ %s == %s = %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceGlobal(operands[1], OpcodeType(statement.opcode)).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-
-		case OP_NE_F: {
-			const auto &a = GetGlobal<vec_t>(operands[0]);
-			const auto &b = GetGlobal<vec_t>(operands[1]);
-
-			SetGlobal<vec_t>(operands[2], a != b);
-				
-			if (enable_tracing)
-				PrintTrace("NE_F %s != %s = %s", TraceGlobal(operands[0], TYPE_FLOAT).data(), TraceGlobal(operands[1], TYPE_FLOAT).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_NE_V: {
-			const auto &a = GetGlobal<vec3_t>(operands[0]);
-			const auto &b = GetGlobal<vec3_t>(operands[1]);
-
-			SetGlobal<vec_t>(operands[2], a != b);
-				
-			if (enable_tracing)
-				PrintTrace("NE_V %s != %s = %s", TraceGlobal(operands[0], TYPE_VECTOR).data(), TraceGlobal(operands[1], TYPE_VECTOR).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_NE_S: {
-			const auto &l = GetString(GetGlobal<string_t>(operands[0]));
-			const auto &r = GetString(GetGlobal<string_t>(operands[1]));
-
-			SetGlobal<vec_t>(operands[2], strcmp(l, r));
-
-			if (enable_tracing)
-				PrintTrace("NE_S %s == %s = %s", TraceGlobal(operands[0], TYPE_STRING).data(), TraceGlobal(operands[1], TYPE_STRING).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-		case OP_NE_E:
-		case OP_NE_FNC: {
-			const auto &a = GetGlobal<int32_t>(operands[0]);
-			const auto &b = GetGlobal<int32_t>(operands[1]);
-
-			SetGlobal<vec_t>(operands[2], a != b);
-
-			if (enable_tracing)
-				PrintTrace("NE %s != %s = %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceGlobal(operands[1], OpcodeType(statement.opcode)).data(), TraceGlobal(operands[2], TYPE_FLOAT).data());
-			break; }
-
-		case OP_STORE_F:
-		case OP_STORE_ENT:
-		case OP_STORE_FLD:		// integers
-		case OP_STORE_S:
-		case OP_STORE_FNC: {		// pointers
-			CopyGlobal(operands[1], operands[0]);
-
-			if (operands[1] >= global_t::PARM0 && operands[1] < global_t::QC_OFS)
-				params_from[operands[1]] = operands[0];
-				
-			if (enable_tracing)
-				PrintTrace("STORE %s -> %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceGlobal(operands[1], OpcodeType(statement.opcode)).data());
-			break; }
-		case OP_STORE_V: {
-			CopyGlobal<3>(operands[1], operands[0]);
-
-			if (operands[1] >= global_t::PARM0 && operands[1] < global_t::QC_OFS)
-				params_from[operands[1]] = operands[0];
-				
-			if (enable_tracing)
-				PrintTrace("STORE %s -> %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceGlobal(operands[1], OpcodeType(statement.opcode)).data());
-			break; }
-
-
-		// Get address of entity field.
-		case OP_ADDRESS: {
-			auto &ent = *EntToEntity(GetGlobal<ent_t>(operands[0]), true);
-			auto field = GetGlobal<int32_t>(operands[1]);
-			SetGlobal(operands[2], EntityFieldAddress(ent, field));
-			if (enable_tracing)
-				PrintTrace("ADDRESS : %s %s -> %s", TraceGlobal(operands[0], TYPE_ENTITY).data(), TraceGlobal(operands[1], TYPE_FIELD).data(), TraceGlobal(operands[2], TYPE_POINTER).data());
-			break; }
-
-
-		// Store arg into operand
-		case OP_STOREP_F:
-		case OP_STOREP_ENT:
-		case OP_STOREP_FLD:		// integers
-		case OP_STOREP_S:
-		case OP_STOREP_FNC: {		// pointers
-			const auto &address = GetGlobal<int32_t>(operands[1]);
-			const auto &value = GetGlobal<int32_t>(operands[0]);
-
-			auto address_ptr = AddressToEntityField<uint32_t>(address);
-			*address_ptr = value;
-			dynamic_strings.CheckRefUnset(address_ptr, 1);
-				
-			auto &ent = AddressToEntity(address);
-			const auto &field = AddressToField(ent, address);
-			field_wraps.WrapField(ent, field, &value);
-
-			dynamic_strings.MarkIfHasRef(&value, address_ptr);
-				
-			if (enable_tracing)
-				PrintTrace("STOREP %s -> %s %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceEntity(&ent).data(), TraceField(field / sizeof(global_t)).data());
-			break; }
-		case OP_STOREP_V: {
-			const auto &address = GetGlobal<int32_t>(operands[1]);
-			const auto &value = GetGlobal<vec3_t>(operands[0]);
-
-			auto address_ptr = AddressToEntityField<vec3_t>(address);
-			*address_ptr = value;
-			dynamic_strings.CheckRefUnset(address_ptr, 3);
-
-			auto &ent = AddressToEntity(address);
-			const auto &field = AddressToField(ent, address);
-			field_wraps.WrapField(ent, field, &value[0]);
-			field_wraps.WrapField(ent, field + 4, &value[1]);
-			field_wraps.WrapField(ent, field + 8, &value[2]);
-
-			dynamic_strings.MarkIfHasRef<3>(&value, address_ptr);
-				
-			if (enable_tracing)
-				PrintTrace("STOREP %s -> %s %s", TraceGlobal(operands[0], OpcodeType(statement.opcode)).data(), TraceEntity(&ent).data(), TraceField(field / sizeof(global_t)).data());
-			break; }
-				
-
-		// Load operand into return
-		case OP_LOAD_F:
-		case OP_LOAD_FLD:
-		case OP_LOAD_ENT:
-		case OP_LOAD_S:
-		case OP_LOAD_FNC: {
-			auto &ent = *EntToEntity(GetGlobal<ent_t>(operands[0]), true);
-			auto &field_offset = GetGlobal<int32_t>(operands[1]);
-			auto &field_value = *reinterpret_cast<int32_t *>(reinterpret_cast<int32_t*>(&ent) + field_offset);
-			SetGlobal(operands[2], field_value);
-
-			dynamic_strings.MarkIfHasRef(&field_value, GetGlobalByIndex(operands[2]));
-
-			if (enable_tracing)
-				PrintTrace("LOAD : %s %s -> %s", TraceGlobal(operands[0], TYPE_ENTITY).data(), TraceGlobal(operands[1], TYPE_FIELD).data(), TraceGlobal(operands[2], OpcodeType(statement.opcode)).data());
-			break; }
-		case OP_LOAD_V: {
-			auto &ent = *EntToEntity(GetGlobal<ent_t>(operands[0]), true);
-			auto &field_offset = GetGlobal<int32_t>(operands[1]);
-			auto &field_value = *reinterpret_cast<vec3_t *>(reinterpret_cast<int32_t*>(&ent) + field_offset);
-			SetGlobal(operands[2], field_value);
-
-			dynamic_strings.MarkIfHasRef<3>(&field_value, GetGlobalByIndex(operands[2]));
-
-			if (enable_tracing)
-				PrintTrace("LOAD : %s %s -> %s", TraceGlobal(operands[0], TYPE_ENTITY).data(), TraceGlobal(operands[1], TYPE_FIELD).data(), TraceGlobal(operands[2], OpcodeType(statement.opcode)).data());
-			break; }
-
-
-		case OP_IFNOT:
-			if (!GetGlobal<int32_t>(operands[0]))
-			{
-				current.statement += static_cast<int16_t>(statement.args[1]) - 1;
-#ifdef ALLOW_PROFILING
-				current.profile->fields[NumConditionalJumps]++;
-#endif
-			}
-			if (enable_tracing)
-				PrintTrace("IFNOT %s GOTO + %i (%s)", TraceGlobal(operands[0]).data(), static_cast<int16_t>(statement.args[1]), !GetGlobal<int32_t>(operands[0]) ? "passed" : "failed");
-			break;
-
-		case OP_IF:
-			if (GetGlobal<int32_t>(operands[0]))
-			{
-				current.statement += static_cast<int16_t>(statement.args[1]) - 1;
-#ifdef ALLOW_PROFILING
-				current.profile->fields[NumConditionalJumps]++;
-#endif
-			}
-			if (enable_tracing)
-				PrintTrace("IF %s GOTO + %i (%s)", TraceGlobal(operands[0]).data(), static_cast<int16_t>(statement.args[1]), GetGlobal<int32_t>(operands[0]) ? "passed" : "failed");
-			break;
-
-		case OP_GOTO:
-			current.statement += static_cast<int16_t>(statement.args[0]) - 1;
-
-#ifdef ALLOW_PROFILING
-			current.profile->fields[NumUnconditionalJumps]++;
-#endif
-
-			if (enable_tracing)
-				PrintTrace("GOTO + %i", static_cast<int16_t>(statement.args[0]));
-			break;
-
-		case OP_CALL0:
-		case OP_CALL1:
-		case OP_CALL2:
-		case OP_CALL3:
-		case OP_CALL4:
-		case OP_CALL5:
-		case OP_CALL6:
-		case OP_CALL7:
-		case OP_CALL8: {
-				const int32_t &enter_func = GetGlobal<int32_t>(operands[0]);
-
-				state.argc = static_cast<uint8_t>(statement.opcode - OP_CALL0);
-				if (!enter_func)
-					Error("NULL function");
-
-#ifdef ALLOW_PROFILING
-				current.profile->fields[NumFuncCalls]++;
-#endif
-
-				QCFunction &call = functions[enter_func];
-					
-				if (enable_tracing)
-					PrintTrace("CALL(%u) %s", state.argc, TraceFunction(enter_func).data());
-
-				if (!call.id)
-					Error("Tried to call missing function %s", GetString(call.name_index));
-
-				if (call.id < 0)
-				{
-					// negative statements are built in functions
-					CallBuiltin(call);
-					break;
-				}
-
-				enter_depth++;
-				Enter(call);
-				break;
-			}
-
-		case OP_DONE:
-		case OP_RETURN:
-#ifdef ALLOW_PROFILING
-			current.profile->fields[NumConditionalJumps]++;
-#endif
-
-			if (operands[0].arg)
-			{
-				CopyGlobal<3>(global_t::RETURN, operands[0]);
-
-				if (enable_tracing)
-					PrintTrace("RETURN %s", TraceGlobal(operands[0]).data());
-			}
-	
-			Leave();
-
-			enter_depth--;
-
-			if (!enter_depth)
-				return;		// all done
-
-			break;
-
-		case OP_STATE:
-			Error("STATE is not a valid OP in Q2QC");
-			
-		case OP_GLOBALADDRESS:
-			SetGlobal(operands[2], reinterpret_cast<int32_t>(&GetGlobal<int32_t>(operands[0]) + GetGlobal<int32_t>(operands[1])));
-			break;
-
-		default:
-			Error("Unknown opcode %i", statement.opcode);
-		}
+		if (!enter_depth)
+			return;		// all done
 	}
 }
 
@@ -1062,6 +1259,12 @@ void InitVM()
 
 	stream.seekg(header.sections.statement.offset);
 	stream.read(reinterpret_cast<char *>(qvm.statements.data()), header.sections.statement.size * sizeof(QCStatement));
+
+#if _DEBUG
+	for (auto &s : qvm.statements)
+		if (!codeFuncs[s.opcode])
+			qvm.Error("opcode not implemented: %i\n", s.opcode);
+#endif
 	
 	qvm.definitions.resize(header.sections.definition.size);
 
@@ -1089,9 +1292,10 @@ void InitVM()
 	stream.read(reinterpret_cast<char *>(qvm.functions.data()), header.sections.function.size * sizeof(QCFunction));
 
 	qvm.global_data = reinterpret_cast<global_t *>(gi.TagMalloc(header.sections.globals.size * sizeof(global_t), TAG_GAME));
+	qvm.global_size = header.sections.globals.size;
 
 	stream.seekg(header.sections.globals.offset);
-	stream.read(reinterpret_cast<char *>(qvm.global_data), header.sections.globals.size * sizeof(global_t));
+	stream.read(reinterpret_cast<char *>(qvm.global_data), qvm.global_size * sizeof(global_t));
 
 	int32_t lowest_func = 0;
 
@@ -1185,13 +1389,31 @@ void ShutdownVM()
 
 		stream << "Name,Count,Total (ms)\n";
 
-		for (size_t i = 0; i < TotalTimerFields; i++)
+		for (size_t i = 0; i < std::extent_v<decltype(qvm.timers)>; i++)
 		{
 			auto &timer = qvm.timers[i];
 
 			auto total = std::chrono::duration<double, std::milli>(timer.time).count();
 
 			stream << timer_type_names[i] << "," << timer.count << "," << total << "\n";
+		}
+	}
+
+	{
+		std::filesystem::path progs_path(vas("%s/opcodes.csv", game_var->string).data());
+		std::filebuf fb;
+		fb.open(progs_path, std::ios::out);
+		std::ostream stream(&fb);
+
+		stream << "ID,Count,Total (ms)\n";
+
+		for (size_t i = 0; i < std::extent_v<decltype(qvm.opcode_timers)>; i++)
+		{
+			auto &timer = qvm.opcode_timers[i];
+
+			auto total = std::chrono::duration<double, std::milli>(timer.time).count();
+
+			stream << i << "," << timer.count << "," << total << "\n";
 		}
 	}
 #endif

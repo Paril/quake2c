@@ -22,15 +22,49 @@ static void QC_ClearEntity(QCVM &vm)
 	vm.dynamic_strings.CheckRefUnset(entity, sizeof(*entity) / sizeof(global_t));
 }
 
-static void QC_SyncPlayerState(QCVM &vm)
+void SyncPlayerState(QCVM &vm, edict_t *ent)
 {
-	auto ent = vm.ArgvEntity(0);
-
 	for (auto &wrap : vm.field_wraps.GetFields())
 	{
 		const auto &field = vm.GetEntityFieldPointer(*ent, wrap.first / sizeof(global_t));
 		vm.field_wraps.WrapField(*ent, wrap.first, field);
 	}
+}
+
+static void QC_SyncPlayerState(QCVM &vm)
+{
+	auto ent = vm.ArgvEntity(0);
+	SyncPlayerState(vm, ent);
+}
+
+std::string ParseSlashes(const char *value)
+{
+	std::string v(value);
+
+	size_t index = 0;
+
+	while (true)
+	{
+		index = v.find_first_of('\\', index);
+
+		if (index == v.npos || index + 1 >= v.length())
+			break;
+
+		if (v.at(index + 1) == 'n')
+		{
+			v.replace(index, 2, 1, '\n');
+			index++;
+		}
+		else if (v.at(index + 1) == '\\')
+		{
+			v.replace(index, 2, 1, '\\');
+			index++;
+		}
+		else
+			index += 2;
+	}
+
+	return v;
 }
 
 static inline void QC_parse_value_into_ptr(QCVM &vm, const deftype_t &type, const char *value, void *ptr)
@@ -40,7 +74,7 @@ static inline void QC_parse_value_into_ptr(QCVM &vm, const deftype_t &type, cons
 	switch (type)
 	{
 	case TYPE_STRING:
-		*reinterpret_cast<string_t *>(ptr) = vm.StoreOrFind(value);
+		*reinterpret_cast<string_t *>(ptr) = vm.StoreOrFind(ParseSlashes(value));
 		break;
 	case TYPE_FLOAT:
 		*reinterpret_cast<vec_t *>(ptr) = strtof(value, nullptr);
