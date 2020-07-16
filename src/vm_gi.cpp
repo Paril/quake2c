@@ -60,6 +60,11 @@ static void QC_cvar_get_modified(QCVM &vm)
 	const auto &cvar = cvar_list[vm.ArgvInt32(0) - 1];
 	vm.Return(cvar.cvar->modified);
 }
+static void QC_cvar_get_flags(QCVM &vm)
+{
+	const auto &cvar = cvar_list[vm.ArgvInt32(0) - 1];
+	vm.Return(cvar.cvar->flags);
+}
 
 static void QC_cvar_set_modified(QCVM &vm)
 {
@@ -112,7 +117,7 @@ static void QC_cvar_forceset(QCVM &vm)
 {
 	const auto &name = vm.ArgvString(0);
 	const auto &value = vm.ArgvString(1);
-	gi.cvar_set(name, value);
+	gi.cvar_forceset(name, value);
 }
 
 static void QC_configstring(QCVM &vm)
@@ -604,6 +609,13 @@ static void QC_centerprintf(QCVM &vm)
 	gi.centerprintf(ent, "%s", ParseFormat(fmt, vm, 2).data());
 }
 
+static void QC_DebugGraph(QCVM &vm)
+{
+	const auto &a = vm.ArgvFloat(0);
+	const auto &b = vm.ArgvInt32(1);
+	gi.DebugGraph(a, b);
+}
+
 void InitGIBuiltins(QCVM &vm)
 {
 	RegisterBuiltin(bprintf);
@@ -657,6 +669,8 @@ void InitGIBuiltins(QCVM &vm)
 	RegisterBuiltin(args);
 
 	RegisterBuiltin(AddCommandString);
+
+	RegisterBuiltin(DebugGraph);
 	
 	RegisterBuiltin(box_edicts_length);
 	RegisterBuiltin(box_edicts_get);
@@ -670,6 +684,7 @@ void InitGIBuiltins(QCVM &vm)
 	RegisterBuiltin(cvar_get_latched_string);
 	RegisterBuiltin(cvar_get_modified);
 	RegisterBuiltin(cvar_set_modified);
+	RegisterBuiltin(cvar_get_flags);
 	RegisterBuiltin(cvar_get_floatVal);
 	RegisterBuiltin(cvar_get_intVal);
 }

@@ -482,12 +482,20 @@ using profile_key = std::tuple<int, int>;
 		OpcodeTimer_()
 #endif
 
+#include <optional>
+
+struct QCVMRefCountBackup
+{
+	const void					*ptr;
+	string_t					id;
+};
+
 struct QCStack
 {
 	QCFunction									*function = nullptr;
 	const QCStatement							*statement = nullptr;
 	std::vector<std::tuple<global_t, global_t>>	locals;
-	std::vector<string_t>						ref_strings;
+	std::vector<QCVMRefCountBackup>				ref_strings;
 
 #ifdef ALLOW_PROFILING
 	QCProfile				*profile;
@@ -539,7 +547,7 @@ public:
 
 	string_t StoreRefCounted(const std::string &str);
 
-	void Unstore(const string_t &id);
+	void Unstore(const string_t &id, const bool &free_index = true);
 
 	size_t Length(const string_t &id) const;
 
@@ -556,6 +564,8 @@ public:
 	void MarkRefCopy(const string_t &id, const void *ptr);
 
 	void CheckRefUnset(const void *ptr, const size_t &span);
+
+	bool HasRef(const void *ptr);
 
 	bool HasRef(const void *ptr, string_t &id);
 
@@ -604,6 +614,10 @@ public:
 	}
 
 	bool IsRefCounted(const string_t &id);
+
+	QCVMRefCountBackup PopRef(const void *ptr);
+
+	void PushRef(const QCVMRefCountBackup &backup);
 };
 
 class QCVMBuiltinList
@@ -695,6 +709,8 @@ struct QCVM
 	QCVMBuiltinList								builtins;
 	QCVMFieldWrapList							field_wraps;
 	std::vector<int>							linenumbers;
+	const void									*allowed_stack;
+	size_t										allowed_stack_size;
 
 	QCVM();
 
@@ -906,6 +922,12 @@ struct QCVM
 	constexpr nullptr_t Timer_() { return nullptr; }
 	constexpr nullptr_t OpcodeTimer_() { return nullptr; }
 #endif
+
+	inline void SetAllowedStack(const void *ptr, const size_t &length)
+	{
+		allowed_stack = ptr;
+		allowed_stack_size = length;
+	}
 
 	inline const global_t *GetGlobalByIndex(const global_t &g) const
 	{
@@ -1181,13 +1203,10 @@ struct QCVM
 			{
 				cur_stack.locals.push_back(std::make_tuple(static_cast<global_t>(arg), GetGlobal<global_t>(static_cast<global_t>(arg))));
 
-				string_t str;
+				const void *ptr = GetGlobalByIndex(static_cast<global_t>(arg));
 
-				if (dynamic_strings.HasRef(GetGlobalByIndex(static_cast<global_t>(arg)), str))
-				{
-					cur_stack.ref_strings.push_back(str);
-					dynamic_strings.AcquireRefCounted(str);
-				}
+				if (dynamic_strings.HasRef(ptr))
+					cur_stack.ref_strings.push_back(dynamic_strings.PopRef(ptr));
 			}
 
 			PrintTrace("Backup locals %u -> %u", function.first_arg, static_cast<uint32_t>(function.first_arg) + function.num_args_and_locals);
@@ -1225,7 +1244,7 @@ struct QCVM
 				SetGlobal(std::get<0>(local), std::get<1>(local));
 
 			for (auto &str : prev_stack.ref_strings)
-				dynamic_strings.ReleaseRefCounted(str);
+				dynamic_strings.PushRef(str);
 
 			prev_stack.ref_strings.clear();
 			prev_stack.locals.clear();
@@ -1241,6 +1260,9 @@ struct QCVM
 		if (prev_stack.profile)
 			prev_stack.profile->call_into += time_spent;
 #endif
+
+		allowed_stack = 0;
+		allowed_stack_size = 0;
 	}
 
 	inline QCFunction *FindFunction(const char *name)
@@ -1365,7 +1387,8 @@ struct QCVM
 	{
 		return
 			(address >= reinterpret_cast<ptrdiff_t>(globals.edicts) && (address + len) < (reinterpret_cast<ptrdiff_t>(globals.edicts) + (globals.edict_size * globals.num_edicts))) ||
-			(address >= reinterpret_cast<ptrdiff_t>(global_data) && (address + len) < reinterpret_cast<ptrdiff_t>(global_data + global_size));
+			(address >= reinterpret_cast<ptrdiff_t>(global_data) && (address + len) < reinterpret_cast<ptrdiff_t>(global_data + global_size)) ||
+			(allowed_stack && address >= reinterpret_cast<ptrdiff_t>(allowed_stack) && address < (reinterpret_cast<ptrdiff_t>(allowed_stack) + allowed_stack_size));
 	}
 
 	std::string StackEntry(const QCStack &stack);

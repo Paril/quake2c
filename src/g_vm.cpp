@@ -81,7 +81,7 @@ string_t QCVMStringList::StoreRefCounted(const std::string &str)
 	return id;
 }
 
-void QCVMStringList::Unstore(const string_t &id)
+void QCVMStringList::Unstore(const string_t &id, const bool &free_index)
 {
 	assert(strings.contains(id));
 		
@@ -95,7 +95,9 @@ void QCVMStringList::Unstore(const string_t &id)
 	PrintTraceExt(vm, "REFSTRING UNSTORE %i", id);
 		
 	strings.erase(id);
-	free_indices.push(id);
+
+	if (free_index)
+		free_indices.push(id);
 }
 
 size_t QCVMStringList::Length(const string_t &id) const
@@ -249,6 +251,12 @@ void QCVMStringList::CheckRefUnset(const void *ptr, const size_t &span)
 	}
 }
 
+bool QCVMStringList::HasRef(const void *ptr)
+{
+	__attribute__((unused)) auto timer = vm.CreateTimer(StringHasRef);
+	return ref_storage.contains(ptr);
+}
+
 bool QCVMStringList::HasRef(const void *ptr, string_t &id)
 {
 	__attribute__((unused)) auto timer = vm.CreateTimer(StringHasRef);
@@ -273,6 +281,36 @@ void QCVMStringList::MarkIfHasRef(const void *src_ptr, const void *dst_ptr)
 bool QCVMStringList::IsRefCounted(const string_t &id)
 {
 	return strings.contains(id) && std::holds_alternative<QCVMRefCountString>(strings.at(id));
+}
+
+QCVMRefCountBackup QCVMStringList::PopRef(const void *ptr)
+{
+	auto id = ref_storage.at(ptr);
+
+	QCVMRefCountBackup popped_ref { ptr, id };
+
+	ref_storage.erase(ptr);
+
+	return popped_ref;
+}
+
+void QCVMStringList::PushRef(const QCVMRefCountBackup &backup)
+{
+	// somebody stole our ptr >:(
+	if (ref_storage.contains(backup.ptr))
+	{
+		ReleaseRefCounted(ref_storage.at(backup.ptr));
+		ref_storage.erase(backup.ptr);
+	}
+
+	// simple restore
+	if (strings.contains(backup.id))
+	{
+		ref_storage.emplace(backup.ptr, backup.id);
+		return;
+	}
+
+	vm.Error("what");
 }
 
 QCVMBuiltinList::QCVMBuiltinList(QCVM &invm) :
