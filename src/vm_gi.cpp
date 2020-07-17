@@ -28,62 +28,53 @@ static void QC_positioned_sound(QCVM &vm)
 	gi.positioned_sound(position, entity, channel, soundindex, volume, attenuation, timeofs);
 }
 
-// TODO: move into VM state
-struct cvar_handle_t
-{
-	cvar_t	*cvar;
-	string_t name, string, latched_string;
-};
-
-static std::vector<cvar_handle_t> cvar_list;
-
 static void QC_cvar_get_name(QCVM &vm)
 {
-	const auto &cvar = cvar_list[vm.ArgvInt32(0) - 1];
-	vm.Return(cvar.name);
+	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
+	vm.Return(std::string(cvar->name));
 }
 
 static void QC_cvar_get_string(QCVM &vm)
 {
-	const auto &cvar = cvar_list[vm.ArgvInt32(0) - 1];
-	vm.Return(cvar.string);
+	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
+	vm.Return(std::string(cvar->string));
 }
 
 static void QC_cvar_get_latched_string(QCVM &vm)
 {
-	const auto &cvar = cvar_list[vm.ArgvInt32(0) - 1];
-	vm.Return(cvar.latched_string);
+	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
+	vm.Return(std::string(cvar->latched_string));
 }
 
 static void QC_cvar_get_modified(QCVM &vm)
 {
-	const auto &cvar = cvar_list[vm.ArgvInt32(0) - 1];
-	vm.Return(cvar.cvar->modified);
+	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
+	vm.Return(cvar->modified);
 }
 static void QC_cvar_get_flags(QCVM &vm)
 {
-	const auto &cvar = cvar_list[vm.ArgvInt32(0) - 1];
-	vm.Return(cvar.cvar->flags);
+	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
+	vm.Return(cvar->flags);
 }
 
 static void QC_cvar_set_modified(QCVM &vm)
 {
-	const auto &cvar = cvar_list[vm.ArgvInt32(0) - 1];
+	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
 	const auto &value = vm.ArgvInt32(1);
 
-	cvar.cvar->modified = static_cast<qboolean>(value);
+	cvar->modified = static_cast<qboolean>(value);
 }
 
 static void QC_cvar_get_floatVal(QCVM &vm)
 {
-	const auto &cvar = cvar_list[vm.ArgvInt32(0) - 1];
-	vm.Return(cvar.cvar->value);
+	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
+	vm.Return(cvar->value);
 }
 
 static void QC_cvar_get_intVal(QCVM &vm)
 {
-	const auto &cvar = cvar_list[vm.ArgvInt32(0) - 1];
-	vm.Return(static_cast<int32_t>(cvar.cvar->value));
+	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
+	vm.Return(static_cast<int32_t>(cvar->value));
 }
 
 static void QC_cvar(QCVM &vm)
@@ -92,18 +83,9 @@ static void QC_cvar(QCVM &vm)
 	const auto &value = vm.ArgvString(1);
 	const auto &flags = static_cast<cvar_flags_t>(vm.ArgvInt32(2));
 
-	const int32_t &val = cvar_list.size() + 1;
+	auto cvar = gi.cvar(name, value, flags);
 
-	cvar_t *cvar = gi.cvar(name, value, flags);
-
-	cvar_list.push_back({
-		.cvar = cvar,
-		.name = vm.dynamic_strings.StoreStatic(cvar->name),
-		.string = vm.dynamic_strings.StoreStatic(const_cast<const char **>(&cvar->string)),
-		.latched_string = vm.dynamic_strings.StoreStatic(const_cast<const char **>(&cvar->latched_string))
-	});
-
-	vm.Return(val);
+	vm.Return(reinterpret_cast<int32_t>(cvar));
 }
 
 static void QC_cvar_set(QCVM &vm)
@@ -169,7 +151,7 @@ static void QC_csurface_get_name(QCVM &vm)
 	if (!surf)
 		vm.Return(string_t::STRING_EMPTY);
 	else
-		vm.Return(vm.dynamic_strings.StoreStatic(surf->name));
+		vm.Return(std::string(surf->name));
 }
 
 static void QC_csurface_get_flags(QCVM &vm)
@@ -204,32 +186,27 @@ struct QC_trace_t
 	ent_t			ent;
 };
 
-static trace_t trace_result;
-
 static void QC_trace(QCVM &vm)
 {
-	const auto &start = vm.ArgvVector(0);
-	const auto &mins = vm.ArgvVector(1);
-	const auto &maxs = vm.ArgvVector(2);
-	const auto &end = vm.ArgvVector(3);
-	auto ent = vm.ArgvEntity(4);
-	const auto &contents = static_cast<content_flags_t>(vm.ArgvInt32(5));
+	auto &trace = *vm.GetGlobalPtr<QC_trace_t>(global_t::PARM0);
+	const auto &start = vm.ArgvVector(1);
+	const auto &mins = vm.ArgvVector(2);
+	const auto &maxs = vm.ArgvVector(3);
+	const auto &end = vm.ArgvVector(4);
+	auto ent = vm.ArgvEntity(5);
+	const auto &contents = static_cast<content_flags_t>(vm.ArgvInt32(6));
 
-	trace_result = gi.trace(start, mins, maxs, end, ent, contents);
-}
-
-static void QC_trace_result(QCVM &vm)
-{
-	auto &out = *vm.GetGlobalPtr<QC_trace_t>(global_t::PARM0);
-	out.allsolid = trace_result.allsolid;
-	out.startsolid = trace_result.startsolid;
-	out.fraction = trace_result.fraction;
-	out.endpos = trace_result.endpos;
-	out.plane = trace_result.plane;
-	out.surface = static_cast<QC_csurface_t>(reinterpret_cast<int32_t>(trace_result.surface));
-	out.contents = trace_result.contents;
-	out.ent = vm.EntityToEnt(trace_result.ent);
-	vm.dynamic_strings.CheckRefUnset(vm.GetGlobalByIndex(global_t::PARM0), sizeof(QC_trace_t) / sizeof(global_t));
+	auto trace_result = gi.trace(start, mins, maxs, end, ent, contents);
+	
+	trace.allsolid = trace_result.allsolid;
+	trace.startsolid = trace_result.startsolid;
+	trace.fraction = trace_result.fraction;
+	trace.endpos = trace_result.endpos;
+	trace.plane = trace_result.plane;
+	trace.surface = static_cast<QC_csurface_t>(reinterpret_cast<int32_t>(trace_result.surface));
+	trace.contents = trace_result.contents;
+	trace.ent = vm.EntityToEnt(trace_result.ent);
+	vm.dynamic_strings.CheckRefUnset(&trace, sizeof(trace) / sizeof(global_t));
 }
 
 static void QC_pointcontents(QCVM &vm)
@@ -376,14 +353,28 @@ static func_t QC_pm_trace_func;
 
 static trace_t QC_pm_trace(const vec3_t &start, const vec3_t &mins, const vec3_t &maxs, const vec3_t &end)
 {
+	QC_trace_t qc_tr;
+
 	auto func = qvm.FindFunction(QC_pm_trace_func);
-	qvm.SetGlobal(global_t::PARM0, start);
-	qvm.SetGlobal(global_t::PARM1, mins);
-	qvm.SetGlobal(global_t::PARM2, maxs);
-	qvm.SetGlobal(global_t::PARM3, end);
+	qvm.SetAllowedStack(&qc_tr, sizeof(qc_tr));
+	qvm.SetGlobal(global_t::PARM0, reinterpret_cast<ptrdiff_t>(&qc_tr));
+	qvm.SetGlobal(global_t::PARM1, start);
+	qvm.SetGlobal(global_t::PARM2, mins);
+	qvm.SetGlobal(global_t::PARM3, maxs);
+	qvm.SetGlobal(global_t::PARM4, end);
 	qvm.Execute(*func);
 
-	return trace_result;
+	trace_t tr;
+	tr.allsolid = static_cast<qboolean>(qc_tr.allsolid);
+	tr.startsolid = static_cast<qboolean>(qc_tr.startsolid);
+	tr.fraction = qc_tr.fraction;
+	tr.endpos = qc_tr.endpos;
+	tr.plane = qc_tr.plane;
+	tr.surface = reinterpret_cast<csurface_t *>(qc_tr.surface);
+	tr.contents = static_cast<content_flags_t>(qc_tr.contents);
+	tr.ent = qvm.EntToEntity(qc_tr.ent);
+
+	return tr;
 }
 
 static void QC_Pmove(QCVM &vm)
@@ -639,7 +630,6 @@ void InitGIBuiltins(QCVM &vm)
 	RegisterBuiltin(setmodel);
 	
 	RegisterBuiltin(trace);
-	RegisterBuiltin(trace_result);
 	RegisterBuiltin(pointcontents);
 	RegisterBuiltin(inPVS);
 	RegisterBuiltin(inPHS);

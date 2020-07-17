@@ -13,7 +13,7 @@ static void QC_itos(QCVM &vm)
 	const auto &a = vm.ArgvInt32(0);
 	static char buffer[65];
 	Q_snprintf(buffer, sizeof(buffer), "%i", a);
-	vm.Return(vm.dynamic_strings.StoreStatic(buffer));
+	vm.Return(std::string(buffer));
 }
 
 static void QC_stoi(QCVM &vm)
@@ -27,7 +27,7 @@ static void QC_ftos(QCVM &vm)
 	const auto &a = vm.ArgvFloat(0);
 	static char buffer[129];
 	Q_snprintf(buffer, sizeof(buffer), "%f", a);
-	vm.Return(vm.dynamic_strings.StoreStatic(buffer));
+	vm.Return(std::string(buffer));
 }
 
 static void QC_stof(QCVM &vm)
@@ -121,7 +121,7 @@ static void QC_strconcat(QCVM &vm)
 	for (int32_t i = 0; i < vm.state.argc; i++)
 		str += vm.ArgvString(i);
 
-	vm.Return(str);
+	vm.Return(std::move(str));
 }
 
 static void QC_strstr(QCVM &vm)

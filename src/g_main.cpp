@@ -116,6 +116,18 @@ static struct qc_export_t
 	func_t		RunFrame;
 
 	func_t		ServerCommand;
+	
+	func_t		PreWriteGame;
+	func_t		PostWriteGame;
+	
+	func_t		PreReadGame;
+	func_t		PostReadGame;
+
+	func_t		PreWriteLevel;
+	func_t		PostWriteLevel;
+	
+	func_t		PreReadLevel;
+	func_t		PostReadLevel;
 } qce;
 
 /*
@@ -162,10 +174,6 @@ static void InitGame ()
 	qvm.Execute(*func);
 }
 
-#ifdef ALLOW_PROFILING
-#include <ostream>
-#endif
-
 static void ShutdownGame()
 {
 	auto func = qvm.FindFunction(qce.ShutdownGame);
@@ -177,22 +185,32 @@ static void ShutdownGame()
 	gi.FreeTags (TAG_GAME);
 }
 
-static void SpawnEntities(const char *mapname, const char *entities, const char *spawnpoint)
+static void AssignClientPointers()
 {
-	gi.FreeTags(TAG_LEVEL);
+	for (size_t i = 0; i < game.clients.size(); i++)
+		game.entity(i + 1).client = &game.clients[i];
+}
 
+static void WipeEntities()
+{
 	memset(globals.edicts, 0, globals.max_edicts * globals.edict_size);
 
 	for (int32_t i = 0; i < globals.max_edicts; i++)
 		game.entity(i).s.number = i;
 
-	for (size_t i = 0; i < game.clients.size(); i++)
-		game.entity(i + 1).client = &game.clients[i];
+	AssignClientPointers();
+}
+
+static void SpawnEntities(const char *mapname, const char *entities, const char *spawnpoint)
+{
+	gi.FreeTags(TAG_LEVEL);
+
+	WipeEntities();
 
 	auto func = qvm.FindFunction(qce.SpawnEntities);
-	qvm.SetGlobal(global_t::PARM0, std::string(mapname));
-	qvm.SetGlobal(global_t::PARM1, std::string(entities));
-	qvm.SetGlobal(global_t::PARM2, std::string(spawnpoint));
+	qvm.SetGlobalStr(global_t::PARM0, std::string(mapname));
+	qvm.SetGlobalStr(global_t::PARM1, std::string(entities));
+	qvm.SetGlobalStr(global_t::PARM2, std::string(spawnpoint));
 	qvm.Execute(*func);
 }
 
@@ -200,12 +218,10 @@ static qboolean ClientConnect(edict_t *e, char *userinfo)
 {
 	auto func = qvm.FindFunction(qce.ClientConnect);
 	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
-	string_t str = qvm.SetGlobal(global_t::PARM1, std::string(userinfo));
-	qvm.dynamic_strings.AcquireRefCounted(str);
+	qvm.SetGlobalStr(global_t::PARM1, std::string(userinfo));
 	qvm.Execute(*func);
 
-	Q_strlcpy(userinfo, qvm.GetString(str), MAX_INFO_STRING);
-	qvm.dynamic_strings.ReleaseRefCounted(str);
+	Q_strlcpy(userinfo, qvm.GetString(qvm.GetGlobal<string_t>(global_t::PARM1)), MAX_INFO_STRING);
 
 	return qvm.GetGlobal<qboolean>(global_t::RETURN);
 }
@@ -222,7 +238,7 @@ static void ClientUserinfoChanged(edict_t *e, char *userinfo)
 {
 	auto func = qvm.FindFunction(qce.ClientUserinfoChanged);
 	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
-	qvm.SetGlobal(global_t::PARM1, std::string(userinfo));
+	qvm.SetGlobalStr(global_t::PARM1, std::string(userinfo));
 	qvm.Execute(*func);
 	SyncPlayerState(qvm, e);
 }
@@ -280,6 +296,637 @@ static void ServerCommand()
 	qvm.Execute(*func);
 }
 
+
+//=========================================================
+
+const uint32_t	SAVE_MAGIC1		= (('V'<<24)|('S'<<16)|('C'<<8)|'Q');	// "QCSV"
+const uint32_t	SAVE_MAGIC2		= (('A'<<24)|('S'<<16)|('C'<<8)|'Q');	// "QCSA"
+const uint32_t	SAVE_VERSION	= 666;
+
+enum class pointer_class_type_t : uint8_t
+{
+	POINTER_NONE,
+	POINTER_GLOBAL,
+	POINTER_ENT
+};
+
+static void WriteDefinitionData(std::ostream &stream, const QCDefinition &def, const global_t *value)
+{
+	const deftype_t type = static_cast<deftype_t>(def.id & ~TYPE_GLOBAL);
+
+	if (type == TYPE_STRING)
+	{
+		const char *str = qvm.GetString(static_cast<string_t>(*value));
+		stream <= strlen(str);
+		stream.write(str, strlen(str));
+		return;
+	}
+	else if (type == TYPE_FUNCTION)
+	{
+		func_t func = static_cast<func_t>(*value);
+		auto &func_ptr = qvm.functions[static_cast<size_t>(func)];
+		const char *str = qvm.GetString(func_ptr.name_index);
+
+		stream <= strlen(str);
+		stream.write(str, strlen(str));
+		return;
+	}
+	else if (type == TYPE_POINTER)
+	{
+		if (*value == global_t::QC_NULL)
+		{
+			stream <= pointer_class_type_t::POINTER_NONE;
+			return;
+		}
+
+		ptrdiff_t ptr_val = static_cast<ptrdiff_t>(*value);
+		
+		if (ptr_val >= reinterpret_cast<ptrdiff_t>(qvm.global_data) && ptr_val < reinterpret_cast<ptrdiff_t>(qvm.global_data + qvm.global_size))
+		{
+			stream <= pointer_class_type_t::POINTER_GLOBAL;
+
+			// find closest def
+			global_t def_id = static_cast<global_t>((ptr_val - reinterpret_cast<ptrdiff_t>(qvm.global_data)) / sizeof(global_t));
+			size_t offset = 0;
+
+			while (def_id >= global_t::QC_OFS)
+			{
+				if (qvm.definition_map_by_id.contains(def_id))
+					break;
+
+				def_id = static_cast<global_t>(static_cast<int32_t>(def_id) - 1);
+				offset++;
+			}
+
+			if (def_id < global_t::QC_OFS)
+				qvm.Error("couldn't find ptr reference");
+
+			auto closest_def = qvm.definition_map_by_id.at(def_id);
+			const char *str = qvm.GetString(closest_def->name_index);
+
+			stream <= strlen(str);
+			stream.write(str, strlen(str));
+			stream <= offset;
+		}
+		else if (ptr_val >= reinterpret_cast<ptrdiff_t>(globals.edicts) && ptr_val < reinterpret_cast<ptrdiff_t>(globals.edicts) + (globals.edict_size * globals.max_edicts))
+		{
+			qvm.Error("somehow got a bad field ptr");
+			stream <= pointer_class_type_t::POINTER_ENT;
+		}
+		else
+			qvm.Error("somehow got a bad field ptr");
+		
+		return;
+	}
+	else if (type == TYPE_ENTITY)
+	{
+		auto ent = qvm.EntToEntity(static_cast<ent_t>(*value));
+
+		if (ent == nullptr)
+			stream <= globals.max_edicts;
+		else
+			stream <= ent->s.number;
+
+		return;
+	}
+	
+	const size_t len = (type == TYPE_VECTOR) ? 3 : 1;
+	stream.write(reinterpret_cast<const char *>(value), sizeof(global_t) * len);
+}
+
+static void WriteEntityFieldData(std::ostream &stream, edict_t &ent, const QCDefinition &def)
+{
+	auto field = qvm.GetEntityFieldPointer(ent, def.global_index);
+	WriteDefinitionData(stream, def, reinterpret_cast<global_t *>(field));
+}
+
+static void ReadDefinitionData(std::istream &stream, const QCDefinition &def, global_t *value)
+{
+	const deftype_t type = static_cast<deftype_t>(def.id & ~TYPE_GLOBAL);
+
+	if (type == TYPE_STRING)
+	{
+		std::string def_value;
+		size_t def_len;
+		stream >= def_len;
+		def_value.resize(def_len);
+		stream.read(def_value.data(), def_len);
+		qvm.SetStringPtr(value, std::move(def_value));
+		return;
+	}
+	else if (type == TYPE_FUNCTION)
+	{
+		std::string func_name;
+		size_t func_len;
+		stream >= func_len;
+
+		if (!func_len)
+			*value = global_t::QC_NULL;
+		else
+		{
+			func_name.resize(func_len);
+			stream.read(func_name.data(), func_len);
+
+			*value = static_cast<global_t>(qvm.FindFunctionID(func_name.data()));
+
+			if (*value == global_t::QC_NULL)
+				qvm.Error("can't find func %s", func_name.data());
+		}
+		return;
+	}
+	else if (type == TYPE_POINTER)
+	{
+		pointer_class_type_t ptrclass;
+		stream >= ptrclass;
+
+		if (ptrclass == pointer_class_type_t::POINTER_NONE)
+		{
+			*value = global_t::QC_NULL;
+			return;
+		}
+		else if (ptrclass == pointer_class_type_t::POINTER_GLOBAL)
+		{
+			std::string global_name;
+			size_t global_len;
+			stream >= global_len;
+			global_name.resize(global_len);
+			stream.read(global_name.data(), global_len);
+
+			string_t str;
+			
+			if (!qvm.FindString(global_name, str))
+				qvm.Error("bad pointer; can't find %s", global_name.data());
+
+			if (!qvm.definition_map.contains(str))
+				qvm.Error("bad pointer; can't map %s", global_name.data());
+
+			auto def = qvm.definition_map.at(str);
+			size_t global_offset;
+			stream >= global_offset;
+
+			auto ptr = qvm.GetGlobalByIndex(static_cast<global_t>(def->global_index + global_offset));
+			*value = static_cast<global_t>(reinterpret_cast<ptrdiff_t>(ptr));
+			return;
+		}
+		else if (ptrclass == pointer_class_type_t::POINTER_ENT)
+		{
+			qvm.Error("bad pointer");
+			return;
+		}
+		
+		qvm.Error("bad pointer");
+		return;
+	}
+	else if (type == TYPE_ENTITY)
+	{
+		int32_t number;
+		stream >= number;
+
+		if (number == globals.max_edicts)
+			*value = static_cast<global_t>(ent_t::ENT_INVALID);
+		else
+			*value = static_cast<global_t>(qvm.EntityToEnt(&game.entity(number)));
+
+		return;
+	}
+	
+	const size_t len = (type == TYPE_VECTOR) ? 3 : 1;
+	stream.read(reinterpret_cast<char *>(value), sizeof(global_t) * len);
+}
+
+static void ReadEntityFieldData(std::istream &stream, edict_t &ent, const QCDefinition &def)
+{
+	auto field = qvm.GetEntityFieldPointer(ent, def.global_index);
+	ReadDefinitionData(stream, def, reinterpret_cast<global_t *>(field));
+}
+
+/*
+============
+WriteGame
+
+This will be called whenever the game goes to a new level,
+and when the user explicitly saves the game.
+
+Game information include cross level data, like multi level
+triggers, help computer info, and all client states.
+
+A single player death will automatically restore from the
+last save position.
+============
+*/
+static void WriteGame(const char *filename, qboolean autosave)
+{
+	std::filesystem::path file_path(filename);
+	std::ofstream stream(file_path, std::ios::binary);
+
+	auto func = qvm.FindFunction(qce.PreWriteGame);
+	qvm.SetGlobal(global_t::PARM0, autosave);
+	qvm.Execute(*func);
+	
+	stream <= SAVE_MAGIC1;
+	stream <= SAVE_VERSION;
+	stream <= globals.edict_size;
+	stream <= game.clients.size();
+
+	// save "game." values
+	for (auto &def : qvm.definitions)
+	{
+		if (!(def.id & TYPE_GLOBAL))
+			continue;
+
+		const char *name = qvm.GetString(def.name_index);
+
+		if (strnicmp(name, "game.", 5))
+			continue;
+
+		size_t name_len = strlen(name);
+		
+		stream <= name_len;
+		stream.write(name, name_len);
+
+		WriteDefinitionData(stream, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
+	}
+
+	stream <= 0u;
+
+	// save client structs
+	for (auto &def : qvm.fields)
+	{
+		const char *name = qvm.GetString(def.name_index);
+
+		if (strnicmp(name, "client.", 6))
+			continue;
+
+		size_t name_len = strlen(name);
+
+		stream <= name_len;
+		stream.write(name, name_len);
+
+		for (size_t i = 0; i < game.clients.size(); i++)
+			WriteEntityFieldData(stream, game.entity(i + 1), def);
+	}
+
+	stream <= 0u;
+	
+	func = qvm.FindFunction(qce.PostWriteGame);
+	qvm.SetGlobal(global_t::PARM0, autosave);
+	qvm.Execute(*func);
+}
+
+static void ReadGame(const char *filename)
+{
+	std::filesystem::path file_path(filename);
+	std::ifstream stream(file_path, std::ios::binary);
+
+	auto func = qvm.FindFunction(qce.PreReadGame);
+	qvm.Execute(*func);
+
+	uint32_t magic, version, edict_size, maxclients;
+
+	stream >= magic;
+
+	if (magic != SAVE_MAGIC1)
+		qvm.Error("Not a save game");
+
+	stream >= version;
+
+	if (version != SAVE_VERSION)
+		qvm.Error("Savegame from different version (got %d, expected %d)", version, SAVE_VERSION);
+
+	stream >= edict_size;
+	stream >= maxclients;
+
+	// should agree with server's version
+	if (game.clients.size() != maxclients)
+		qvm.Error("Savegame has bad maxclients");
+
+	if (globals.edict_size != edict_size)
+		qvm.Error("Savegame has bad fields");
+
+	// setup entities
+	WipeEntities();
+	
+	// free any string refs inside of the entity structure
+	qvm.dynamic_strings.CheckRefUnset(globals.edicts, (globals.edict_size * globals.max_edicts) / sizeof(global_t));
+
+	// load game globals
+	std::string def_name;
+	std::string def_value;
+
+	while (true)
+	{
+		size_t len;
+
+		stream >= len;
+
+		if (!len)
+			break;
+
+		def_name.resize(len);
+
+		stream.read(def_name.data(), len);
+
+		string_t str;
+		
+		if (!qvm.FindString(def_name, str) || qvm.dynamic_strings.IsRefCounted(str))
+			qvm.Error("Bad string in save file");
+
+		if (!qvm.definition_map.contains(str))
+			qvm.Error("Bad definition %s", def_name.data());
+
+		auto &def = *qvm.definition_map.at(str);
+		ReadDefinitionData(stream, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
+	}
+
+	// load client fields
+	while (true)
+	{
+		size_t len;
+
+		stream >= len;
+
+		if (!len)
+			break;
+
+		def_name.resize(len);
+
+		stream.read(def_name.data(), len);
+
+		string_t str;
+		
+		if (!qvm.FindString(def_name, str) || qvm.dynamic_strings.IsRefCounted(str))
+			qvm.Error("Bad string in save file");
+
+		if (!qvm.field_map_by_name.contains(def_name))
+			qvm.Error("Bad field %s", def_name.data());
+		
+		auto &field = *qvm.field_map_by_name.at(def_name);
+		
+		for (size_t i = 0; i < game.clients.size(); i++)
+			ReadEntityFieldData(stream, game.entity(i + 1), field);
+	}
+
+	func = qvm.FindFunction(qce.PostReadGame);
+	qvm.Execute(*func);
+
+	for (size_t i = 0; i < game.clients.size(); i++)
+		SyncPlayerState(qvm, &game.entity(i + 1));
+
+	// make a temp copy of the clients' entities for ReadLevel
+	game.client_load_data = reinterpret_cast<uint8_t *>(gi.TagMalloc(globals.edict_size * game.clients.size(), TAG_GAME));
+	memcpy(game.client_load_data, &game.entity(1), globals.edict_size * game.clients.size());
+	qvm.dynamic_strings.MarkIfHasRef(&game.entity(1), game.client_load_data, (globals.edict_size * game.clients.size()) / sizeof(global_t));
+}
+
+//==========================================================
+
+
+/*
+=================
+WriteLevel
+
+=================
+*/
+static void WriteLevel(const char *filename)
+{
+	std::filesystem::path file_path(filename);
+	std::ofstream stream(file_path, std::ios::binary);
+
+	auto func = qvm.FindFunction(qce.PreWriteLevel);
+	qvm.Execute(*func);
+	
+	stream <= SAVE_MAGIC2;
+	stream <= SAVE_VERSION;
+	stream <= globals.edict_size;
+	stream <= game.clients.size();
+
+	// save "level." values
+	for (auto &def : qvm.definitions)
+	{
+		if (!(def.id & TYPE_GLOBAL))
+			continue;
+
+		const char *name = qvm.GetString(def.name_index);
+
+		if (strnicmp(name, "level.", 5))
+			continue;
+
+		size_t name_len = strlen(name);
+
+		stream <= name_len;
+		stream.write(name, name_len);
+
+		WriteDefinitionData(stream, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
+	}
+
+	stream <= 0u;
+
+	// save non-client structs
+	for (auto &def : qvm.fields)
+	{
+		const char *name = qvm.GetString(def.name_index);
+
+		if (def.name_index == string_t::STRING_EMPTY || strnicmp(name, "client.", 6) == 0)
+			continue;
+
+		size_t name_len = strlen(name);
+		stream <= name_len;
+		stream.write(name, name_len);
+
+		for (size_t i = 0; i < globals.num_edicts; i++)
+		{
+			auto &ent = game.entity(i);
+
+			if (!ent.inuse)
+				continue;
+
+			stream <= i;
+			WriteEntityFieldData(stream, ent, def);
+		}
+
+		stream <= -1u;
+	}
+
+	stream <= 0u;
+	
+	func = qvm.FindFunction(qce.PostWriteLevel);
+	qvm.Execute(*func);
+}
+
+
+/*
+=================
+ReadLevel
+
+SpawnEntities will allready have been called on the
+level the same way it was when the level was saved.
+
+That is necessary to get the baselines
+set up identically.
+
+The server will have cleared all of the world links before
+calling ReadLevel.
+
+No clients are connected yet.
+=================
+*/
+static void ReadLevel(const char *filename)
+{
+	std::filesystem::path file_path(filename);
+	std::ifstream stream(file_path, std::ios::binary);
+
+	auto func = qvm.FindFunction(qce.PreReadLevel);
+	qvm.Execute(*func);
+
+	uint32_t magic, version, edict_size, maxclients;
+
+	stream >= magic;
+
+	if (magic != SAVE_MAGIC2)
+		qvm.Error("Not a save game");
+
+	stream >= version;
+
+	if (version != SAVE_VERSION)
+		qvm.Error("Savegame from different version (got %d, expected %d)", version, SAVE_VERSION);
+
+	stream >= edict_size;
+	stream >= maxclients;
+
+	// should agree with server's version
+	if (game.clients.size() != maxclients)
+		qvm.Error("Savegame has bad maxclients");
+
+	if (globals.edict_size != edict_size)
+		qvm.Error("Savegame has bad fields");
+
+	// setup entities
+	WipeEntities();
+	globals.num_edicts = game.clients.size() + 1;
+	
+	// free any string refs inside of the entity structure
+	qvm.dynamic_strings.CheckRefUnset(globals.edicts, (globals.edict_size * globals.max_edicts) / sizeof(global_t));
+
+	// load level globals
+	std::string def_name;
+	std::string def_value;
+
+	while (true)
+	{
+		size_t len;
+
+		stream >= len;
+
+		if (!len)
+			break;
+
+		def_name.resize(len);
+
+		stream.read(def_name.data(), len);
+
+		string_t str;
+		
+		if (!qvm.FindString(def_name, str) || qvm.dynamic_strings.IsRefCounted(str))
+			qvm.Error("Bad string in save file");
+
+		if (!qvm.definition_map.contains(str))
+			qvm.Error("Bad definition %s", def_name.data());
+
+		auto &def = *qvm.definition_map.at(str);
+		ReadDefinitionData(stream, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
+	}
+
+	// load entity fields
+	while (true)
+	{
+		size_t len;
+
+		stream >= len;
+
+		if (!len)
+			break;
+
+		def_name.resize(len);
+
+		stream.read(def_name.data(), len);
+
+		string_t str;
+		
+		if (!qvm.FindString(def_name, str) || qvm.dynamic_strings.IsRefCounted(str))
+			qvm.Error("Bad string in save file");
+
+		if (!qvm.field_map_by_name.contains(def_name))
+			qvm.Error("Bad field %s", def_name.data());
+		
+		auto &field = *qvm.field_map_by_name.at(def_name);
+
+		size_t ent_id;
+
+		while (true)
+		{
+			stream >= ent_id;
+
+			if (ent_id == -1u)
+				break;
+
+			if (ent_id >= globals.max_edicts)
+				qvm.Error("%s: bad entity number", __func__);
+
+			if (ent_id >= globals.num_edicts)
+				globals.num_edicts = ent_id + 1;
+
+			auto &ent = game.entity(ent_id);
+			ReadEntityFieldData(stream, ent, field);
+		}
+	}
+
+	AssignClientPointers();
+	
+	// copy over any client-specific data back into the clients and re-sync
+
+	for (size_t i = 0; i < game.clients.size(); i++)
+	{
+		auto &ent = game.entity(i + 1);
+		auto &backup = *reinterpret_cast<edict_t *>(game.client_load_data + (globals.edict_size * i));
+
+		// restore client structs
+		for (auto &def : qvm.fields)
+		{
+			const char *name = qvm.GetString(def.name_index);
+
+			if (def.name_index == string_t::STRING_EMPTY || strnicmp(name, "client.", 6))
+				continue;
+
+			const size_t len = def.id == TYPE_VECTOR ? 3 : 1;
+
+			auto dst = qvm.GetEntityFieldPointer(ent, def.global_index);
+			auto src = qvm.GetEntityFieldPointer(backup, def.global_index);
+
+			memcpy(dst, src, sizeof(global_t) * len);
+		}
+
+		SyncPlayerState(qvm, &ent);
+	}
+	
+	qvm.dynamic_strings.MarkIfHasRef(game.client_load_data, &game.entity(1), (globals.edict_size * game.clients.size()) / sizeof(global_t));
+	qvm.dynamic_strings.CheckRefUnset(game.client_load_data, (globals.edict_size * game.clients.size()) / sizeof(global_t), true);
+	gi.TagFree(game.client_load_data);
+
+	for (size_t i = 0; i < globals.num_edicts; i++)
+	{
+		auto &ent = game.entity(i);
+
+		// let the server rebuild world links for this ent
+		ent.area = {};
+		gi.linkentity(&ent);
+	}
+	
+	func = qvm.FindFunction(qce.PostReadLevel);
+	qvm.SetGlobal(global_t::PARM0, globals.num_edicts);
+	qvm.Execute(*func);
+}
+
+
 game_export_t globals = {
 	.apiversion = 3,
 
@@ -288,19 +935,11 @@ game_export_t globals = {
 
 	.SpawnEntities = SpawnEntities,
 
-	.WriteGame = [](const char *, qboolean)
-	{
-	},
-	.ReadGame = [](const char *)
-	{
-	},
+	.WriteGame = WriteGame,
+	.ReadGame = ReadGame,
 
-	.WriteLevel = [](const char *)
-	{
-	},
-	.ReadLevel = [](const char *)
-	{
-	},
+	.WriteLevel = WriteLevel,
+	.ReadLevel = ReadLevel,
 	
 	.ClientConnect = ClientConnect,
 	.ClientBegin = ClientBegin,

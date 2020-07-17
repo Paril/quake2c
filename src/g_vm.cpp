@@ -41,34 +41,7 @@ string_t QCVMStringList::Allocate()
 	return static_cast<string_t>(-static_cast<int32_t>(strings.size() + 1));
 }
 
-string_t QCVMStringList::StoreStatic(const char **resolver)
-{
-	if (constant_storage.contains(resolver))
-		return constant_storage.at(resolver);
-
-	string_t id = Allocate();
-	constant_storage.emplace(resolver, id);
-	strings.emplace(id, resolver);
-	return id;
-}
-
-string_t QCVMStringList::StoreStatic(const std::string_view &view)
-{
-	string_t id;
-
-	if (constant_storage.contains(view.data()))
-		id = constant_storage.at(view.data());
-	else
-	{
-		id = Allocate();
-		constant_storage.emplace(view.data(), id);
-	}
-
-	strings.emplace(id, view);
-	return id;
-}
-
-string_t QCVMStringList::StoreRefCounted(const std::string &str)
+string_t QCVMStringList::StoreRefCounted(std::string &&str)
 {
 	string_t id = Allocate();
 	
@@ -85,12 +58,9 @@ void QCVMStringList::Unstore(const string_t &id, const bool &free_index)
 {
 	assert(strings.contains(id));
 		
-	const StringType &str = strings.at(id);
+	const auto &str = strings.at(id);
 		
-	if (std::holds_alternative<const char **>(str))
-		constant_storage.erase(std::get<const char **>(str));
-		
-	assert(!std::holds_alternative<QCVMRefCountString>(str) || !std::get<QCVMRefCountString>(str).ref_count);
+	assert(!str.ref_count);
 	
 	PrintTraceExt(vm, "REFSTRING UNSTORE %i", id);
 		
@@ -104,56 +74,27 @@ size_t QCVMStringList::Length(const string_t &id) const
 {
 	assert(strings.contains(id));
 		
-	const StringType &str = strings.at(id);
+	const auto &str = strings.at(id);
 		
-	if (std::holds_alternative<std::string_view>(str))
-		return std::get<std::string_view>(str).length();
-	else if (std::holds_alternative<QCVMRefCountString>(str))
-		return std::get<QCVMRefCountString>(str).str.length();
-		
-	return strlen(*std::get<const char **>(str));
-}
-
-const char *QCVMStringList::GetStatic(const string_t &id) const
-{
-	assert(strings.contains(id));
-		
-	const StringType &str = strings.at(id);
-
-	assert(std::holds_alternative<std::string_view>(str) || std::holds_alternative<const char **>(str));
-
-	if (std::holds_alternative<std::string_view>(str))
-		return std::get<std::string_view>(str).data();
-
-	return *std::get<const char **>(str);
+	return str.str.length();
 }
 
 std::string &QCVMStringList::GetRefCounted(const string_t &id)
 {
 	assert(strings.contains(id));
 		
-	StringType &str = strings.at(id);
+	auto &str = strings.at(id);
 
-	assert(std::holds_alternative<QCVMRefCountString>(str));
-
-	return std::get<QCVMRefCountString>(str).str;
+	return str.str;
 }
 
 const char *QCVMStringList::Get(const string_t &id) const
 {
 	assert(strings.contains(id));
 
-	if (!strings.contains(id))
-		return "";
+	const auto &str = strings.at(id);
 
-	const StringType &str = strings.at(id);
-		
-	if (std::holds_alternative<std::string_view>(str))
-		return std::get<std::string_view>(str).data();
-	else if (std::holds_alternative<const char **>(str))
-		return *std::get<const char **>(str);
-
-	return std::get<QCVMRefCountString>(str).str.c_str();
+	return str.str.c_str();
 }
 
 void QCVMStringList::AcquireRefCounted(const string_t &id)
@@ -162,15 +103,11 @@ void QCVMStringList::AcquireRefCounted(const string_t &id)
 
 	assert(strings.contains(id));
 
-	StringType &str = strings.at(id);
+	auto &str = strings.at(id);
 
-	assert(std::holds_alternative<QCVMRefCountString>(str));
-
-	auto &ref = std::get<QCVMRefCountString>(str);
-
-	ref.ref_count++;
+	str.ref_count++;
 	
-	PrintTraceExt(vm, "REFSTRING ACQUIRE %i (now %i)", id, ref.ref_count);
+	PrintTraceExt(vm, "REFSTRING ACQUIRE %i (now %i)", id, str.ref_count);
 }
 
 void QCVMStringList::ReleaseRefCounted(const string_t &id)
@@ -179,19 +116,15 @@ void QCVMStringList::ReleaseRefCounted(const string_t &id)
 
 	assert(strings.contains(id));
 
-	StringType &str = strings.at(id);
+	auto &str = strings.at(id);
 
-	assert(std::holds_alternative<QCVMRefCountString>(str));
-
-	auto &ref = std::get<QCVMRefCountString>(str);
-
-	assert(ref.ref_count);
+	assert(str.ref_count);
 		
-	ref.ref_count--;
+	str.ref_count--;
 	
-	PrintTraceExt(vm, "REFSTRING RELEASE %i (now %i)", id, ref.ref_count);
+	PrintTraceExt(vm, "REFSTRING RELEASE %i (now %i)", id, str.ref_count);
 
-	if (!ref.ref_count)
+	if (!str.ref_count)
 		Unstore(id);
 }
 
@@ -226,7 +159,7 @@ void QCVMStringList::MarkRefCopy(const string_t &id, const void *ptr)
 	PrintTraceExt(vm, "REFSTRING MARK %i -> %x", id, ptr);
 }
 
-void QCVMStringList::CheckRefUnset(const void *ptr, const size_t &span)
+void QCVMStringList::CheckRefUnset(const void *ptr, const size_t &span, const bool &assume_changed)
 {
 	__attribute__((unused)) auto timer = vm.CreateTimer(StringCheckUnset);
 
@@ -238,11 +171,15 @@ void QCVMStringList::CheckRefUnset(const void *ptr, const size_t &span)
 			continue;
 
 		auto old = ref_storage.at(gptr);
-		auto newstr = *reinterpret_cast<const string_t *>(gptr);
 
-		// still here, so we probably just copied to ourselves or something
-		if (newstr == old)
-			continue;
+		if (!assume_changed)
+		{
+			auto newstr = *reinterpret_cast<const string_t *>(gptr);
+
+			// still here, so we probably just copied to ourselves or something
+			if (newstr == old)
+				continue;
+		}
 
 		// not here! release and unmark
 		ReleaseRefCounted(old);
@@ -270,17 +207,23 @@ bool QCVMStringList::HasRef(const void *ptr, string_t &id)
 	return false;
 }
 
-void QCVMStringList::MarkIfHasRef(const void *src_ptr, const void *dst_ptr)
+bool QCVMStringList::IsRefCounted(const string_t &id)
+{
+	return strings.contains(id);
+}
+
+void QCVMStringList::MarkIfHasRef(const void *src_ptr, const void *dst_ptr, const size_t &span)
 {
 	__attribute__((unused)) auto timer = vm.CreateTimer(StringMarkIfHasRef);
 
-	if (ref_storage.contains(src_ptr))
-		MarkRefCopy(ref_storage.at(src_ptr), dst_ptr);
-}
+	for (size_t i = 0; i < span; i++)
+	{
+		auto src_gptr = reinterpret_cast<const global_t *>(src_ptr) + i;
+		auto dst_gptr = reinterpret_cast<const global_t *>(dst_ptr) + i;
 
-bool QCVMStringList::IsRefCounted(const string_t &id)
-{
-	return strings.contains(id) && std::holds_alternative<QCVMRefCountString>(strings.at(id));
+		if (ref_storage.contains(src_gptr))
+			MarkRefCopy(ref_storage.at(src_gptr), dst_gptr);
+	}
 }
 
 QCVMRefCountBackup QCVMStringList::PopRef(const void *ptr)
@@ -311,6 +254,39 @@ void QCVMStringList::PushRef(const QCVMRefCountBackup &backup)
 	}
 
 	vm.Error("what");
+}
+
+void QCVMStringList::WriteState(std::ostream &stream)
+{
+	for (const auto &s : strings)
+	{
+		stream <= s.second.str.length();
+		stream.write(s.second.str.data(), s.second.str.length());
+	}
+
+	stream <= 0u;
+}
+
+void QCVMStringList::ReadState(std::istream &stream)
+{
+	std::string s;
+
+	while (true)
+	{
+		size_t len;
+
+		stream >= len;
+
+		if (!len)
+			break;
+
+		s.resize(len);
+
+		stream.read(s.data(), len);
+
+		// does not acquire, since entity/game state does that itself
+		vm.StoreOrFind(std::move(s));
+	}
 }
 
 QCVMBuiltinList::QCVMBuiltinList(QCVM &invm) :
@@ -1247,6 +1223,29 @@ void QCVM::Execute(QCFunction &function)
 	}
 }
 
+const uint32_t QCVM_VERSION	= 1;
+
+void QCVM::WriteState(std::ostream &stream)
+{
+	stream <= QCVM_VERSION;
+
+	// write dynamic strings
+	dynamic_strings.WriteState(stream);
+}
+
+void QCVM::ReadState(std::istream &stream)
+{
+	uint32_t ver;
+
+	stream >= ver;
+
+	if (ver != QCVM_VERSION)
+		Error("bad VM version");
+
+	// read dynamic strings
+	dynamic_strings.ReadState(stream);
+}
+
 QCVM qvm;
 static const cvar_t *game_var;
 
@@ -1286,10 +1285,6 @@ void InitVM()
 
 		auto view = std::string_view(s);
 		i += view.length();
-
-		if (qvm.string_hashes.contains(view))
-			continue;
-
 		qvm.string_hashes.emplace(std::move(view));
 	}
 
@@ -1310,8 +1305,13 @@ void InitVM()
 	stream.read(reinterpret_cast<char *>(qvm.definitions.data()), header.sections.definition.size * sizeof(QCDefinition));
 	
 	for (auto &definition : qvm.definitions)
+	{
 		if (definition.name_index != string_t::STRING_EMPTY)
 			qvm.definition_map.emplace(definition.name_index, &definition);
+
+		qvm.definition_map_by_id.emplace(static_cast<global_t>(definition.global_index), &definition);
+		qvm.string_hashes.emplace(qvm.string_data + static_cast<int32_t>(definition.name_index));
+	}
 
 	qvm.fields.resize(header.sections.field.size);
 
@@ -1319,7 +1319,12 @@ void InitVM()
 	stream.read(reinterpret_cast<char *>(qvm.fields.data()), header.sections.field.size * sizeof(QCDefinition));
 
 	for (auto &field : qvm.fields)
+	{
 		qvm.field_map.emplace(field.global_index, &field);
+		qvm.field_map_by_name.emplace(qvm.string_data + static_cast<int32_t>(field.name_index), &field);
+
+		qvm.string_hashes.emplace(qvm.string_data + static_cast<int32_t>(field.name_index));
+	}
 
 	qvm.functions.resize(header.sections.function.size);
 #ifdef ALLOW_PROFILING

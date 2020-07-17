@@ -354,3 +354,17 @@ bool    Info_Validate(const char *s);
 #include "api.h"
 #include "client.h"
 #include "entity.h"
+
+template <typename T, class... StreamArgs>
+inline std::basic_ostream<StreamArgs...> &
+operator <= (std::basic_ostream<StreamArgs...> & out, T const & data) {
+        out.write(reinterpret_cast<char const *>(&data), sizeof(T));
+        return out;
+}
+
+template <typename T, class... StreamArgs>
+inline std::basic_istream<StreamArgs...> &
+operator >= (std::basic_istream<StreamArgs...> & out, T & data) {
+        out.read(reinterpret_cast<char *>(&data), sizeof(T));
+        return out;
+}

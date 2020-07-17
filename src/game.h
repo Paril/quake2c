@@ -18,6 +18,5 @@ struct
 
 	std::vector<gclient_t>	clients;
 
-	uint8_t	*client_data_ptr;
-	size_t	client_data_size;
+	uint8_t		*client_load_data;
 } game;

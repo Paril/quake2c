@@ -516,17 +516,11 @@ class QCVMStringList
 {
 	struct QCVM	&vm;
 
-	using StringType = std::variant<std::string_view, const char**, QCVMRefCountString>;
-
-	// The string list maps IDs (one-indexed) to either a custom string object or
-	// a string view that points to existing memory.
-	std::unordered_map<string_t, StringType>	strings;
+	// Mapped list to dynamic strings
+	std::unordered_map<string_t, QCVMRefCountString>	strings;
 
 	// stores a list of free indices that were explicitly freed
 	std::stack<string_t>	free_indices;
-
-	// static strings mapped to string_t's
-	std::unordered_map<const void *, string_t> constant_storage;
 
 	// mapped list of addresses that contain(ed) strings
 	std::unordered_map<const void *, string_t> ref_storage;
@@ -541,17 +535,11 @@ public:
 		return strings;
 	}
 
-	string_t StoreStatic(const char **resolver);
-
-	string_t StoreStatic(const std::string_view &view);
-
-	string_t StoreRefCounted(const std::string &str);
+	string_t StoreRefCounted(std::string &&str);
 
 	void Unstore(const string_t &id, const bool &free_index = true);
 
 	size_t Length(const string_t &id) const;
-
-	const char *GetStatic(const string_t &id) const;
 
 	std::string &GetRefCounted(const string_t &id);
 
@@ -563,7 +551,7 @@ public:
 
 	void MarkRefCopy(const string_t &id, const void *ptr);
 
-	void CheckRefUnset(const void *ptr, const size_t &span);
+	void CheckRefUnset(const void *ptr, const size_t &span, const bool &assume_changed = false);
 
 	bool HasRef(const void *ptr);
 
@@ -596,9 +584,7 @@ public:
 		return ids.size();
 	}
 
-	void MarkIfHasRef(const void *src_ptr, const void *dst_ptr);
-
-	template<size_t span>
+	template<size_t span = 1>
 	void MarkIfHasRef(const void *src_ptr, const void *dst_ptr)
 	{
 		__attribute__((unused)) auto timer = vm.CreateTimer(StringMarkIfHasRef);
@@ -613,11 +599,16 @@ public:
 		}
 	}
 
+	void MarkIfHasRef(const void *src_ptr, const void *dst_ptr, const size_t &span);
+
 	bool IsRefCounted(const string_t &id);
 
 	QCVMRefCountBackup PopRef(const void *ptr);
 
 	void PushRef(const QCVMRefCountBackup &backup);
+	
+	void WriteState(std::ostream &stream);
+	void ReadState(std::istream &stream);
 };
 
 class QCVMBuiltinList
@@ -691,8 +682,10 @@ struct QCVM
 	// loaded from progs.dat
 	std::vector<QCDefinition>					definitions;
 	std::unordered_map<string_t, QCDefinition*>	definition_map;
+	std::unordered_map<global_t, QCDefinition*> definition_map_by_id;
 	std::vector<QCDefinition>					fields;
 	std::unordered_map<uint16_t, QCDefinition*>	field_map;
+	std::unordered_map<std::string_view, QCDefinition*> field_map_by_name;
 	std::vector<QCStatement>					statements;
 	std::vector<QCFunction>						functions;
 #ifdef ALLOW_PROFILING
@@ -980,7 +973,7 @@ struct QCVM
 			(*state.current).profile->fields[NumGlobalsSet]++;
 #endif
 
-		static_assert(std::is_standard_layout_v<T> && (sizeof(T) % 4) == 0);
+		static_assert(std::is_standard_layout_v<T> && std::is_trivial_v<T> && (sizeof(T) % 4) == 0);
 
 		*reinterpret_cast<T*>(GetGlobalByIndex(global)) = value;
 		dynamic_strings.CheckRefUnset(GetGlobalByIndex(global), sizeof(T) / sizeof(global_t));
@@ -989,11 +982,29 @@ struct QCVM
 			PrintTrace("  SetGlobal: %i -> %s", global, TraceGlobal(global).data());
 	}
 
-	inline string_t SetGlobal(const global_t &global, const std::string &value)
+	inline string_t SetGlobalStr(const global_t &global, std::string &&value)
 	{
-		string_t str = dynamic_strings.StoreRefCounted(value);
+		string_t str = StoreOrFind(std::move(value));
 		SetGlobal(global, str);
-		dynamic_strings.MarkRefCopy(str, GetGlobalByIndex(global));
+
+		if (dynamic_strings.IsRefCounted(str))
+			dynamic_strings.MarkRefCopy(str, GetGlobalByIndex(global));
+
+		return str;
+	}
+
+	inline string_t SetStringPtr(global_t *ptr, std::string &&value)
+	{
+		if (!PointerValid(reinterpret_cast<ptrdiff_t>(ptr)))
+			Error("bad pointer");
+
+		string_t str = StoreOrFind(std::move(value));
+		*reinterpret_cast<string_t *>(ptr) = str;
+		dynamic_strings.CheckRefUnset(ptr, sizeof(string_t) / sizeof(global_t));
+
+		if (dynamic_strings.IsRefCounted(str))
+			dynamic_strings.MarkRefCopy(str, ptr);
+
 		return str;
 	}
 
@@ -1145,11 +1156,11 @@ struct QCVM
 		PrintTrace("BUILTIN RETURN STATIC S %s", value);
 	}
 
-	inline void Return(const std::string &str)
+	inline void Return(std::string &&str)
 	{
-		SetGlobal(global_t::RETURN, str);
-		
 		PrintTrace("BUILTIN RETURN REFCOUNT S %s", str.data());
+
+		SetGlobalStr(global_t::RETURN, std::move(str));
 	}
 
 	inline void Return(const string_t &str)
@@ -1159,23 +1170,48 @@ struct QCVM
 		PrintTrace("BUILTIN RETURN S %s", GetString(str));
 	}
 
-	inline string_t StoreOrFind(const std::string_view &value)
+	inline bool FindString(const std::string_view &value, string_t &rstr)
 	{
+		rstr = string_t::STRING_EMPTY;
+
+		if (!value.length())
+			return true;
+
 		// check built-ins
 		auto builtin = string_hashes.find(value);
+
 		if (builtin != string_hashes.end())
-			return static_cast<string_t>((*builtin).data() - string_data);
-		
+		{
+			rstr = static_cast<string_t>((*builtin).data() - string_data);
+			return true;
+		}
+
 		// check temp strings
+		// TODO: hash these too
 		for (auto &s : dynamic_strings.GetStrings())
 		{
 			const char *str = dynamic_strings.Get(s.first);
 
 			if (str && value.compare(str) == 0)
-				return s.first;
+			{
+				rstr = s.first;
+				return true;
+			}
 		}
 
-		return dynamic_strings.StoreRefCounted(std::string(value));
+		return false;
+	}
+
+	// Note: DOES NOT ACQUIRE IF REF COUNTED!!
+	inline string_t StoreOrFind(std::string &&value)
+	{
+		// check built-ins
+		string_t str;
+
+		if (FindString(value, str))
+			return str;
+
+		return dynamic_strings.StoreRefCounted(std::move(value));
 	}
 
 	struct QCVMState {
@@ -1385,8 +1421,8 @@ struct QCVM
 
 	inline bool PointerValid(const ptrdiff_t &address, const size_t &len = 1) const
 	{
-		return
-			(address >= reinterpret_cast<ptrdiff_t>(globals.edicts) && (address + len) < (reinterpret_cast<ptrdiff_t>(globals.edicts) + (globals.edict_size * globals.num_edicts))) ||
+		return address == 0 ||
+			(address >= reinterpret_cast<ptrdiff_t>(globals.edicts) && (address + len) < (reinterpret_cast<ptrdiff_t>(globals.edicts) + (globals.edict_size * globals.max_edicts))) ||
 			(address >= reinterpret_cast<ptrdiff_t>(global_data) && (address + len) < reinterpret_cast<ptrdiff_t>(global_data + global_size)) ||
 			(allowed_stack && address >= reinterpret_cast<ptrdiff_t>(allowed_stack) && address < (reinterpret_cast<ptrdiff_t>(allowed_stack) + allowed_stack_size));
 	}
@@ -1421,6 +1457,9 @@ struct QCVM
 	}
 
 	void Execute(QCFunction &function);
+	
+	void WriteState(std::ostream &stream);
+	void ReadState(std::istream &stream);
 };
 
 std::string ParseFormat(const char *format, QCVM &vm, const uint8_t &start);
