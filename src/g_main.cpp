@@ -30,7 +30,6 @@ static void InitBuiltins()
 	InitStringBuiltins(qvm);
 	InitMemBuiltins(qvm);
 	InitDebugBuiltins(qvm);
-	InitVectorBuiltins(qvm);
 	InitMathBuiltins(qvm);
 }
 

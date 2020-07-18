@@ -42,9 +42,6 @@
     <ClCompile Include="src\vm_debug.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm_vector.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="src\vm_math.cpp">
       <Filter>src</Filter>
     </ClCompile>

@@ -18,7 +18,6 @@ void InitExtBuiltins(QCVM &vm);
 void InitStringBuiltins(QCVM &vm);
 void InitMemBuiltins(QCVM &vm);
 void InitDebugBuiltins(QCVM &vm);
-void InitVectorBuiltins(QCVM &vm);
 void InitMathBuiltins(QCVM &vm);
 
 void SyncPlayerState(QCVM &vm, edict_t *ent);

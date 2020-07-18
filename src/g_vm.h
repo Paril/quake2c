@@ -1107,6 +1107,12 @@ struct QCVM
 		return GetGlobal<vec3_t>(GlobalOffset(global_t::PARM0, d * 3));
 	}
 	
+	template<typename T>
+	[[nodiscard]] inline T *ArgvPointer(const uint8_t &d)
+	{
+		return reinterpret_cast<T*>(ArgvInt32(d));
+	}
+
 	inline void Return(const vec_t &value)
 	{
 		SetGlobal(global_t::RETURN, value);
@@ -1276,6 +1282,8 @@ struct QCVM
 		state.stack.pop_back();
 		auto &prev_stack = state.stack.back();
 
+		state.current = &prev_stack;
+
 		if (prev_stack.locals.size())
 		{
 			for (auto &local : prev_stack.locals)
@@ -1301,8 +1309,6 @@ struct QCVM
 
 		allowed_stack = 0;
 		allowed_stack_size = 0;
-
-		state.current = &prev_stack;
 	}
 
 	inline QCFunction *FindFunction(const char *name)

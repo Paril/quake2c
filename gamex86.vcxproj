@@ -106,7 +106,6 @@
     <ClCompile Include="src\vm_math.cpp" />
     <ClCompile Include="src\vm_mem.cpp" />
     <ClCompile Include="src\vm_string.cpp" />
-    <ClCompile Include="src\vm_vector.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\game.h" />

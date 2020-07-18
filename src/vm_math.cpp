@@ -33,18 +33,6 @@ static void QC_atan2f(QCVM &vm)
 	vm.Return(atan2f(x, y));
 }
 
-static void QC_DEG2RAD(QCVM &vm)
-{
-	const auto &x = vm.ArgvFloat(0);
-	vm.Return(static_cast<vec_t>(DEG2RAD(x)));
-}
-
-static void QC_RAD2DEG(QCVM &vm)
-{
-	const auto &x = vm.ArgvFloat(0);
-	vm.Return(static_cast<vec_t>(RAD2DEG(x)));
-}
-
 static void QC_floorf(QCVM &vm)
 {
 	const auto &v = vm.ArgvFloat(0);
@@ -106,8 +94,6 @@ void InitMathBuiltins(QCVM &vm)
 	RegisterBuiltin(sinf);
 	RegisterBuiltin(cosf);
 	RegisterBuiltin(atan2f);
-	RegisterBuiltin(RAD2DEG);
-	RegisterBuiltin(DEG2RAD);
 	RegisterBuiltin(floorf);
 	RegisterBuiltin(ceilf);
 	RegisterBuiltin(roundf);

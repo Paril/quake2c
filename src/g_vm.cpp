@@ -634,7 +634,7 @@ inline void F_OP_STORE(QCVM &vm, const std::array<operand, 3> &operands, int &de
 template<typename TType, typename TResult>
 inline void F_OP_STORE(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
 {
-	vm.CopyGlobal<TType, TResult>(operands[1], operands[0]);
+	vm.CopyGlobal<TResult, TType>(operands[1], operands[0]);
 }
 
 template<typename TType, typename TResult = TType>
@@ -855,7 +855,14 @@ inline void F_OP_LSHIFT(QCVM &vm, const std::array<operand, 3> &operands, int &d
 
 inline void F_OP_GLOBALADDRESS(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
 {
-	vm.SetGlobal(operands[2], reinterpret_cast<int32_t>(&vm.GetGlobal<int32_t>(operands[0]) + vm.GetGlobal<int32_t>(operands[1])));
+	const auto &base = &vm.GetGlobal<int32_t>(operands[0]);
+	const auto &offset = vm.GetGlobal<int32_t>(operands[1]);
+	const auto &address = reinterpret_cast<int32_t>(base + offset);
+
+	if (!vm.PointerValid(address))
+		vm.Error("bad pointer");
+
+	vm.SetGlobal(operands[2], address);
 }
 
 inline void F_OP_ADD_PIW(QCVM &vm, const std::array<operand, 3> &operands, int &depth)

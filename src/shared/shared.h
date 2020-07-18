@@ -149,79 +149,9 @@ constexpr vec3_t operator*(const TR &l, const vec3_t &r)
 
 constexpr vec3_t vec3_origin { 0, 0, 0 };
 
-constexpr vec_t DEG2RAD(const vec_t &a)
-{
-	return a * (M_PI / 180);
-}
-
-constexpr vec_t RAD2DEG(const vec_t &a)
-{
-	return a * (180 / M_PI);
-}
-
 constexpr vec_t DotProduct(const vec3_t &x, const vec3_t &y)
 {
 	return x * y;
-}
-
-constexpr void CrossProduct(const vec3_t &v1, const vec3_t &v2, vec3_t &cross)
-{
-	cross[0] = v1[1] * v2[2] - v1[2] * v2[1];
-	cross[1] = v1[2] * v2[0] - v1[0] * v2[2];
-	cross[2] = v1[0] * v2[1] - v1[1] * v2[0];
-}
-
-constexpr vec_t VectorLengthSquared(const vec3_t &v)
-{
-	return DotProduct(v, v);
-}
-
-inline vec_t VectorLength(const vec3_t &v)
-{
-	return sqrtf(VectorLengthSquared(v));
-}
-
-inline void AngleVectors(const vec3_t &angles, vec3_t &forward, vec3_t &right, vec3_t &up)
-{
-    float        angle;
-    float        sr, sp, sy, cr, cp, cy;
-
-    angle = DEG2RAD(angles[YAW]);
-    sy = sin(angle);
-    cy = cos(angle);
-    angle = DEG2RAD(angles[PITCH]);
-    sp = sin(angle);
-    cp = cos(angle);
-    angle = DEG2RAD(angles[ROLL]);
-    sr = sin(angle);
-    cr = cos(angle);
-
-	forward = { cp * cy, cp * sy, -sp };
-    right = {
-		(-1 * sr * sp * cy + -1 * cr * -sy),
-		(-1 * sr * sp * sy + -1 * cr * cy),
-		-1 * sr * cp
-	};
-	up = {
-		(cr * sp * cy + -sr * -sy),
-		(cr * sp * sy + -sr * cy),
-		cr * cp
-	};
-}
-
-inline vec_t VectorNormalize(vec3_t &v)
-{
-	vec_t length = VectorLength(v);
-
-	if (length)
-	{
-		vec_t ilength = 1 / length;
-		v[0] *= ilength;
-		v[1] *= ilength;
-		v[2] *= ilength;
-	}
-
-	return length;
 }
 
 /*
@@ -347,7 +277,7 @@ bool    Info_Validate(const char *s);
 /*
 ==========================================================
 
-  ELEMENTS COMMUNICATED ACROSS THE NET
+	ELEMENTS COMMUNICATED ACROSS THE NET
 
 ==========================================================
 */
@@ -359,13 +289,13 @@ bool    Info_Validate(const char *s);
 template <typename T, class... StreamArgs>
 inline std::basic_ostream<StreamArgs...> &
 operator <= (std::basic_ostream<StreamArgs...> & out, T const & data) {
-        out.write(reinterpret_cast<char const *>(&data), sizeof(T));
-        return out;
+		out.write(reinterpret_cast<char const *>(&data), sizeof(T));
+		return out;
 }
 
 template <typename T, class... StreamArgs>
 inline std::basic_istream<StreamArgs...> &
 operator >= (std::basic_istream<StreamArgs...> & out, T & data) {
-        out.read(reinterpret_cast<char *>(&data), sizeof(T));
-        return out;
+		out.read(reinterpret_cast<char *>(&data), sizeof(T));
+		return out;
 }
