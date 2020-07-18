@@ -1216,13 +1216,12 @@ struct QCVM
 
 	struct QCVMState {
 		std::list<QCStack>				stack;
-		std::list<QCStack>::iterator	current;
+		QCStack							*current;
 		uint8_t							argc = 0;
 
 		QCVMState()
 		{
-			stack.resize(16);
-			current = stack.begin();
+			current = &stack.emplace_back();
 		}
 	} state;
 
@@ -1248,7 +1247,7 @@ struct QCVM
 			PrintTrace("Backup locals %u -> %u", function.first_arg, static_cast<uint32_t>(function.first_arg) + function.num_args_and_locals);
 		}
 
-		auto &new_stack = *(++state.current);
+		auto &new_stack = state.stack.emplace_back();
 
 		// set up current stack
 		new_stack.function = &function;
@@ -1264,15 +1263,18 @@ struct QCVM
 		new_stack.profile->fields[NumSelfCalls]++;
 		new_stack.start = perf_time();
 #endif
+
+		state.current = &new_stack;
 	}
 
 	inline void Leave()
 	{
 		// restore stack
 #ifdef ALLOW_PROFILING
-		auto &current_stack = *state.current;
+		auto current_stack = std::move(state.stack.back());
 #endif
-		auto &prev_stack = *(--state.current);
+		state.stack.pop_back();
+		auto &prev_stack = state.stack.back();
 
 		if (prev_stack.locals.size())
 		{
@@ -1299,6 +1301,8 @@ struct QCVM
 
 		allowed_stack = 0;
 		allowed_stack_size = 0;
+
+		state.current = &prev_stack;
 	}
 
 	inline QCFunction *FindFunction(const char *name)

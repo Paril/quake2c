@@ -63,9 +63,15 @@ static void QC_roundf(QCVM &vm)
 	vm.Return(roundf(v));
 }
 
+static void QC_tanf(QCVM &vm)
+{
+	const auto &v = vm.ArgvFloat(0);
+	vm.Return(tanf(v));
+}
+
 static void QC_Q_rand(QCVM &vm)
 {
-	vm.Return(static_cast<int32_t>(Q_rand()));
+	vm.Return(static_cast<int32_t>(Q_rand() & 0x7FFFFFFF));
 }
 
 static void QC_Q_rand_uniform(QCVM &vm)
@@ -95,6 +101,7 @@ void InitMathBuiltins(QCVM &vm)
 	RegisterBuiltin(floorf);
 	RegisterBuiltin(ceilf);
 	RegisterBuiltin(roundf);
+	RegisterBuiltin(tanf);
 	
 	RegisterBuiltin(Q_rand);
 	RegisterBuiltin(Q_rand_uniform);

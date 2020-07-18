@@ -56,7 +56,10 @@ static void QC_strlen(QCVM &vm)
 {
 	const auto &a = vm.ArgvStringID(0);
 
-	vm.Return(static_cast<int32_t>(vm.dynamic_strings.Length(a)));
+	if (vm.dynamic_strings.IsRefCounted(a))
+		vm.Return(static_cast<int32_t>(vm.dynamic_strings.Length(a)));
+	else
+		vm.Return(static_cast<int32_t>(strlen(vm.GetString(a))));
 }
 
 static void QC_strtok(QCVM &vm)

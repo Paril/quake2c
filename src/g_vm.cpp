@@ -733,7 +733,7 @@ inline void F_CALL(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
 	const int32_t &enter_func = vm.GetGlobal<int32_t>(operands[0]);
 
 	vm.state.argc = argc;
-	if (!enter_func)
+	if (enter_func <= 0 || enter_func >= vm.functions.size())
 		vm.Error("NULL function");
 
 #ifdef ALLOW_PROFILING
