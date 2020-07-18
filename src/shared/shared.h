@@ -236,7 +236,8 @@ void Q_srand(uint32_t seed);
 uint32_t Q_rand();
 uint32_t Q_rand_uniform(uint32_t n);
 float frand();
-float crand();
+float frand(const float &max);
+float frand(const float &min, const float &max);
 
 /*
 ==============================================================

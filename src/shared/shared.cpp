@@ -308,12 +308,14 @@ float frand()
 	return std::uniform_real<float>()(mt);
 }
 
-float crand()
+float frand(const float &max)
 {
-	float v = frand();
-	if (Q_rand() & 1)
-		v = -v;
-	return v;
+	return std::uniform_real<float>(0.f, max)(mt);
+}
+
+float frand(const float &min, const float &max)
+{
+	return std::uniform_real<float>(min, max)(mt);
 }
 
 

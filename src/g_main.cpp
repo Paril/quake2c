@@ -371,7 +371,7 @@ static void WriteDefinitionData(std::ostream &stream, const QCDefinition &def, c
 		else if (ptr_val >= reinterpret_cast<ptrdiff_t>(globals.edicts) && ptr_val < reinterpret_cast<ptrdiff_t>(globals.edicts) + (globals.edict_size * globals.max_edicts))
 		{
 			qvm.Error("somehow got a bad field ptr");
-			stream <= pointer_class_type_t::POINTER_ENT;
+			//stream <= pointer_class_type_t::POINTER_ENT;
 		}
 		else
 			qvm.Error("somehow got a bad field ptr");
@@ -460,22 +460,20 @@ static void ReadDefinitionData(std::istream &stream, const QCDefinition &def, gl
 			if (!qvm.definition_map.contains(str))
 				qvm.Error("bad pointer; can't map %s", global_name.data());
 
-			auto def = qvm.definition_map.at(str);
+			auto global_def = qvm.definition_map.at(str);
 			size_t global_offset;
 			stream >= global_offset;
 
-			auto ptr = qvm.GetGlobalByIndex(static_cast<global_t>(def->global_index + global_offset));
+			auto ptr = qvm.GetGlobalByIndex(static_cast<global_t>(global_def->global_index + global_offset));
 			*value = static_cast<global_t>(reinterpret_cast<ptrdiff_t>(ptr));
 			return;
 		}
 		else if (ptrclass == pointer_class_type_t::POINTER_ENT)
 		{
 			qvm.Error("bad pointer");
-			return;
 		}
 		
 		qvm.Error("bad pointer");
-		return;
 	}
 	else if (type == TYPE_ENTITY)
 	{

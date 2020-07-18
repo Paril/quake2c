@@ -971,6 +971,39 @@ inline void F_OP_ADDSTOREP(QCVM &vm, const std::array<operand, 3> &operands, int
 	vm.SetGlobal<TType>(operands[2], (*f) += a);
 }
 
+inline void F_OP_RAND0(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	vm.SetGlobal<vec_t>(operands[2], frand());
+}
+
+inline void F_OP_RAND1(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	vm.SetGlobal<vec_t>(operands[2], frand(vm.GetGlobal<vec_t>(operands[0])));
+}
+
+inline void F_OP_RAND2(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	vm.SetGlobal<vec_t>(operands[2], frand(vm.GetGlobal<vec_t>(operands[0]), vm.GetGlobal<vec_t>(operands[1])));
+}
+
+inline void F_OP_RANDV0(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	vm.SetGlobal<vec3_t>(operands[2], { frand(), frand(), frand() });
+}
+
+inline void F_OP_RANDV1(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<vec3_t>(operands[0]);
+	vm.SetGlobal<vec3_t>(operands[2], { frand(a[0]), frand(a[1]), frand(a[2]) });
+}
+
+inline void F_OP_RANDV2(QCVM &vm, const std::array<operand, 3> &operands, int &depth)
+{
+	const auto &a = vm.GetGlobal<vec3_t>(operands[0]);
+	const auto &b = vm.GetGlobal<vec3_t>(operands[1]);
+	vm.SetGlobal<vec3_t>(operands[2], { frand(a[0], b[0]), frand(a[1], b[1]), frand(a[2], b[2]) });
+}
+
 static OPCodeFunc codeFuncs[] = {
 	[OP_DONE] = [](auto vm, auto operands, auto depth) { vm.Leave(); depth--; },
 
@@ -1176,7 +1209,15 @@ static OPCodeFunc codeFuncs[] = {
 	[OP_LOADP_FNC] = F_OP_LOADP<func_t>,
 	[OP_LOADP_I] = F_OP_LOADP<int32_t>,
 
-	[OP_BOUNDCHECK] = F_OP_BOUNDCHECK
+	[OP_BOUNDCHECK] = F_OP_BOUNDCHECK,
+		
+	[OP_RAND0] = F_OP_RAND0,
+	[OP_RAND1] = F_OP_RAND1,
+	[OP_RAND2] = F_OP_RAND2,
+
+	[OP_RANDV0] = F_OP_RANDV0,
+	[OP_RANDV1] = F_OP_RANDV1,
+	[OP_RANDV2] = F_OP_RANDV2,
 };
 
 void QCVM::Execute(QCFunction &function)
