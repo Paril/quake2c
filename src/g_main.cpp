@@ -103,7 +103,9 @@ static struct qc_export_t
 	func_t		InitGame;
 	func_t		ShutdownGame;
 	
+	func_t		PreSpawnEntities;
 	func_t		SpawnEntities;
+	func_t		PostSpawnEntities;
 	
 	func_t		ClientConnect;
 	func_t		ClientBegin;
@@ -190,6 +192,49 @@ static void AssignClientPointers()
 		game.entity(i + 1).client = &game.clients[i];
 }
 
+static void BackupClientData()
+{
+	// in Q2, gclient_t was stored in a separate pointer, but in Q2QC they're fields
+	// and as such wiped with the entity structure. We have to mimic the original Q2 behavior of backing up
+	// the gclient_t structures.
+	game.client_load_data = reinterpret_cast<uint8_t *>(gi.TagMalloc(globals.edict_size * game.clients.size(), TAG_GAME));
+	memcpy(game.client_load_data, &game.entity(1), globals.edict_size * game.clients.size());
+	qvm.dynamic_strings.MarkIfHasRef(&game.entity(1), game.client_load_data, (globals.edict_size * game.clients.size()) / sizeof(global_t));
+}
+
+static void RestoreClientData()
+{
+	// copy over any client-specific data back into the clients and re-sync
+	for (size_t i = 0; i < game.clients.size(); i++)
+	{
+		auto &ent = game.entity(i + 1);
+		auto &backup = *reinterpret_cast<edict_t *>(game.client_load_data + (globals.edict_size * i));
+
+		// restore client structs
+		for (auto &def : qvm.fields)
+		{
+			const char *name = qvm.GetString(def.name_index);
+
+			if (def.name_index == string_t::STRING_EMPTY || strnicmp(name, "client.", 6))
+				continue;
+
+			const size_t len = def.id == TYPE_VECTOR ? 3 : 1;
+
+			auto dst = qvm.GetEntityFieldPointer(ent, def.global_index);
+			auto src = qvm.GetEntityFieldPointer(backup, def.global_index);
+
+			memcpy(dst, src, sizeof(global_t) * len);
+		}
+
+		SyncPlayerState(qvm, &ent);
+	}
+	
+	qvm.dynamic_strings.MarkIfHasRef(game.client_load_data, &game.entity(1), (globals.edict_size * game.clients.size()) / sizeof(global_t));
+	qvm.dynamic_strings.CheckRefUnset(game.client_load_data, (globals.edict_size * game.clients.size()) / sizeof(global_t), true);
+	gi.TagFree(game.client_load_data);
+	game.client_load_data = nullptr;
+}
+
 static void WipeEntities()
 {
 	memset(globals.edicts, 0, globals.max_edicts * globals.edict_size);
@@ -204,13 +249,23 @@ static void SpawnEntities(const char *mapname, const char *entities, const char 
 {
 	gi.FreeTags(TAG_LEVEL);
 
+	auto func = qvm.FindFunction(qce.PreSpawnEntities);
+	qvm.Execute(*func);
+
+	BackupClientData();
+
 	WipeEntities();
 
-	auto func = qvm.FindFunction(qce.SpawnEntities);
+	func = qvm.FindFunction(qce.SpawnEntities);
 	qvm.SetGlobalStr(global_t::PARM0, std::string(mapname));
 	qvm.SetGlobalStr(global_t::PARM1, std::string(entities));
 	qvm.SetGlobalStr(global_t::PARM2, std::string(spawnpoint));
 	qvm.Execute(*func);
+
+	func = qvm.FindFunction(qce.PostSpawnEntities);
+	qvm.Execute(*func);
+
+	RestoreClientData();
 }
 
 static qboolean ClientConnect(edict_t *e, char *userinfo)
@@ -668,11 +723,6 @@ static void ReadGame(const char *filename)
 
 	for (size_t i = 0; i < game.clients.size(); i++)
 		SyncPlayerState(qvm, &game.entity(i + 1));
-
-	// make a temp copy of the clients' entities for ReadLevel
-	game.client_load_data = reinterpret_cast<uint8_t *>(gi.TagMalloc(globals.edict_size * game.clients.size(), TAG_GAME));
-	memcpy(game.client_load_data, &game.entity(1), globals.edict_size * game.clients.size());
-	qvm.dynamic_strings.MarkIfHasRef(&game.entity(1), game.client_load_data, (globals.edict_size * game.clients.size()) / sizeof(global_t));
 }
 
 //==========================================================
@@ -798,7 +848,10 @@ static void ReadLevel(const char *filename)
 		qvm.Error("Savegame has bad fields");
 
 	// setup entities
+	BackupClientData();
+
 	WipeEntities();
+
 	globals.num_edicts = game.clients.size() + 1;
 	
 	// free any string refs inside of the entity structure
@@ -878,36 +931,8 @@ static void ReadLevel(const char *filename)
 	}
 
 	AssignClientPointers();
-	
-	// copy over any client-specific data back into the clients and re-sync
 
-	for (size_t i = 0; i < game.clients.size(); i++)
-	{
-		auto &ent = game.entity(i + 1);
-		auto &backup = *reinterpret_cast<edict_t *>(game.client_load_data + (globals.edict_size * i));
-
-		// restore client structs
-		for (auto &def : qvm.fields)
-		{
-			const char *name = qvm.GetString(def.name_index);
-
-			if (def.name_index == string_t::STRING_EMPTY || strnicmp(name, "client.", 6))
-				continue;
-
-			const size_t len = def.id == TYPE_VECTOR ? 3 : 1;
-
-			auto dst = qvm.GetEntityFieldPointer(ent, def.global_index);
-			auto src = qvm.GetEntityFieldPointer(backup, def.global_index);
-
-			memcpy(dst, src, sizeof(global_t) * len);
-		}
-
-		SyncPlayerState(qvm, &ent);
-	}
-	
-	qvm.dynamic_strings.MarkIfHasRef(game.client_load_data, &game.entity(1), (globals.edict_size * game.clients.size()) / sizeof(global_t));
-	qvm.dynamic_strings.CheckRefUnset(game.client_load_data, (globals.edict_size * game.clients.size()) / sizeof(global_t), true);
-	gi.TagFree(game.client_load_data);
+	RestoreClientData();
 
 	for (size_t i = 0; i < globals.num_edicts; i++)
 	{
@@ -922,7 +947,6 @@ static void ReadLevel(const char *filename)
 	qvm.SetGlobal(global_t::PARM0, globals.num_edicts);
 	qvm.Execute(*func);
 }
-
 
 game_export_t globals = {
 	.apiversion = 3,
