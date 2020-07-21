@@ -656,7 +656,7 @@ inline void F_OP_STOREP(QCVM &vm, const operands &operands, int &depth)
 	const auto &address = vm.GetGlobal<int32_t>(operands[1]) + (vm.GetGlobal<ptrdiff_t>(operands[2]) * sizeof(global_t));
 	const auto &value = vm.GetGlobal<TType>(operands[0]);
 
-	if (!vm.PointerValid(address, sizeof(TResult)))
+	if (!vm.PointerValid(address, false, sizeof(TResult)))
 		vm.Error("invalid address");
 
 	constexpr size_t span = sizeof(TType) / sizeof(global_t);
@@ -892,7 +892,7 @@ inline void F_OP_LOADA(QCVM &vm, const operands &operands, int &depth)
 {
 	const ptrdiff_t address = static_cast<ptrdiff_t>(operands[0]) + vm.GetGlobal<int32_t>(operands[1]);
 			
-	if (!vm.PointerValid(reinterpret_cast<ptrdiff_t>(vm.global_data + address), sizeof(TType)))
+	if (!vm.PointerValid(reinterpret_cast<ptrdiff_t>(vm.global_data + address), false, sizeof(TType)))
 		vm.Error("Invalid pointer %x", address);
 			
 	auto &field_value = *reinterpret_cast<TType *>(vm.global_data + address);
@@ -907,7 +907,7 @@ inline void F_OP_LOADP(QCVM &vm, const operands &operands, int &depth)
 {
 	const ptrdiff_t address = vm.GetGlobal<int32_t>(operands[0]) + (vm.GetGlobal<int32_t>(operands[1]) * sizeof(global_t));
 
-	if (!vm.PointerValid(address, sizeof(TType)))
+	if (!vm.PointerValid(address, false, sizeof(TType)))
 		vm.Error("Invalid pointer %x", address);
 			
 	auto &field_value = *reinterpret_cast<TType *>(address);
@@ -1335,7 +1335,7 @@ void QCVM::ReadState(std::istream &stream)
 }
 
 QCVM qvm;
-static const cvar_t *game_var;
+const cvar_t *game_var;
 
 static void VMLoadStatements(std::istream &stream, QCStatement *dst, QCHeader &header)
 {

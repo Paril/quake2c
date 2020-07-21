@@ -23,10 +23,41 @@ static void QC_debugbreak(QCVM &vm)
 	__debugbreak();
 }
 
+static void QC_dumpentity(QCVM &vm)
+{
+	std::filesystem::path file_path(vas("%s/dumpentity.text", game_var->string).data());
+	std::ofstream stream(file_path, std::ios::binary);
+
+	auto ent = vm.ArgvEntity(0);
+
+	for (auto f : vm.fields)
+	{
+		stream << vm.GetString(f.name_index) << ": ";
+
+		auto val = reinterpret_cast<ptrdiff_t>(vm.GetEntityFieldPointer(*ent, static_cast<int32_t>(f.global_index)));
+
+		switch (f.id)
+		{
+		case TYPE_FLOAT:
+			stream << *reinterpret_cast<vec_t *>(val);
+			break;
+		case TYPE_VECTOR:
+			stream << vtoss(*reinterpret_cast<vec3_t *>(val));
+			break;
+		default:
+			stream << *reinterpret_cast<int32_t *>(val);
+			break;
+		}
+
+		stream << "\r\n";
+	}
+}
+
 void InitDebugBuiltins(QCVM &vm)
 {
 	RegisterBuiltin(traceon);
 	RegisterBuiltin(traceoff);
 	RegisterBuiltin(stacktrace);
 	RegisterBuiltin(debugbreak);
+	RegisterBuiltin(dumpentity);
 }

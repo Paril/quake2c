@@ -960,7 +960,7 @@ struct QCVM
 
 		const int32_t address = *reinterpret_cast<const int32_t*>(GetGlobalByIndex(global));
 
-		if (!PointerValid(reinterpret_cast<ptrdiff_t>(address), sizeof(T)))
+		if (!PointerValid(reinterpret_cast<ptrdiff_t>(address), false, sizeof(T)))
 			Error("bad address");
 
 		return reinterpret_cast<T *>(address);
@@ -1442,9 +1442,9 @@ struct QCVM
 		return game.entity(address / globals.edict_size);
 	}
 
-	inline bool PointerValid(const ptrdiff_t &address, const size_t &len = 1) const
+	inline bool PointerValid(const ptrdiff_t &address, const bool allow_null = false, const size_t &len = sizeof(global_t)) const
 	{
-		return address == 0 ||
+		return (allow_null && address == 0) ||
 			(address >= reinterpret_cast<ptrdiff_t>(globals.edicts) && (address + len) < (reinterpret_cast<ptrdiff_t>(globals.edicts) + (globals.edict_size * globals.max_edicts))) ||
 			(address >= reinterpret_cast<ptrdiff_t>(global_data) && (address + len) < reinterpret_cast<ptrdiff_t>(global_data + global_size)) ||
 			(allowed_stack && address >= reinterpret_cast<ptrdiff_t>(allowed_stack) && address < (reinterpret_cast<ptrdiff_t>(allowed_stack) + allowed_stack_size));
@@ -1498,3 +1498,5 @@ void ShutdownVM();
 // Helpful macro for quickly registering a builtin
 #define RegisterBuiltin(name) \
 	vm.builtins.Register(#name, QC_ ## name)
+
+extern const cvar_t *game_var;
