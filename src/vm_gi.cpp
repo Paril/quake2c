@@ -112,8 +112,8 @@ static void QC_configstring(QCVM &vm)
 
 [[noreturn]] static void QC_error(QCVM &vm)
 {
-	const auto &fmt = vm.ArgvString(0);
-	vm.Error(ParseFormat(fmt, vm, 1).data());
+	const auto &fmtid = vm.ArgvStringID(0);
+	vm.Error(ParseFormat(fmtid, vm, 1).data());
 }
 
 static void QC_modelindex(QCVM &vm)
@@ -574,14 +574,14 @@ static void QC_AddCommandString(QCVM &vm)
 static void QC_bprintf(QCVM &vm)
 {
 	const auto &level = static_cast<print_level_t>(vm.ArgvInt32(0));
-	const auto &fmt = vm.ArgvString(1);
-	gi.bprintf(level, "%s", ParseFormat(fmt, vm, 2).data());
+	const auto &fmtid = vm.ArgvStringID(1);
+	gi.bprintf(level, "%s", ParseFormat(fmtid, vm, 2).data());
 }
 
 static void QC_dprintf(QCVM &vm)
 {
-	const auto &fmt = vm.ArgvString(0);
-	const auto &str = ParseFormat(fmt, vm, 1);
+	const auto &fmtid = vm.ArgvStringID(0);
+	const auto &str = ParseFormat(fmtid, vm, 1);
 	gi.dprintf("%s", str.data());
 }
 
@@ -589,15 +589,15 @@ static void QC_cprintf(QCVM &vm)
 {
 	auto ent = vm.ArgvEntity(0);
 	const auto &level = static_cast<print_level_t>(vm.ArgvInt32(1));
-	const auto &fmt = vm.ArgvString(2);
-	gi.cprintf(ent, level, "%s", ParseFormat(fmt, vm, 3).data());
+	const auto &fmtid = vm.ArgvStringID(2);
+	gi.cprintf(ent, level, "%s", ParseFormat(fmtid, vm, 3).data());
 }
 
 static void QC_centerprintf(QCVM &vm)
 {
 	auto ent = vm.ArgvEntity(0);
-	const auto &fmt = vm.ArgvString(1);
-	gi.centerprintf(ent, "%s", ParseFormat(fmt, vm, 2).data());
+	const auto &fmtid = vm.ArgvStringID(1);
+	gi.centerprintf(ent, "%s", ParseFormat(fmtid, vm, 2).data());
 }
 
 static void QC_DebugGraph(QCVM &vm)

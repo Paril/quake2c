@@ -142,8 +142,6 @@ is loaded.
 */
 static void InitGame ()
 {
-	Q_srand(static_cast<uint32_t>(time(NULL)));
-
 	InitVM();
 
 	InitBuiltins();
@@ -220,8 +218,8 @@ static void RestoreClientData()
 
 			const size_t len = def.id == TYPE_VECTOR ? 3 : 1;
 
-			auto dst = qvm.GetEntityFieldPointer(ent, def.global_index);
-			auto src = qvm.GetEntityFieldPointer(backup, def.global_index);
+			auto dst = qvm.GetEntityFieldPointer(ent, static_cast<int32_t>(def.global_index));
+			auto src = qvm.GetEntityFieldPointer(backup, static_cast<int32_t>(def.global_index));
 
 			memcpy(dst, src, sizeof(global_t) * len);
 		}
@@ -370,9 +368,11 @@ static void WriteDefinitionData(std::ostream &stream, const QCDefinition &def, c
 
 	if (type == TYPE_STRING)
 	{
-		const char *str = qvm.GetString(static_cast<string_t>(*value));
-		stream <= strlen(str);
-		stream.write(str, strlen(str));
+		auto strid = static_cast<string_t>(*value);
+		auto strlength = qvm.StringLength(strid);
+		const char *str = qvm.GetString(strid);
+		stream <= strlength;
+		stream.write(str, strlength);
 		return;
 	}
 	else if (type == TYPE_FUNCTION)
@@ -380,9 +380,10 @@ static void WriteDefinitionData(std::ostream &stream, const QCDefinition &def, c
 		func_t func = static_cast<func_t>(*value);
 		auto &func_ptr = qvm.functions[static_cast<size_t>(func)];
 		const char *str = qvm.GetString(func_ptr.name_index);
+		auto strlength = qvm.StringLength(func_ptr.name_index);
 
-		stream <= strlen(str);
-		stream.write(str, strlen(str));
+		stream <= strlength;
+		stream.write(str, strlength);
 		return;
 	}
 	else if (type == TYPE_POINTER)
@@ -450,7 +451,7 @@ static void WriteDefinitionData(std::ostream &stream, const QCDefinition &def, c
 
 static void WriteEntityFieldData(std::ostream &stream, edict_t &ent, const QCDefinition &def)
 {
-	auto field = qvm.GetEntityFieldPointer(ent, def.global_index);
+	auto field = qvm.GetEntityFieldPointer(ent, static_cast<int32_t>(def.global_index));
 	WriteDefinitionData(stream, def, reinterpret_cast<global_t *>(field));
 }
 
@@ -506,19 +507,14 @@ static void ReadDefinitionData(std::istream &stream, const QCDefinition &def, gl
 			global_name.resize(global_len);
 			stream.read(global_name.data(), global_len);
 
-			string_t str;
-			
-			if (!qvm.FindString(global_name, str))
-				qvm.Error("bad pointer; can't find %s", global_name.data());
-
-			if (!qvm.definition_map.contains(str))
+			if (!qvm.definition_map_by_name.contains(global_name))
 				qvm.Error("bad pointer; can't map %s", global_name.data());
 
-			auto global_def = qvm.definition_map.at(str);
+			auto global_def = qvm.definition_map_by_name.at(global_name);
 			size_t global_offset;
 			stream >= global_offset;
 
-			auto ptr = qvm.GetGlobalByIndex(static_cast<global_t>(global_def->global_index + global_offset));
+			auto ptr = qvm.GetGlobalByIndex(static_cast<global_t>(static_cast<uint32_t>(global_def->global_index) + global_offset));
 			*value = static_cast<global_t>(reinterpret_cast<ptrdiff_t>(ptr));
 			return;
 		}
@@ -548,7 +544,7 @@ static void ReadDefinitionData(std::istream &stream, const QCDefinition &def, gl
 
 static void ReadEntityFieldData(std::istream &stream, edict_t &ent, const QCDefinition &def)
 {
-	auto field = qvm.GetEntityFieldPointer(ent, def.global_index);
+	auto field = qvm.GetEntityFieldPointer(ent, static_cast<int32_t>(def.global_index));
 	ReadDefinitionData(stream, def, reinterpret_cast<global_t *>(field));
 }
 
@@ -678,15 +674,10 @@ static void ReadGame(const char *filename)
 
 		stream.read(def_name.data(), len);
 
-		string_t str;
-		
-		if (!qvm.FindString(def_name, str) || qvm.dynamic_strings.IsRefCounted(str))
-			qvm.Error("Bad string in save file");
-
-		if (!qvm.definition_map.contains(str))
+		if (!qvm.definition_map_by_name.contains(def_name))
 			qvm.Error("Bad definition %s", def_name.data());
 
-		auto &def = *qvm.definition_map.at(str);
+		auto &def = *qvm.definition_map_by_name.at(def_name);
 		ReadDefinitionData(stream, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
 	}
 
@@ -874,15 +865,10 @@ static void ReadLevel(const char *filename)
 
 		stream.read(def_name.data(), len);
 
-		string_t str;
-		
-		if (!qvm.FindString(def_name, str) || qvm.dynamic_strings.IsRefCounted(str))
-			qvm.Error("Bad string in save file");
-
-		if (!qvm.definition_map.contains(str))
+		if (!qvm.definition_map_by_name.contains(def_name))
 			qvm.Error("Bad definition %s", def_name.data());
 
-		auto &def = *qvm.definition_map.at(str);
+		auto &def = *qvm.definition_map_by_name.at(def_name);
 		ReadDefinitionData(stream, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
 	}
 

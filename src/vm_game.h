@@ -20,4 +20,9 @@ void InitMemBuiltins(QCVM &vm);
 void InitDebugBuiltins(QCVM &vm);
 void InitMathBuiltins(QCVM &vm);
 
+// exports from modules
+float frand();
+float frand(const float &max);
+float frand(const float &min, const float &max);
+
 void SyncPlayerState(QCVM &vm, edict_t *ent);

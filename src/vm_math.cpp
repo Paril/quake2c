@@ -57,6 +57,45 @@ static void QC_tanf(QCVM &vm)
 	vm.Return(tanf(v));
 }
 
+
+
+/*
+=====================================================================
+
+  MT19337 PRNG
+
+=====================================================================
+*/
+
+#include <random>
+
+static std::mt19937 mt(static_cast<uint32_t>(time(NULL)));
+
+inline uint32_t Q_rand(void)
+{
+	return mt();
+}
+
+inline uint32_t Q_rand_uniform(uint32_t n)
+{
+	return std::uniform_int_distribution<uint32_t>(0, n - 1)(mt);
+}
+
+float frand()
+{
+	return std::uniform_real<float>()(mt);
+}
+
+float frand(const float &max)
+{
+	return std::uniform_real<float>(0.f, max)(mt);
+}
+
+float frand(const float &min, const float &max)
+{
+	return std::uniform_real<float>(min, max)(mt);
+}
+
 static void QC_Q_rand(QCVM &vm)
 {
 	vm.Return(static_cast<int32_t>(Q_rand() & 0x7FFFFFFF));

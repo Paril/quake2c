@@ -55,14 +55,6 @@ MATHLIB
 ==============================================================
 */
 
-// angle indexes
-enum : size_t
-{
-	PITCH,	// up / down
-	YAW,	// left / right
-	ROLL	// fall over
-};
-
 using vec_t = float;
 
 struct vec3_t : std::array<vec_t, 3>
@@ -94,7 +86,6 @@ struct vec3_t : std::array<vec_t, 3>
 	{
 		return !this->at(0) && !this->at(1) && !this->at(2);
 	}
-
 
 	template<typename TR>
 	constexpr vec3_t operator*(const TR &r) const
@@ -147,27 +138,10 @@ constexpr vec3_t operator*(const TR &l, const vec3_t &r)
 	return r * l;
 }
 
-constexpr vec3_t vec3_origin { 0, 0, 0 };
-
 constexpr vec_t DotProduct(const vec3_t &x, const vec3_t &y)
 {
 	return x * y;
 }
-
-/*
-==============================================================
-
-RANDOM
-
-==============================================================
-*/
-
-void Q_srand(uint32_t seed);
-uint32_t Q_rand();
-uint32_t Q_rand_uniform(uint32_t n);
-float frand();
-float frand(const float &max);
-float frand(const float &min, const float &max);
 
 /*
 ==============================================================
@@ -195,26 +169,6 @@ constexpr T min(const T &a, const T &b)
 	return a < b ? a : b;
 }
 
-constexpr int16_t ANGLE2SHORT(const vec_t &x)
-{
-	return static_cast<int32_t>(x * 65536 / 360) & 65535;
-}
-
-constexpr vec_t SHORT2ANGLE(const int16_t &x)
-{
-	return x * 360.0f / 65536;
-}
-
-constexpr int16_t COORD2SHORT(const vec_t &x)
-{
-	return x * 8.0f;
-}
-
-constexpr vec_t SHORT2COORD(const int16_t &x)
-{
-	return x * (1.0f / 8);
-}
-
 /*
 ==============================================================
 
@@ -223,19 +177,10 @@ STRING
 ==============================================================
 */
 
-constexpr size_t MAX_TOKEN_CHARS	= 1024;	// max length of an individual token
 constexpr size_t MAX_QPATH	= 64;	// max length of a quake game pathname
-
-#define Q_stricmp   stricmp
-#define Q_stricmpn  strnicmp
-
-char *COM_Parse(const char **data_p);
 
 // buffer safe operations
 size_t Q_strlcpy(char *dst, const char *src, size_t size);
-
-size_t Q_vsnprintf(char *dest, size_t size, const char *fmt, va_list argptr);
-size_t Q_snprintf(char *dest, size_t size, const char *fmt, ...) q_printf(3, 4);
 
 char *va(const char *format, ...) q_printf(1, 2);
 
@@ -262,17 +207,7 @@ inline std::string vtoss(const vec3_t v)
 	return vas("%f %f %f", v[0], v[1], v[2]);
 }
 
-//
-// key / value info strings
-//
-constexpr size_t MAX_INFO_KEY		= 64;
-constexpr size_t MAX_INFO_VALUE		= 64;
 constexpr size_t MAX_INFO_STRING	= 512;
-
-char    *Info_ValueForKey(const char *s, const char *key);
-void    Info_RemoveKey(char *s, const char *key);
-bool    Info_SetValueForKey(char *s, const char *key, const char *value);
-bool    Info_Validate(const char *s);
 
 /*
 ==========================================================

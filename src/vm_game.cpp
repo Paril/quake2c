@@ -104,7 +104,7 @@ static void QC_entity_key_parse(QCVM &vm)
 
 	void *ptr = vm.GetEntityFieldPointer(*ent, field);
 
-	auto f = vm.field_map.find(field);
+	auto f = vm.field_map.find(static_cast<global_t>(field));
 
 	if (f == vm.field_map.end())
 		vm.Error("Couldn't match field %i", field);
@@ -119,24 +119,15 @@ static void QC_struct_key_parse(QCVM &vm)
 	const auto &value = vm.ArgvString(2);
 	
 	auto full_name = vas("%s.%s", struct_name, key_name);
-	auto hashed = vm.string_hashes.find(full_name);
+	auto hashed = vm.definition_map_by_name.find(full_name);
 
-	if (hashed == vm.string_hashes.end())
+	if (hashed == vm.definition_map_by_name.end())
 	{
 		vm.Return(0);
 		return;
 	}
 
-	auto str = static_cast<string_t>((*hashed).data() - vm.string_data);
-	auto def = vm.definition_map.find(str);
-
-	if (def == vm.definition_map.end())
-	{
-		vm.Return(0);
-		return;
-	}
-
-	auto g = (*def).second;
+	auto g = (*hashed).second;
 	auto global = vm.GetGlobalByIndex(static_cast<global_t>(g->global_index));
 	QC_parse_value_into_ptr(vm, static_cast<deftype_t>(g->id & ~TYPE_GLOBAL), value, global);
 	vm.Return(1);

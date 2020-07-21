@@ -4,30 +4,14 @@
 
 static void QC_va(QCVM &vm)
 {
-	const auto &fmt = vm.ArgvString(0);
-	vm.Return(ParseFormat(fmt, vm, 1));
-}
-
-static void QC_itos(QCVM &vm)
-{
-	const auto &a = vm.ArgvInt32(0);
-	static char buffer[65];
-	Q_snprintf(buffer, sizeof(buffer), "%i", a);
-	vm.Return(std::string(buffer));
+	const auto &fmtid = vm.ArgvStringID(0);
+	vm.Return(ParseFormat(fmtid, vm, 1));
 }
 
 static void QC_stoi(QCVM &vm)
 {
 	const auto &a = vm.ArgvString(0);
 	vm.Return(strtol(a, nullptr, 10));
-}
-
-static void QC_ftos(QCVM &vm)
-{
-	const auto &a = vm.ArgvFloat(0);
-	static char buffer[129];
-	Q_snprintf(buffer, sizeof(buffer), "%f", a);
-	vm.Return(std::string(buffer));
 }
 
 static void QC_stof(QCVM &vm)
@@ -40,7 +24,7 @@ static void QC_stricmp(QCVM &vm)
 {
 	const auto &a = vm.ArgvString(0);
 	const auto &b = vm.ArgvString(1);
-	vm.Return(Q_stricmp(a, b));
+	vm.Return(stricmp(a, b));
 }
 
 static void QC_strncmp(QCVM &vm)
@@ -55,44 +39,14 @@ static void QC_strncmp(QCVM &vm)
 static void QC_strlen(QCVM &vm)
 {
 	const auto &a = vm.ArgvStringID(0);
-
-	if (vm.dynamic_strings.IsRefCounted(a))
-		vm.Return(static_cast<int32_t>(vm.dynamic_strings.Length(a)));
-	else
-		vm.Return(static_cast<int32_t>(strlen(vm.GetString(a))));
-}
-
-static void QC_strtok(QCVM &vm)
-{
-	const auto &str = vm.ArgvString(0);
-	const auto &offset = vm.ArgvInt32(1);
-
-	if (offset == -1)
-	{
-		vm.Return(vm.string_data);
-		vm.SetGlobal(global_t::PARM1, -1);
-		return;
-	}
-
-	const char *ptr = str + offset;
-	const char *parsed = COM_Parse(&ptr);
-	vm.Return(std::string(parsed));
-	vm.SetGlobal(global_t::PARM1, (ptr == nullptr) ? -1 : (ptr - str));
-}
-
-static void QC_strat(QCVM &vm)
-{
-	const auto &str = vm.ArgvString(0);
-	const auto &offset = vm.ArgvInt32(1);
-
-	vm.Return(str[offset]);
+	vm.Return(static_cast<int32_t>(vm.StringLength(a)));
 }
 
 static void QC_substr(QCVM &vm)
 {
-	const auto &str = vm.ArgvString(0);
+	const auto &strid = vm.ArgvStringID(0);
 	const auto &start = vm.ArgvInt32(1);
-	const size_t str_len = strlen(str);
+	const size_t str_len = vm.StringLength(strid);
 	size_t length = SIZE_MAX;
 
 	if (start < 0 || start >= str_len)
@@ -103,14 +57,14 @@ static void QC_substr(QCVM &vm)
 
 	length = min(str_len - start, length);
 
-	vm.Return(std::string(str + start, length));
+	vm.Return(std::string(vm.GetString(strid) + start, length));
 }
 
 static void QC_strconcat(QCVM &vm)
 {
 	if (vm.state.argc == 0)
 	{
-		vm.Return(vm.string_data);
+		vm.Return(vm.string_data.data());
 		return;
 	}
 	else if (vm.state.argc == 1)
@@ -145,23 +99,6 @@ static void QC_strchr(QCVM &vm)
 	vm.Return(c == nullptr ? -1 : (c - a));
 }
 
-static void QC_Info_ValueForKey(QCVM &vm)
-{
-	const auto &userinfo = vm.ArgvString(0);
-	const auto &key = vm.ArgvString(1);
-
-	vm.Return(std::string(Info_ValueForKey(userinfo, key)));
-}
-
-static void QC_Info_SetValueForKey(QCVM &vm)
-{
-	const auto &userinfo = vm.ArgvString(0);
-	const auto &key = vm.ArgvString(1);
-	const auto &value = vm.ArgvString(2);
-
-	vm.Return(Info_SetValueForKey(const_cast<char *>(userinfo), key, value));
-}
-
 static void QC_localtime(QCVM &vm)
 {
 	static tm empty_ltime;
@@ -178,23 +115,16 @@ void InitStringBuiltins(QCVM &vm)
 {
 	RegisterBuiltin(va);
 	
-	RegisterBuiltin(ftos);
-	RegisterBuiltin(itos);
 	RegisterBuiltin(stoi);
 	RegisterBuiltin(stof);
 
 	RegisterBuiltin(stricmp);
 	RegisterBuiltin(strlen);
-	RegisterBuiltin(strtok);
-	RegisterBuiltin(strat);
 	RegisterBuiltin(substr);
 	RegisterBuiltin(strncmp);
 	RegisterBuiltin(strconcat);
 	RegisterBuiltin(strstr);
 	RegisterBuiltin(strchr);
-
-	RegisterBuiltin(Info_ValueForKey);
-	RegisterBuiltin(Info_SetValueForKey);
 
 	RegisterBuiltin(localtime);
 }

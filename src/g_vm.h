@@ -323,13 +323,7 @@ enum opcode_t : uint16_t
 	OP_NUMOPS
 };
 
-struct QCStatement
-{
-	opcode_t				opcode;
-	std::array<uint16_t, 3>	args;
-};
-
-enum deftype_t : uint16_t
+enum deftype_t : uint32_t
 {
 	TYPE_VOID,
 	TYPE_STRING,
@@ -353,13 +347,6 @@ enum deftype_t : uint16_t
 	TYPE_GLOBAL		= bit(15)
 };
 
-struct QCDefinition
-{
-	deftype_t	id;
-	uint16_t	global_index;
-	string_t	name_index;
-};
-
 enum class global_t : uint32_t
 {
 	QC_NULL	= 0,
@@ -375,6 +362,19 @@ enum class global_t : uint32_t
 	QC_OFS	= 28
 };
 
+struct QCStatement
+{
+	opcode_t				opcode;
+	std::array<global_t, 3>	args;
+};
+
+struct QCDefinition
+{
+	deftype_t	id;
+	global_t	global_index;
+	string_t	name_index;
+};
+
 struct QCFunction
 {
 	int32_t					id;
@@ -383,7 +383,7 @@ struct QCFunction
 	uint32_t				profile;
 	string_t				name_index;
 	uint32_t				file_index;
-	int32_t					num_args;
+	uint32_t				num_args;
 	std::array<uint8_t, 8>	arg_sizes;
 };
 
@@ -681,10 +681,10 @@ struct QCVM
 {
 	// loaded from progs.dat
 	std::vector<QCDefinition>					definitions;
-	std::unordered_map<string_t, QCDefinition*>	definition_map;
 	std::unordered_map<global_t, QCDefinition*> definition_map_by_id;
+	std::unordered_map<std::string_view, QCDefinition*> definition_map_by_name;
 	std::vector<QCDefinition>					fields;
-	std::unordered_map<uint16_t, QCDefinition*>	field_map;
+	std::unordered_map<global_t, QCDefinition*>	field_map;
 	std::unordered_map<std::string_view, QCDefinition*> field_map_by_name;
 	std::vector<QCStatement>					statements;
 	std::vector<QCFunction>						functions;
@@ -695,7 +695,8 @@ struct QCVM
 #endif
 	global_t									*global_data = nullptr;
 	size_t										global_size;
-	char										*string_data = nullptr;
+	std::vector<char>							string_data;
+	std::vector<size_t>							string_lengths;
 	size_t										string_size;
 	std::unordered_set<std::string_view>		string_hashes;
 	QCVMStringList								dynamic_strings;
@@ -1154,10 +1155,10 @@ struct QCVM
 
 	inline void Return(const char *value)
 	{
-		if (!(value >= string_data && value < string_data + string_size))
+		if (!(value >= string_data.data() && value < string_data.data() + string_size))
 			Error("attempt to return dynamic string from %s", __func__);
 
-		Return(static_cast<string_t>(value - string_data));
+		Return(static_cast<string_t>(value - string_data.data()));
 		
 		PrintTrace("BUILTIN RETURN STATIC S %s", value);
 	}
@@ -1188,7 +1189,7 @@ struct QCVM
 
 		if (builtin != string_hashes.end())
 		{
-			rstr = static_cast<string_t>((*builtin).data() - string_data);
+			rstr = static_cast<string_t>((*builtin).data() - string_data.data());
 			return true;
 		}
 
@@ -1339,8 +1340,20 @@ struct QCVM
 	{
 		if (static_cast<int32_t>(str) < 0)
 			return dynamic_strings.Get(str);
+		else if (static_cast<size_t>(str) >= string_size)
+			Error("bad string");
 
-		return string_data + static_cast<int>(str);
+		return string_data.data() + static_cast<size_t>(str);
+	}
+
+	inline size_t StringLength(const string_t &str) const
+	{
+		if (static_cast<int32_t>(str) < 0)
+			return dynamic_strings.Length(str);
+		else if (static_cast<size_t>(str) >= string_size)
+			Error("bad string");
+
+		return string_lengths[static_cast<size_t>(str)];
 	}
 
 	inline QCFunction *FindFunction(const func_t &id)
@@ -1472,7 +1485,7 @@ struct QCVM
 	void ReadState(std::istream &stream);
 };
 
-std::string ParseFormat(const char *format, QCVM &vm, const uint8_t &start);
+std::string ParseFormat(const string_t &format, QCVM &vm, const uint8_t &start);
 
 // Ideally we'd not be static, but I don't expect to run more
 // than one VM
