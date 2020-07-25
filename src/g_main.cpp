@@ -148,7 +148,11 @@ static void InitGame ()
 	InitFieldWraps();
 
 	CheckVM();
-	
+
+#ifdef ALLOW_DEBUGGING
+	CheckDebuggerCommands();
+#endif
+
 	// Call GetGameAPI
 	auto func = qvm.FindFunction("GetGameAPI");
 	qvm.Execute(*func);
@@ -175,6 +179,10 @@ static void InitGame ()
 
 static void ShutdownGame()
 {
+#ifdef ALLOW_DEBUGGING
+	CheckDebuggerCommands();
+#endif
+
 	auto func = qvm.FindFunction(qce.ShutdownGame);
 	qvm.Execute(*func);
 
@@ -245,6 +253,10 @@ static void WipeEntities()
 
 static void SpawnEntities(const char *mapname, const char *entities, const char *spawnpoint)
 {
+#ifdef ALLOW_DEBUGGING
+	CheckDebuggerCommands();
+#endif
+
 	gi.FreeTags(TAG_LEVEL);
 
 	auto func = qvm.FindFunction(qce.PreSpawnEntities);
@@ -268,6 +280,10 @@ static void SpawnEntities(const char *mapname, const char *entities, const char 
 
 static qboolean ClientConnect(edict_t *e, char *userinfo)
 {
+#ifdef ALLOW_DEBUGGING
+	CheckDebuggerCommands();
+#endif
+
 	auto func = qvm.FindFunction(qce.ClientConnect);
 	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 	qvm.SetGlobalStr(global_t::PARM1, std::string(userinfo));
@@ -280,6 +296,10 @@ static qboolean ClientConnect(edict_t *e, char *userinfo)
 
 static void ClientBegin(edict_t *e)
 {
+#ifdef ALLOW_DEBUGGING
+	CheckDebuggerCommands();
+#endif
+
 	auto func = qvm.FindFunction(qce.ClientBegin);
 	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 	qvm.Execute(*func);
@@ -288,6 +308,10 @@ static void ClientBegin(edict_t *e)
 
 static void ClientUserinfoChanged(edict_t *e, char *userinfo)
 {
+#ifdef ALLOW_DEBUGGING
+	CheckDebuggerCommands();
+#endif
+
 	auto func = qvm.FindFunction(qce.ClientUserinfoChanged);
 	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 	qvm.SetGlobalStr(global_t::PARM1, std::string(userinfo));
@@ -297,6 +321,10 @@ static void ClientUserinfoChanged(edict_t *e, char *userinfo)
 
 static void ClientDisconnect(edict_t *e)
 {
+#ifdef ALLOW_DEBUGGING
+	CheckDebuggerCommands();
+#endif
+
 	auto func = qvm.FindFunction(qce.ClientDisconnect);
 	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 	qvm.Execute(*func);
@@ -305,6 +333,10 @@ static void ClientDisconnect(edict_t *e)
 
 static void ClientCommand(edict_t *e)
 {
+#ifdef ALLOW_DEBUGGING
+	CheckDebuggerCommands();
+#endif
+
 	auto func = qvm.FindFunction(qce.ClientCommand);
 	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 	qvm.Execute(*func);
@@ -313,6 +345,10 @@ static void ClientCommand(edict_t *e)
 
 static void ClientThink(edict_t *e, usercmd_t *ucmd)
 {
+#ifdef ALLOW_DEBUGGING
+	CheckDebuggerCommands();
+#endif
+
 	auto func = qvm.FindFunction(qce.ClientThink);
 	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
 
@@ -335,6 +371,10 @@ static void ClientThink(edict_t *e, usercmd_t *ucmd)
 
 static void RunFrame()
 {
+#ifdef ALLOW_DEBUGGING
+	CheckDebuggerCommands();
+#endif
+
 	auto func = qvm.FindFunction(qce.RunFrame);
 	qvm.Execute(*func);
 
@@ -344,6 +384,10 @@ static void RunFrame()
 
 static void ServerCommand()
 {
+#ifdef ALLOW_DEBUGGING
+	CheckDebuggerCommands();
+#endif
+
 	auto func = qvm.FindFunction(qce.ServerCommand);
 	qvm.Execute(*func);
 }

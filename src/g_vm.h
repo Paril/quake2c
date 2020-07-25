@@ -1,7 +1,20 @@
 #pragma once
 
+#define ALLOW_DEBUGGING
 //#define ALLOW_PROFILING
 //#define ALLOW_TRACING
+
+#ifdef ALLOW_DEBUGGING
+enum debug_state_t
+{
+	DEBUG_NONE,
+	DEBUG_STEP_INTO,
+	DEBUG_STEP_OUT,
+	DEBUG_STEP_OVER,
+
+	DEBUG_BROKE
+};
+#endif
 
 #include <cassert>
 #include <variant>
@@ -34,7 +47,7 @@ enum class func_t
 	FUNC_VOID
 };
 
-enum opcode_t : uint16_t
+enum opcode_t
 {
 	OP_DONE,	//0
 	OP_MUL_F,
@@ -112,7 +125,6 @@ enum opcode_t : uint16_t
 	OP_BITAND_F,
 	OP_BITOR_F,
 
-	
 	//these following ones are Hexen 2 constants.	
 	OP_MULSTORE_F,	//66 redundant, for h2 compat
 	OP_MULSTORE_VF,	//67 redundant, for h2 compat
@@ -323,6 +335,8 @@ enum opcode_t : uint16_t
 	OP_NUMOPS
 };
 
+constexpr opcode_t OP_BREAKPOINT = static_cast<opcode_t>(0x80000000);
+
 enum deftype_t : uint32_t
 {
 	TYPE_VOID,
@@ -336,12 +350,6 @@ enum deftype_t : uint32_t
 
 	// EXT
 	TYPE_INTEGER,
-	TYPE_VARIANT,
-	TYPE_STRUCT,
-	TYPE_UNION,
-	TYPE_ACCESSOR,
-	TYPE_ENUM,
-	TYPE_BOOLEAN,
 	// EXT
 
 	TYPE_GLOBAL		= bit(15)
@@ -382,7 +390,7 @@ struct QCFunction
 	uint32_t				num_args_and_locals;
 	uint32_t				profile;
 	string_t				name_index;
-	uint32_t				file_index;
+	string_t				file_index;
 	uint32_t				num_args;
 	std::array<uint8_t, 8>	arg_sizes;
 };
@@ -974,6 +982,9 @@ struct QCVM
 			(*state.current).profile->fields[NumGlobalsSet]++;
 #endif
 
+		if (global == global_t::QC_NULL)
+			Error("attempt to overwrite 0");
+
 		static_assert(std::is_standard_layout_v<T> && std::is_trivial_v<T> && (sizeof(T) % 4) == 0);
 
 		*reinterpret_cast<T*>(GetGlobalByIndex(global)) = value;
@@ -1232,6 +1243,123 @@ struct QCVM
 		}
 	} state;
 
+#ifdef ALLOW_DEBUGGING
+	struct {
+		debug_state_t state;
+		QCFunction *step_function;
+		const QCStatement *step_statement;
+		size_t step_depth;
+	} debug;
+
+	using value_type = std::variant<int, float, vec3_t, string_t, ent_t, func_t, void*>;
+
+	inline value_type ValueFromPtr(const QCDefinition *def, const void *ptr)
+	{
+		switch (def->id & ~TYPE_GLOBAL)
+		{
+		default:
+			return value_type();
+		case TYPE_STRING:
+			return *reinterpret_cast<const string_t *>(ptr);
+		case TYPE_FLOAT:
+			return *reinterpret_cast<const vec_t *>(ptr);
+		case TYPE_VECTOR:
+			return *reinterpret_cast<const vec3_t *>(ptr);
+		case TYPE_ENTITY:
+			return *reinterpret_cast<const ent_t *>(ptr);
+		case TYPE_FIELD:
+			return value_type();
+		case TYPE_FUNCTION:
+			return *reinterpret_cast<const func_t *>(ptr);
+		case TYPE_POINTER:
+			return value_type();
+		case TYPE_INTEGER:
+			return *reinterpret_cast<const int32_t *>(ptr);
+		}
+	}
+
+	inline value_type ValueFromGlobal(const QCDefinition *def)
+	{
+		return ValueFromPtr(def, GetGlobalByIndex(def->global_index));
+	}
+
+	value_type EvaluateFromLocalOrGlobal(const std::string_view &variable)
+	{
+		// we don't have a . so we're just checking for a base object.
+		// check locals
+		if (state.current->function)
+		{
+			size_t i;
+			global_t g;
+
+			for (i = 0, g = state.current->function->first_arg; i < state.current->function->num_args_and_locals; i++, g = static_cast<global_t>(static_cast<int32_t>(g) + 1))
+			{
+				auto def = definition_map_by_id[g];
+
+				if (!def || def->name_index == string_t::STRING_EMPTY || variable != GetString(def->name_index))
+					continue;
+
+				return ValueFromGlobal(def);
+			}
+		}
+
+		// no locals, so we can check all the globals
+		for (auto &def : definitions)
+		{
+			if (def.name_index == string_t::STRING_EMPTY || variable != GetString(def.name_index))
+				continue;
+
+			return ValueFromGlobal(&def);
+		}
+
+		return value_type();
+	}
+
+	value_type Evaluate(const std::string &variable)
+	{
+		if (variable.find_first_of('.') != std::string::npos)
+		{
+			// we have a . so we're either a entity, pointer or struct...
+			auto context = std::string_view(variable).substr(0, variable.find_first_of('.'));
+			auto left_hand = EvaluateFromLocalOrGlobal(context);
+
+			if (std::holds_alternative<ent_t>(left_hand))
+			{
+				auto right_context = std::string_view(variable).substr(context.length() + 1);
+				const ent_t &ent = std::get<ent_t>(left_hand);
+
+				if (ent == ent_t::ENT_INVALID)
+					return ent_t::ENT_INVALID;
+
+				const QCDefinition *field = nullptr;
+
+				for (auto &f : fields)
+				{
+					if (f.name_index == string_t::STRING_EMPTY || strcmp(GetString(f.name_index), right_context.data()))
+						continue;
+
+					field = &f;
+					break;
+				}
+
+				if (!field)
+					return value_type();
+
+				return ValueFromPtr(field, GetEntityFieldPointer(*EntToEntity(ent), static_cast<int32_t>(field->global_index)));
+			}
+		}
+
+		return EvaluateFromLocalOrGlobal(variable);
+	}
+
+	void BreakOnCurrentStatement();
+#endif
+
+	inline int LineNumberFor(const QCStatement *statement)
+	{
+		return linenumbers[statement - statements.data()];
+	}
+
 	inline void Enter(QCFunction &function)
 	{
 		auto &cur_stack = *state.current;
@@ -1483,6 +1611,10 @@ struct QCVM
 	
 	void WriteState(std::ostream &stream);
 	void ReadState(std::istream &stream);
+
+#ifdef ALLOW_DEBUGGING
+	void SetBreakpoint(const int &mode, const std::string &file, const int &line);
+#endif
 };
 
 std::string ParseFormat(const string_t &format, QCVM &vm, const uint8_t &start);

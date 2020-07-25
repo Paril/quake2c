@@ -26,3 +26,9 @@ float frand(const float &max);
 float frand(const float &min, const float &max);
 
 void SyncPlayerState(QCVM &vm, edict_t *ent);
+
+#ifdef ALLOW_DEBUGGING
+void CheckDebuggerCommands();
+void SendDebuggerCommand(const std::string &cmd);
+void WaitForDebuggerCommands();
+#endif

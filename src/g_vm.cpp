@@ -483,7 +483,12 @@ std::string QCVM::StackEntry(const QCStack &stack)
 	if (!*func)
 		func = "dunno";
 
-	return vas("%s:%i(@%u)", func, linenumbers[stack.statement - statements.data()], stack.statement - statements.data());
+	const char *file = GetString(stack.function->file_index);
+
+	if (!*file)
+		file = "dunno.qc";
+
+	return vas("%s (%s:%i @ %u)", file, func, LineNumberFor(stack.statement), stack.statement - statements.data());
 }
 
 std::string QCVM::StackTrace()
@@ -502,6 +507,42 @@ std::string QCVM::StackTrace()
 
 	return str;
 }
+
+#ifdef ALLOW_DEBUGGING
+void QCVM::SetBreakpoint(const int &mode, const std::string &file, const int &line)
+{
+	string_t id;
+
+	if (!FindString(file, id))
+	{
+		gi.dprintf("Can't toggle breakpoint: can't find file %s in table\n", file.data());
+		return;
+	}
+
+	for (auto &function : functions)
+	{
+		if (function.id <= 0 || function.file_index != id)
+			continue;
+
+		for (auto statement = &statements[function.id]; statement->opcode != OP_DONE; statement++)
+		{
+			if (LineNumberFor(statement) == line)
+			{
+				// got it
+				if (mode)
+					statement->opcode = static_cast<opcode_t>(static_cast<int32_t>(statement->opcode) | OP_BREAKPOINT);
+				else
+					statement->opcode = static_cast<opcode_t>(static_cast<int32_t>(statement->opcode) & ~OP_BREAKPOINT);
+				
+				gi.dprintf("Breakpoint set @ %s:%i\n", file.data(), line);
+				return;
+			}
+		}
+	}
+
+	gi.dprintf("Can't toggle breakpoint: can't find %s:%i\n", file.data(), line);
+}
+#endif
 
 using operands = std::array<global_t, 3>;
 using OPCodeFunc = void(*)(QCVM &vm, const operands &operands, int &depth);
@@ -1273,6 +1314,18 @@ static OPCodeFunc codeFuncs[] = {
 	[OP_STOREF_V] = F_OP_STOREF<vec3_t>,
 };
 
+#ifdef ALLOW_DEBUGGING
+void QCVM::BreakOnCurrentStatement()
+{
+	SendDebuggerCommand(vas("qcstep \"%s\":%i\n", GetString(state.current->function->file_index), LineNumberFor(state.current->statement)));
+	debug.state = DEBUG_BROKE;
+	debug.step_function = state.current->function;
+	debug.step_statement = state.current->statement;
+	debug.step_depth = state.stack.size();
+	WaitForDebuggerCommands();
+}
+#endif
+
 void QCVM::Execute(QCFunction &function)
 {
 	if (function.id < 0)
@@ -1296,13 +1349,44 @@ void QCVM::Execute(QCFunction &function)
 		(*state.current).profile->fields[NumInstructions]++;
 #endif
 
-		if (statement.opcode > std::extent_v<decltype(codeFuncs)>)
-			Error("unsupported opcode %i", statement.opcode);
+#ifdef ALLOW_DEBUGGING
+		if (statement.opcode & OP_BREAKPOINT)
+			BreakOnCurrentStatement();
+		else
+		{
+			// figure out if we need to break here.
+			// step into is easiest: next QC execution that is not on the same function+line combo
+			if (debug.state == DEBUG_STEP_INTO)
+			{
+				if (debug.step_function != current.function || LineNumberFor(debug.step_statement) != LineNumberFor(current.statement))
+					BreakOnCurrentStatement();
+			}
+			// I lied, step out is the easiest
+			else if (debug.state == DEBUG_STEP_OUT)
+			{
+				if (debug.step_depth > state.stack.size())
+					BreakOnCurrentStatement();
+			}
+			// step over: either step out, or the next step that is in the same function + stack depth + not on same line
+			else if (debug.state == DEBUG_STEP_OVER)
+			{
+				if (debug.step_depth > state.stack.size() || (debug.step_depth == state.stack.size() && debug.step_function == current.function && LineNumberFor(debug.step_statement) != LineNumberFor(current.statement)))
+					BreakOnCurrentStatement();
+			}
+		}
 
-		auto func = codeFuncs[statement.opcode];
+		const opcode_t code = static_cast<opcode_t>(static_cast<int32_t>(statement.opcode) & ~OP_BREAKPOINT);
+#else
+		const opcode_t code = statement.opcode;
+#endif
+
+		if (code > std::extent_v<decltype(codeFuncs)>)
+			Error("unsupported opcode %i", code);
+
+		auto func = codeFuncs[code];
 
 		if (!func)
-			Error("unsupported opcode %i", statement.opcode);
+			Error("unsupported opcode %i", code);
 
 		func(*this, statement.args, enter_depth);
 
@@ -1439,11 +1523,13 @@ void InitVM()
 		auto view = std::string_view(s);
 
 		for (size_t x = 0; x < view.length(); x++)
-			qvm.string_lengths.at(i + x) = view.length() - x;
+		{
+			size_t len = view.length() - x;
+			qvm.string_lengths.at(i + x) = len;
+			qvm.string_hashes.emplace(std::string_view(s + x, len));
+		}
 
 		i += view.length();
-
-		qvm.string_hashes.emplace(std::move(view));
 	}
 
 	qvm.statements.resize(header.sections.statement.size);

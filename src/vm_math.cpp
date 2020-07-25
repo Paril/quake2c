@@ -33,6 +33,24 @@ static void QC_atan2f(QCVM &vm)
 	vm.Return(atan2f(x, y));
 }
 
+static void QC_atanf(QCVM &vm)
+{
+	const auto &x = vm.ArgvFloat(0);
+	vm.Return(atanf(x));
+}
+
+static void QC_asinf(QCVM &vm)
+{
+	const auto &x = vm.ArgvFloat(0);
+	vm.Return(asinf(x));
+}
+
+static void QC_isnan(QCVM &vm)
+{
+	const auto &x = vm.ArgvFloat(0);
+	vm.Return(isnan(x));
+}
+
 static void QC_floorf(QCVM &vm)
 {
 	const auto &v = vm.ArgvFloat(0);
@@ -137,6 +155,9 @@ void InitMathBuiltins(QCVM &vm)
 	RegisterBuiltin(ceilf);
 	RegisterBuiltin(roundf);
 	RegisterBuiltin(tanf);
+	RegisterBuiltin(atanf);
+	RegisterBuiltin(asinf);
+	RegisterBuiltin(isnan);
 	
 	RegisterBuiltin(Q_rand);
 	RegisterBuiltin(Q_rand_uniform);
