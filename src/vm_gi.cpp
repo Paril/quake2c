@@ -348,12 +348,12 @@ struct QC_pmove_state_t
 {
     pmtype_t pm_type;
 
-    int	origin[3];		// 12.3
-    int	velocity[3];	// 12.3
+    vec3_t	origin;		// 12.3
+    vec3_t velocity;	// 12.3
     int	pm_flags;		// ducked, jump_held, etc
     int	pm_time;		// each unit = 8 ms
     int	gravity;
-    int	delta_angles[3];	// add to command angles to get view direction
+    vec3_t delta_angles;	// add to command angles to get view direction
 							// changed by spawns, rotating objects, and teleporters
 };
 
@@ -433,10 +433,10 @@ static void QC_Pmove(QCVM &vm)
 	pm.s.pm_type = qc_pm.s.pm_type;
 	for (int32_t i = 0; i < 3; i++)
 	{
-		pm.s.origin[i] = qc_pm.s.origin[i];
-		pm.s.velocity[i] = qc_pm.s.velocity[i];
-		pm.s.delta_angles[i] = qc_pm.s.delta_angles[i];
-		pm.cmd.angles[i] = qc_pm.cmd.angles[i];
+		pm.s.origin[i] = qc_pm.s.origin[i] * coord2short;
+		pm.s.velocity[i] = qc_pm.s.velocity[i] * coord2short;
+		pm.s.delta_angles[i] = qc_pm.s.delta_angles[i] * angle2short;
+		pm.cmd.angles[i] = qc_pm.cmd.angles[i] * angle2short;
 	}
 	pm.s.pm_flags = static_cast<pmflags_t>(qc_pm.s.pm_flags);
 	pm.s.pm_time = qc_pm.s.pm_time;
@@ -461,9 +461,9 @@ static void QC_Pmove(QCVM &vm)
 	qc_pm.s.pm_type = pm.s.pm_type;
 	for (int32_t i = 0; i < 3; i++)
 	{
-		qc_pm.s.origin[i] = pm.s.origin[i];
-		qc_pm.s.velocity[i] = pm.s.velocity[i];
-		qc_pm.s.delta_angles[i] = pm.s.delta_angles[i];
+		qc_pm.s.origin[i] = pm.s.origin[i] * short2coord;
+		qc_pm.s.velocity[i] = pm.s.velocity[i] * short2coord;
+		qc_pm.s.delta_angles[i] = pm.s.delta_angles[i] * short2angle;
 	}
 	qc_pm.s.pm_flags = pm.s.pm_flags;
 	qc_pm.s.pm_time = pm.s.pm_time;
@@ -593,7 +593,6 @@ static void QC_AddCommandString(QCVM &vm)
 {
 	gi.AddCommandString(vm.ArgvString(0));
 }
-
 
 static void QC_bprintf(QCVM &vm)
 {

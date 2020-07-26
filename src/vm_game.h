@@ -5,7 +5,7 @@ struct QC_usercmd_t
 {
 	int	msec;
 	int	buttons;
-	int	angles[3];
+	vec3_t	angles;
 	int	forwardmove, sidemove, upmove;
 	int	impulse;		// remove?
 	int	lightlevel;		// light level the player is standing on

@@ -2,7 +2,6 @@
 
 #define ALLOW_DEBUGGING
 //#define ALLOW_PROFILING
-//#define ALLOW_TRACING
 
 #ifdef ALLOW_DEBUGGING
 enum debug_state_t
@@ -477,12 +476,9 @@ struct active_timer_t
 
 struct QCProfile
 {
-	//std::unordered_map<const QCStatement *, size_t>	called_from;
 	clock_type::duration	total, call_into;
 	size_t					fields[TotalProfileFields];
 };
-
-using profile_key = std::tuple<int, int>;
 #else
 #define CreateTimer(...) \
 		Timer_()
@@ -647,7 +643,7 @@ public:
 	void Register(const char *name, QCBuiltin builtin);
 };
 
-using QCVMFieldWrapper = void(*)(uint8_t *out, const int32_t *in);
+using QCVMFieldWrapper = void(*)(void *out, const void *in);
 
 struct QCVMFieldWrap
 {
@@ -724,190 +720,6 @@ struct QCVM
 		gi.error(str.data());
 		exit(0);
 	}
-
-#ifdef ALLOW_TRACING
-	bool										enable_tracing;
-	FILE										*trace_file;
-
-	inline void EnableTrace()
-	{
-		enable_tracing = true;
-		trace_file = fopen(vas("%s/trace.txt", gi.cvar("game", "", CVAR_NONE)->string).data(), "w+");
-		fprintf(trace_file, "TRACING ENABLED\n");
-	}
-
-	inline void PauseTrace()
-	{
-		enable_tracing = false;
-	}
-
-	inline void ResumeTrace()
-	{
-		enable_tracing = true;
-	}
-
-	inline void StopTrace()
-	{
-		enable_tracing = false;
-		fprintf(trace_file, "TRACING DONE\n");
-		fclose(trace_file);
-		trace_file = nullptr;
-	}
-
-	template<typename ...T>
-	inline void PrintTrace(const char *format, T ...args)
-	{
-		if (!enable_tracing)
-			return;
-
-		for (size_t i = 0; i < state.stack.size(); i++)
-			fprintf(trace_file, " ");
-
-		fprintf(trace_file, "[%s] %s\n", StackEntry(state.current).data(), vas(format, args...).data());
-		fflush(trace_file);
-	}
-
-	template<>
-	inline void PrintTrace(const char *data)
-	{
-		if (!enable_tracing)
-			return;
-
-		for (size_t i = 0; i < state.stack.size() - 1; i++)
-			fprintf(trace_file, " ");
-
-		fprintf(trace_file, "[%s] %s\n", StackEntry(state.current).data(), data);
-		fflush(trace_file);
-	}
-
-	inline std::string TraceEntity(const edict_t *e)
-	{
-		/*if (e.v.netname)
-			return vas("%s[#%i]", GetString(e.v.netname), e.s.number);
-		else if (e.v.classname)
-			return vas("%s[#%i]", GetString(e.v.classname), e.s.number);*/
-
-		if (e == nullptr)
-			return "[NULL]";
-		else if (e == &game.entity(1024))
-			return "[INVALID]";
-
-		return vas("[#%i]", e->s.number);
-	}
-
-	inline std::string TraceField(const int32_t &g)
-	{
-		for (auto &f : fields)
-			if (f.global_index == g)
-				return vas("%s[%i]", GetString(f.name_index), g);
-
-		return vas("%i", g);
-	}
-
-	inline std::string TraceFunction(const int32_t &g)
-	{
-		if (g < 0 || g >= functions.size())
-			return vas("INVALID FUNCTION (%i)", g);
-
-		auto &f = functions[g];
-
-		if (f.id < 0)
-			return vas("BUILTIN \"%s\"", GetString(f.name_index));
-		
-		return vas("\"%s\"", GetString(f.name_index));
-	}
-
-	inline std::string DumpGlobalValue(const global_t &g, const deftype_t &type)
-	{
-		global_t *global = GetGlobalByIndex(g);
-
-		switch (type)
-		{
-		case TYPE_VOID:
-			return vas("VOID %x (int value: %i)", global, *reinterpret_cast<int32_t *>(global));
-		case TYPE_STRING:
-			return vas("STRING \"%s\"", GetString(*reinterpret_cast<string_t *>(global)));
-		case TYPE_FLOAT:
-			return vas("FLOAT %f", *reinterpret_cast<vec_t *>(global));
-		case TYPE_VECTOR:
-			return vas("VECTOR %s", vtoss(*reinterpret_cast<vec3_t *>(global)).data());
-		case TYPE_ENTITY:
-			return vas("ENTITY %s", TraceEntity(EntToEntity(*reinterpret_cast<ent_t*>(global))).data());
-		case TYPE_FIELD:
-			return vas("FIELD %s", TraceField(*reinterpret_cast<int32_t *>(global)).data());
-		case TYPE_FUNCTION:
-			return vas("FUNCTION %s", TraceFunction(*reinterpret_cast<int32_t *>(global)).data());
-		case TYPE_POINTER:
-			return vas("POINTER %x", global);
-		case TYPE_INTEGER:
-			return vas("INTEGER %x", *reinterpret_cast<int32_t *>(global));
-		default:
-			return vas("DUNNO @ %i", g);
-//			Error("wat");
-		}
-	}
-
-	inline std::string TraceGlobal(const global_t &g, const deftype_t &type = TYPE_VOID)
-	{
-		if (g < global_t::QC_OFS)
-		{
-			static const char *global_names[] = {
-				"null",
-				"return_0",
-				"return_1",
-				"return_2",
-				"parm0_0",
-				"parm0_1",
-				"parm0_2",
-				"parm1_0",
-				"parm1_1",
-				"parm1_2",
-				"parm2_0",
-				"parm2_1",
-				"parm2_2",
-				"parm3_0",
-				"parm3_1",
-				"parm3_2",
-				"parm4_0",
-				"parm4_1",
-				"parm4_2",
-				"parm5_0",
-				"parm5_1",
-				"parm5_2",
-				"parm6_0",
-				"parm6_1",
-				"parm6_2",
-				"parm7_0",
-				"parm7_1",
-				"parm7_2"
-			};
-
-			return vas("%s[%i] (%s)", global_names[static_cast<int32_t>(g)], g, DumpGlobalValue(g, type).data());
-		}
-
-		for (auto &f : definitions)
-			if (static_cast<global_t>(f.global_index) == g && (type == TYPE_VOID || (f.id & ~TYPE_GLOBAL) == type))
-				return vas("%s[%i] (%s)", GetString(f.name_index), g, DumpGlobalValue(g, (type == TYPE_VOID) ? static_cast<deftype_t>(f.id & ~TYPE_GLOBAL) : type).data());
-
-		return vas("[%i] (%s)", g, DumpGlobalValue(g, type).data());
-	}
-
-#define PrintTraceExt(vm, ...) \
-	vm.PrintTrace(__VA_ARGS__)
-#else
-	static constexpr bool enable_tracing = false;
-	
-	constexpr void EnableTrace() { }
-	constexpr void PauseTrace() { }
-	constexpr void ResumeTrace() { }
-	constexpr void StopTrace() { }
-	template<typename ...T>
-	constexpr void PrintTrace() { }
-
-	// no-op them
-#define PrintTrace(...)
-#define PrintTraceExt(vm, ...)
-#endif
 
 #ifdef ALLOW_PROFILING
 	[[nodiscard]] active_timer_t CreateTimer(const profile_timer_type_t &type)
@@ -989,9 +801,6 @@ struct QCVM
 
 		*reinterpret_cast<T*>(GetGlobalByIndex(global)) = value;
 		dynamic_strings.CheckRefUnset(GetGlobalByIndex(global), sizeof(T) / sizeof(global_t));
-
-		if (enable_tracing)
-			PrintTrace("  SetGlobal: %i -> %s", global, TraceGlobal(global).data());
 	}
 
 	inline string_t SetGlobalStr(const global_t &global, std::string &&value)
@@ -1035,9 +844,6 @@ struct QCVM
 		// if there were any ref strings in src, make sure they are
 		// reffed in dst too
 		dynamic_strings.MarkIfHasRef<count>(src_ptr, dst_ptr);
-
-		if (enable_tracing)
-			PrintTrace("  CopyGlobal: %i:%u -> %i (%s)", src, count, dst, TraceGlobal(dst).data());
 	}
 
 	template<typename TDst, typename TSrc>
@@ -1057,9 +863,6 @@ struct QCVM
 		// if there were any ref strings in src, make sure they are
 		// reffed in dst too
 		dynamic_strings.MarkIfHasRef<count>(src_ptr, dst_ptr);
-
-		if (enable_tracing)
-			PrintTrace("  CopyGlobal: %i:%u -> %i (%s)", src, count, dst, TraceGlobal(dst).data());
 	}
 
 	[[nodiscard]] inline edict_t *ArgvEntity(const uint8_t &d) const
@@ -1128,40 +931,27 @@ struct QCVM
 	inline void Return(const vec_t &value)
 	{
 		SetGlobal(global_t::RETURN, value);
-
-		PrintTrace("BUILTIN RETURN F %f", value);
 	}
 
 	inline void Return(const vec3_t &value)
 	{
 		for (size_t i = 0; i < value.size(); i++)
 			SetGlobal(GlobalOffset(global_t::RETURN, i), value.at(i));
-
-		PrintTrace("BUILTIN RETURN VEC %f %f %f", value[0], value[1], value[2]);
 	}
 	
 	inline void Return(const edict_t &value)
 	{
 		SetGlobal(global_t::RETURN, reinterpret_cast<int32_t>(&value));
-
-		PrintTrace("BUILTIN RETURN ENT %s", TraceEntity(&value).data());
 	}
 	
 	inline void Return(const int32_t &value)
 	{
 		SetGlobal(global_t::RETURN, value);
-
-		PrintTrace("BUILTIN RETURN I %i", value);
 	}
 
 	inline void Return(const func_t &str)
 	{
 		SetGlobal(global_t::RETURN, str);
-		
-		if (str != func_t::FUNC_VOID)
-			PrintTrace("BUILTIN RETURN FUNC %s", GetString(FindFunction(str)->name_index));
-		else
-			PrintTrace("BUILTIN RETURN FUNC NULL");
 	}
 
 	inline void Return(const char *value)
@@ -1170,22 +960,16 @@ struct QCVM
 			Error("attempt to return dynamic string from %s", __func__);
 
 		Return(static_cast<string_t>(value - string_data.data()));
-		
-		PrintTrace("BUILTIN RETURN STATIC S %s", value);
 	}
 
 	inline void Return(std::string &&str)
 	{
-		PrintTrace("BUILTIN RETURN REFCOUNT S %s", str.data());
-
 		SetGlobalStr(global_t::RETURN, std::move(str));
 	}
 
 	inline void Return(const string_t &str)
 	{
 		SetGlobal(global_t::RETURN, str);
-		
-		PrintTrace("BUILTIN RETURN S %s", GetString(str));
 	}
 
 	inline bool FindString(const std::string_view &value, string_t &rstr)
@@ -1378,8 +1162,6 @@ struct QCVM
 				if (dynamic_strings.HasRef(ptr))
 					cur_stack.ref_strings.push_back(dynamic_strings.PopRef(ptr));
 			}
-
-			PrintTrace("Backup locals %u -> %u", function.first_arg, static_cast<uint32_t>(function.first_arg) + function.num_args_and_locals);
 		}
 
 		auto &new_stack = state.stack.emplace_back();
@@ -1423,8 +1205,6 @@ struct QCVM
 
 			prev_stack.ref_strings.clear();
 			prev_stack.locals.clear();
-
-			PrintTrace("Restore locals %u -> %u", current_func.first_arg, static_cast<uint32_t>(current_func.first_arg) + current_func.num_args_and_locals);
 		}
 		
 #ifdef ALLOW_PROFILING

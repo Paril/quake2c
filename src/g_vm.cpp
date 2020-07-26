@@ -65,8 +65,6 @@ string_t QCVMStringList::Allocate()
 string_t QCVMStringList::StoreRefCounted(std::string &&str)
 {
 	string_t id = Allocate();
-	
-	PrintTraceExt(vm, "REFSTRING STORE %10s -> %i", str.data(), id);
 
 	strings.emplace(id, (QCVMRefCountString) {
 		std::move(str),
@@ -82,8 +80,6 @@ void QCVMStringList::Unstore(const string_t &id, const bool &free_index)
 	const auto &str = strings.at(id);
 		
 	assert(!str.ref_count);
-	
-	PrintTraceExt(vm, "REFSTRING UNSTORE %i", id);
 		
 	strings.erase(id);
 
@@ -127,8 +123,6 @@ void QCVMStringList::AcquireRefCounted(const string_t &id)
 	auto &str = strings.at(id);
 
 	str.ref_count++;
-	
-	PrintTraceExt(vm, "REFSTRING ACQUIRE %i (now %i)", id, str.ref_count);
 }
 
 void QCVMStringList::ReleaseRefCounted(const string_t &id)
@@ -142,8 +136,6 @@ void QCVMStringList::ReleaseRefCounted(const string_t &id)
 	assert(str.ref_count);
 		
 	str.ref_count--;
-	
-	PrintTraceExt(vm, "REFSTRING RELEASE %i (now %i)", id, str.ref_count);
 
 	if (!str.ref_count)
 		Unstore(id);
@@ -176,8 +168,6 @@ void QCVMStringList::MarkRefCopy(const string_t &id, const void *ptr)
 
 	// mark
 	ref_storage.emplace(ptr, id);
-	
-	PrintTraceExt(vm, "REFSTRING MARK %i -> %x", id, ptr);
 }
 
 void QCVMStringList::CheckRefUnset(const void *ptr, const size_t &span, const bool &assume_changed)
@@ -204,7 +194,7 @@ void QCVMStringList::CheckRefUnset(const void *ptr, const size_t &span, const bo
 
 		// not here! release and unmark
 		ReleaseRefCounted(old);
-		PrintTraceExt(vm, "REFSTRING UNSET %i -> %x", old, gptr);
+
 		ref_storage.erase(gptr);
 	}
 }

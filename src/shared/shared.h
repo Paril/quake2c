@@ -151,6 +151,11 @@ MATH
 ==============================================================
 */
 
+constexpr float coord2short = 8.f;
+constexpr float angle2short = (65536.f / 360.f);
+constexpr float short2coord = (1.0f / 8);
+constexpr float short2angle = (360.0f / 65536);
+
 template<typename T>
 constexpr T bit(const T &shift)
 {

@@ -34,9 +34,19 @@ static void InitBuiltins()
 }
 
 template<typename T>
-static void FieldWrapToT(uint8_t *out, const int32_t *in)
+static void FieldWrapToT(void *out, const void *in)
 {
-	*reinterpret_cast<T *>(out) = *in;
+	*reinterpret_cast<T *>(out) = *reinterpret_cast<const int32_t *>(in);
+}
+
+static void FieldCoord2Short(void *out, const void *in)
+{
+	*reinterpret_cast<short *>(out) = (*reinterpret_cast<const vec_t *>(in) * coord2short);
+}
+
+static void FieldCoord2Angle(void *out, const void *in)
+{
+	*reinterpret_cast<short *>(out) = (*reinterpret_cast<const vec_t *>(in) * angle2short);
 }
 
 static void InitFieldWraps()
@@ -54,6 +64,16 @@ static void InitFieldWraps()
 	qvm.field_wraps.Register("client." #name, 0, offsetof(gclient_t, name), nullptr); \
 	qvm.field_wraps.Register("client." #name, 1, offsetof(gclient_t, name) + 4, nullptr); \
 	qvm.field_wraps.Register("client." #name, 2, offsetof(gclient_t, name) + 8, nullptr)
+
+#define RegisterVectorCoord2Short(name) \
+	qvm.field_wraps.Register("client." #name, 0, offsetof(gclient_t, name), FieldCoord2Short); \
+	qvm.field_wraps.Register("client." #name, 1, offsetof(gclient_t, name) + 2, FieldCoord2Short); \
+	qvm.field_wraps.Register("client." #name, 2, offsetof(gclient_t, name) + 4, FieldCoord2Short)
+
+#define RegisterVectorCoord2Angle(name) \
+	qvm.field_wraps.Register("client." #name, 0, offsetof(gclient_t, name), FieldCoord2Angle); \
+	qvm.field_wraps.Register("client." #name, 1, offsetof(gclient_t, name) + 2, FieldCoord2Angle); \
+	qvm.field_wraps.Register("client." #name, 2, offsetof(gclient_t, name) + 4, FieldCoord2Angle)
 
 	// gclient_t
 	RegisterSingle(ping);
@@ -80,18 +100,14 @@ static void InitFieldWraps()
 	// gclient_t::ps::pmove
 	RegisterSingle(ps.pmove.pm_type);
 	
-	for (int32_t i = 0; i < std::tuple_size_v<decltype(gclient_t::ps.pmove.origin)>; i++)
-		qvm.field_wraps.Register(va("client.ps.pmove.origin[%i]", i), 0, offsetof(gclient_t, ps.pmove.origin) + (sizeof(gclient_t::ps.pmove.origin[0]) * i), FieldWrapToT<short>);
-	
-	for (int32_t i = 0; i < std::tuple_size_v<decltype(gclient_t::ps.pmove.velocity)>; i++)
-		qvm.field_wraps.Register(va("client.ps.pmove.velocity[%i]", i), 0, offsetof(gclient_t, ps.pmove.velocity) + (sizeof(gclient_t::ps.pmove.velocity[0]) * i), FieldWrapToT<short>);
+	RegisterVectorCoord2Short(ps.pmove.origin);
+	RegisterVectorCoord2Short(ps.pmove.velocity);
 	
 	RegisterSingleWrapped(ps.pmove.pm_flags, FieldWrapToT<uint8_t>);
 	RegisterSingleWrapped(ps.pmove.pm_time, FieldWrapToT<uint8_t>);
 	RegisterSingleWrapped(ps.pmove.gravity, FieldWrapToT<short>);
-	
-	for (int32_t i = 0; i < std::tuple_size_v<decltype(gclient_t::ps.pmove.delta_angles)>; i++)
-		qvm.field_wraps.Register(va("client.ps.pmove.delta_angles[%i]", i), 0, offsetof(gclient_t, ps.pmove.delta_angles) + (sizeof(gclient_t::ps.pmove.delta_angles[0]) * i), FieldWrapToT<short>);
+
+	RegisterVectorCoord2Angle(ps.pmove.delta_angles);
 }
 
 // exported from QC
@@ -355,7 +371,7 @@ static void ClientThink(edict_t *e, usercmd_t *ucmd)
 	QC_usercmd_t cmd = {
 		ucmd->msec,
 		ucmd->buttons,
-		{ ucmd->angles[0], ucmd->angles[1], ucmd->angles[2] },
+		{ ucmd->angles[0] * short2angle, ucmd->angles[1] * short2angle, ucmd->angles[2] * short2angle },
 		ucmd->forwardmove,
 		ucmd->sidemove,
 		ucmd->upmove,

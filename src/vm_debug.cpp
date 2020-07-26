@@ -2,16 +2,6 @@
 #include "game.h"
 #include "g_vm.h"
 
-static void QC_traceon(QCVM &vm)
-{
-	vm.EnableTrace();
-}
-
-static void QC_traceoff(QCVM &vm)
-{
-	vm.StopTrace();
-}
-
 static void QC_stacktrace(QCVM &vm)
 {
 	gi.dprintf("%s\n", vm.StackTrace().data());
@@ -54,8 +44,6 @@ static void QC_dumpentity(QCVM &vm)
 
 void InitDebugBuiltins(QCVM &vm)
 {
-	RegisterBuiltin(traceon);
-	RegisterBuiltin(traceoff);
 	RegisterBuiltin(stacktrace);
 	RegisterBuiltin(debugbreak);
 	RegisterBuiltin(dumpentity);
