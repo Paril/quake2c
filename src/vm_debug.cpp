@@ -95,6 +95,7 @@ void InitDebugger()
 
 	input_thread = std::thread(DebuggerThread);
 	running_thread = true;
+	qvm.debug.state = DEBUG_BROKE;
 
 	WaitForDebuggerCommands();
 }
