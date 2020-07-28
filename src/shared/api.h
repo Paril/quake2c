@@ -21,8 +21,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 //
 // game.h -- game dll information visible to server
 //
-struct edict_t;
-struct gclient_t;
+typedef struct edict_s edict_t;
+typedef struct gclient_s gclient_t;
 
 constexpr int GAME_API_VERSION	= 3;
 
@@ -492,7 +492,7 @@ CVARS (console variables)
 ==========================================================
 */
 
-enum cvar_flags_t
+enum
 {
 	CVAR_NONE		= 0,
 	CVAR_ARCHIVE	= 1,	// set to cause it to be saved to vars.rc
@@ -502,6 +502,8 @@ enum cvar_flags_t
 							// but can be set from the command line
 	CVAR_LATCH	= 16	// save changes until server restart
 };
+
+typedef int cvar_flags_t;
 
 // nothing outside the cvar.*() functions should modify these fields!
 struct cvar_t

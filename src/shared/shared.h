@@ -41,11 +41,11 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "shared/platform.h"
 
 // ABI compat only, don't use
-enum qboolean
+typedef enum
 {
 	qfalse,
 	qtrue
-};
+} qboolean;
 
 /*
 ==============================================================
@@ -225,17 +225,3 @@ constexpr size_t MAX_INFO_STRING	= 512;
 #include "api.h"
 #include "client.h"
 #include "entity.h"
-
-template <typename T, class... StreamArgs>
-inline std::basic_ostream<StreamArgs...> &
-operator <= (std::basic_ostream<StreamArgs...> & out, T const & data) {
-		out.write(reinterpret_cast<char const *>(&data), sizeof(T));
-		return out;
-}
-
-template <typename T, class... StreamArgs>
-inline std::basic_istream<StreamArgs...> &
-operator >= (std::basic_istream<StreamArgs...> & out, T & data) {
-		out.read(reinterpret_cast<char *>(&data), sizeof(T));
-		return out;
-}

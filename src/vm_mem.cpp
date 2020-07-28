@@ -48,7 +48,7 @@ static void QC_memcmp(QCVM &vm)
 	auto src_ptr = vm.AddressToEntityField(src);
 	auto dst_ptr = vm.AddressToEntityField(dst);
 
-	vm.Return(memcmp(dst_ptr, src_ptr, sz));
+	vm.ReturnInt(memcmp(dst_ptr, src_ptr, sz));
 }
 
 void InitMemBuiltins(QCVM &vm)

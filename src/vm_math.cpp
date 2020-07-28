@@ -5,77 +5,75 @@
 static void QC_fabsf(QCVM &vm)
 {
 	const auto &v = vm.ArgvFloat(0);
-	vm.Return(fabsf(v));
+	vm.ReturnFloat(fabsf(v));
 }
 
 static void QC_sqrtf(QCVM &vm)
 {
 	const auto &v = vm.ArgvFloat(0);
-	vm.Return(sqrtf(v));
+	vm.ReturnFloat(sqrtf(v));
 }
 
 static void QC_sinf(QCVM &vm)
 {
 	const auto &v = vm.ArgvFloat(0);
-	vm.Return(sinf(v));
+	vm.ReturnFloat(sinf(v));
 }
 
 static void QC_cosf(QCVM &vm)
 {
 	const auto &v = vm.ArgvFloat(0);
-	vm.Return(cosf(v));
+	vm.ReturnFloat(cosf(v));
 }
 
 static void QC_atan2f(QCVM &vm)
 {
 	const auto &x = vm.ArgvFloat(0);
 	const auto &y = vm.ArgvFloat(1);
-	vm.Return(atan2f(x, y));
+	vm.ReturnFloat(atan2f(x, y));
 }
 
 static void QC_atanf(QCVM &vm)
 {
 	const auto &x = vm.ArgvFloat(0);
-	vm.Return(atanf(x));
+	vm.ReturnFloat(atanf(x));
 }
 
 static void QC_asinf(QCVM &vm)
 {
 	const auto &x = vm.ArgvFloat(0);
-	vm.Return(asinf(x));
+	vm.ReturnFloat(asinf(x));
 }
 
 static void QC_isnan(QCVM &vm)
 {
 	const auto &x = vm.ArgvFloat(0);
-	vm.Return(isnan(x));
+	vm.ReturnFloat(isnan(x));
 }
 
 static void QC_floorf(QCVM &vm)
 {
 	const auto &v = vm.ArgvFloat(0);
-	vm.Return(floorf(v));
+	vm.ReturnFloat(floorf(v));
 }
 
 static void QC_ceilf(QCVM &vm)
 {
 	const auto &v = vm.ArgvFloat(0);
-	vm.Return(ceilf(v));
+	vm.ReturnFloat(ceilf(v));
 }
 
 static void QC_roundf(QCVM &vm)
 {
 	const auto &v = vm.ArgvFloat(0);
-	vm.Return(roundf(v));
+	vm.ReturnFloat(roundf(v));
 }
 
 static void QC_tanf(QCVM &vm)
 {
 	const auto &v = vm.ArgvFloat(0);
-	vm.Return(tanf(v));
+	vm.ReturnFloat(tanf(v));
 }
-
-
 
 /*
 =====================================================================
@@ -86,6 +84,7 @@ static void QC_tanf(QCVM &vm)
 */
 
 #include <random>
+#include <ctime>
 
 static std::mt19937 mt(static_cast<uint32_t>(time(NULL)));
 
@@ -116,12 +115,12 @@ float frand(const float &min, const float &max)
 
 static void QC_Q_rand(QCVM &vm)
 {
-	vm.Return(static_cast<int32_t>(Q_rand() & 0x7FFFFFFF));
+	vm.ReturnInt(static_cast<int32_t>(Q_rand() & 0x7FFFFFFF));
 }
 
 static void QC_Q_rand_uniform(QCVM &vm)
 {
-	vm.Return(static_cast<int32_t>(Q_rand_uniform(vm.ArgvInt32(0))));
+	vm.ReturnInt(static_cast<int32_t>(Q_rand_uniform(vm.ArgvInt32(0))));
 }
 
 

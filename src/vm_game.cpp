@@ -16,7 +16,7 @@ static void QC_ClearEntity(QCVM &vm)
 	
 	entity->s.number = number;
 
-	if (number > 0 && number <= game.clients.size())
+	if (number > 0 && number <= game.num_clients)
 		entity->client = &game.clients[number - 1];
 
 	vm.dynamic_strings.CheckRefUnset(entity, sizeof(*entity) / sizeof(global_t));
@@ -26,8 +26,8 @@ void SyncPlayerState(QCVM &vm, edict_t *ent)
 {
 	for (auto &wrap : vm.field_wraps.GetFields())
 	{
-		const auto &field = vm.GetEntityFieldPointer(*ent, wrap.first / sizeof(global_t));
-		vm.field_wraps.WrapField(*ent, wrap.first, field);
+		const auto &field = vm.GetEntityFieldPointer(ent, wrap.first / sizeof(global_t));
+		vm.field_wraps.WrapField(ent, wrap.first, field);
 	}
 }
 
@@ -102,7 +102,7 @@ static void QC_entity_key_parse(QCVM &vm)
 	const auto &field = vm.ArgvInt32(1);
 	const auto &value = vm.ArgvString(2);
 
-	void *ptr = vm.GetEntityFieldPointer(*ent, field);
+	void *ptr = vm.GetEntityFieldPointer(ent, field);
 
 	auto f = vm.field_map.find(static_cast<global_t>(field));
 
@@ -123,26 +123,26 @@ static void QC_struct_key_parse(QCVM &vm)
 
 	if (hashed == vm.definition_map_by_name.end())
 	{
-		vm.Return(0);
+		vm.ReturnInt(0);
 		return;
 	}
 
 	auto g = (*hashed).second;
 	auto global = vm.GetGlobalByIndex(static_cast<global_t>(g->global_index));
 	QC_parse_value_into_ptr(vm, static_cast<deftype_t>(g->id & ~TYPE_GLOBAL), value, global);
-	vm.Return(1);
+	vm.ReturnInt(1);
 }
 
 static void QC_itoe(QCVM &vm)
 {
 	const auto &number = vm.ArgvInt32(0);
-	vm.Return(reinterpret_cast<int32_t>(reinterpret_cast<uint8_t *>(globals.edicts) + (globals.edict_size * number)));
+	vm.ReturnEntity(itoe(number));
 }
 
 static void QC_etoi(QCVM &vm)
 {
 	const auto &address = vm.ArgvInt32(0);
-	vm.Return((reinterpret_cast<uint8_t *>(address) - reinterpret_cast<uint8_t *>(globals.edicts)) / globals.edict_size);
+	vm.ReturnInt((reinterpret_cast<uint8_t *>(address) - reinterpret_cast<uint8_t *>(globals.edicts)) / globals.edict_size);
 }
 
 void InitGameBuiltins(QCVM &vm)

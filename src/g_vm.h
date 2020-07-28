@@ -22,29 +22,33 @@ enum debug_state_t
 #include <deque>
 #include <unordered_map>
 #include <unordered_set>
-#include <filesystem>
-#include <fstream>
 
-enum class string_t
+enum
 {
 	STRING_EMPTY
 };
+
+typedef int string_t;
 
 // NOTE: in QC, the value 0 is used for the world.
 // For compatibility sake, we also consider 0 to be world,
 // but entities are direct memory addresses into globals.edicts.
 // The value "1" is used to mean a null entity, which is required
 // to differentiate things like groundentity that can be the world.
-enum class ent_t
+enum
 {
 	ENT_WORLD = 0,
 	ENT_INVALID = 1
 };
 
-enum class func_t
+typedef int ent_t;
+
+enum
 {
 	FUNC_VOID
 };
+
+typedef int func_t;
 
 enum opcode_t
 {
@@ -336,7 +340,7 @@ enum opcode_t
 
 constexpr opcode_t OP_BREAKPOINT = static_cast<opcode_t>(0x80000000);
 
-enum deftype_t : uint32_t
+enum : uint32_t
 {
 	TYPE_VOID,
 	TYPE_STRING,
@@ -354,20 +358,23 @@ enum deftype_t : uint32_t
 	TYPE_GLOBAL		= bit(15)
 };
 
-enum class global_t : uint32_t
+typedef uint32_t deftype_t;
+
+enum : uint32_t
 {
-	QC_NULL	= 0,
-	RETURN	= 1,
-	PARM0	= 4,		// leave 3 ofs for each parm to hold vectors
-	PARM1	= 7,
-	PARM2	= 10,
-	PARM3	= 13,
-	PARM4	= 16,
-	PARM5	= 19,
-	PARM6	= 22,
-	PARM7	= 25,
-	QC_OFS	= 28
+	GLOBAL_NULL		= 0,
+	GLOBAL_RETURN	= 1,
+	GLOBAL_PARM0	= 4,		// leave 3 ofs for each parm to hold vectors
+	GLOBAL_PARM1	= 7,
+	GLOBAL_PARM2	= 10,
+	GLOBAL_PARM3	= 13,
+	GLOBAL_PARM4	= 16,
+	GLOBAL_PARM5	= 19,
+	GLOBAL_PARM6	= 22,
+	GLOBAL_PARM7	= 25,
+	GLOBAL_QC		= 28
 };
+typedef uint32_t global_t;
 
 struct QCStatement
 {
@@ -611,8 +618,8 @@ public:
 
 	void PushRef(const QCVMRefCountBackup &backup);
 	
-	void WriteState(std::ostream &stream);
-	void ReadState(std::istream &stream);
+	void WriteState(FILE *fp);
+	void ReadState(FILE *fp);
 };
 
 class QCVMBuiltinList
@@ -662,17 +669,20 @@ public:
 
 	void Register(const char *field_name, const size_t &field_offset, const size_t &client_offset, QCVMFieldWrapper setter);
 
-	inline void WrapField(const edict_t &ent, const int32_t &field, const void *src)
+	inline void WrapField(const edict_t *ent, const int32_t &field, const void *src)
 	{
 		if (!wraps.contains(field))
 			return;
 
 		const auto &wrap = wraps.at(field);
-
+		
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
 		if (wrap.setter)
-			wrap.setter(reinterpret_cast<uint8_t *>(ent.client) + wrap.client_offset, reinterpret_cast<const int32_t *>(src));
+			wrap.setter((uint8_t *)(ent->client) + wrap.client_offset, (const int32_t *)(src));
 		else
-			*reinterpret_cast<int32_t *>(reinterpret_cast<uint8_t *>(ent.client) + wrap.client_offset) = *reinterpret_cast<const int32_t *>(src);
+			*(int32_t *)((uint8_t *)(ent->client) + wrap.client_offset) = *(const int32_t *)(src);
+#pragma GCC diagnostic pop
 	}
 
 	constexpr std::unordered_map<int32_t, QCVMFieldWrap> &GetFields()
@@ -680,6 +690,24 @@ public:
 		return wraps;
 	}
 };
+
+#ifdef ALLOW_DEBUGGING
+typedef struct
+{
+	deftype_t		type;
+
+	union
+	{
+		int	integer;
+		float single;
+		vec3_t vector;
+		string_t strid;
+		ent_t entid;
+		func_t funcid;
+		void *ptr;
+	};
+} evaluate_result_t;
+#endif
 
 struct QCVM
 {
@@ -794,12 +822,12 @@ struct QCVM
 			(*state.current).profile->fields[NumGlobalsSet]++;
 #endif
 
-		if (global == global_t::QC_NULL)
+		if (global == GLOBAL_NULL)
 			Error("attempt to overwrite 0");
 
 		static_assert(std::is_standard_layout_v<T> && std::is_trivial_v<T> && (sizeof(T) % 4) == 0);
 
-		*reinterpret_cast<T*>(GetGlobalByIndex(global)) = value;
+		*(T*)(GetGlobalByIndex(global)) = value;
 		dynamic_strings.CheckRefUnset(GetGlobalByIndex(global), sizeof(T) / sizeof(global_t));
 	}
 
@@ -867,59 +895,59 @@ struct QCVM
 
 	[[nodiscard]] inline edict_t *ArgvEntity(const uint8_t &d) const
 	{
-		return EntToEntity(GetGlobal<ent_t>(GlobalOffset(global_t::PARM0, d * 3)));
+		return EntToEntity(GetGlobal<ent_t>(GlobalOffset(GLOBAL_PARM0, d * 3)));
 	}
 	
 	[[nodiscard]] inline edict_t *EntToEntity(const ent_t &ent, bool allow_invalid = false) const
 	{
-		if (ent == ent_t::ENT_INVALID)
+		if (ent == ENT_INVALID)
 		{
 			if (!allow_invalid)
 				return nullptr;
 			else
-				return &game.entity(MAX_EDICTS);
+				return itoe(MAX_EDICTS);
 		}
-		else if (ent == ent_t::ENT_WORLD)
-			return &game.entity(0);
+		else if (ent == ENT_WORLD)
+			return itoe(0);
 
-		return &game.entity((reinterpret_cast<uint8_t *>(ent) - reinterpret_cast<uint8_t *>(globals.edicts)) / globals.edict_size);
+		return itoe(((uint8_t *)(ent) - (uint8_t *)(globals.edicts)) / globals.edict_size);
 	}
 	
 	[[nodiscard]] inline ent_t EntityToEnt(edict_t *ent) const
 	{
 		if (ent == nullptr)
-			return ent_t::ENT_INVALID;
+			return ENT_INVALID;
 		else if (ent->s.number == 0)
-			return ent_t::ENT_WORLD;
+			return ENT_WORLD;
 
 		return static_cast<ent_t>(reinterpret_cast<ptrdiff_t>(ent));
 	}
 
 	[[nodiscard]] inline const char *ArgvString(const uint8_t &d) const
 	{
-		const int32_t &str = GetGlobal<int32_t>(GlobalOffset(global_t::PARM0, d * 3));
+		const int32_t &str = GetGlobal<int32_t>(GlobalOffset(GLOBAL_PARM0, d * 3));
 		return GetString(static_cast<string_t>(str));
 	}
 
 	[[nodiscard]] inline const string_t &ArgvStringID(const uint8_t &d) const
 	{
-		const int32_t &str = GetGlobal<int32_t>(GlobalOffset(global_t::PARM0, d * 3));
+		const int32_t &str = GetGlobal<int32_t>(GlobalOffset(GLOBAL_PARM0, d * 3));
 		return *reinterpret_cast<const string_t *>(&str);
 	}
 
 	[[nodiscard]] inline const int32_t &ArgvInt32(const uint8_t &d) const
 	{
-		return GetGlobal<int32_t>(GlobalOffset(global_t::PARM0, d * 3));
+		return GetGlobal<int32_t>(GlobalOffset(GLOBAL_PARM0, d * 3));
 	}
 
 	[[nodiscard]] inline const vec_t &ArgvFloat(const uint8_t &d) const
 	{
-		return GetGlobal<vec_t>(GlobalOffset(global_t::PARM0, d * 3));
+		return GetGlobal<vec_t>(GlobalOffset(GLOBAL_PARM0, d * 3));
 	}
 
 	[[nodiscard]] inline const vec3_t &ArgvVector(const uint8_t &d) const
 	{
-		return GetGlobal<vec3_t>(GlobalOffset(global_t::PARM0, d * 3));
+		return GetGlobal<vec3_t>(GlobalOffset(GLOBAL_PARM0, d * 3));
 	}
 	
 	template<typename T>
@@ -928,53 +956,53 @@ struct QCVM
 		return reinterpret_cast<T*>(ArgvInt32(d));
 	}
 
-	inline void Return(const vec_t &value)
+	inline void ReturnFloat(const vec_t &value)
 	{
-		SetGlobal(global_t::RETURN, value);
+		SetGlobal(GLOBAL_RETURN, value);
 	}
 
-	inline void Return(const vec3_t &value)
+	inline void ReturnVector(const vec3_t &value)
 	{
 		for (size_t i = 0; i < value.size(); i++)
-			SetGlobal(GlobalOffset(global_t::RETURN, i), value.at(i));
+			SetGlobal(GlobalOffset(GLOBAL_RETURN, i), value.at(i));
 	}
 	
-	inline void Return(const edict_t &value)
+	inline void ReturnEntity(const edict_t *value)
 	{
-		SetGlobal(global_t::RETURN, reinterpret_cast<int32_t>(&value));
+		SetGlobal(GLOBAL_RETURN, reinterpret_cast<int32_t>(value));
 	}
 	
-	inline void Return(const int32_t &value)
+	inline void ReturnInt(const int32_t &value)
 	{
-		SetGlobal(global_t::RETURN, value);
+		SetGlobal(GLOBAL_RETURN, value);
 	}
 
-	inline void Return(const func_t &str)
+	inline void ReturnFunc(const func_t &str)
 	{
-		SetGlobal(global_t::RETURN, str);
+		SetGlobal(GLOBAL_RETURN, str);
 	}
 
-	inline void Return(const char *value)
+	inline void ReturnString(const char *value)
 	{
 		if (!(value >= string_data.data() && value < string_data.data() + string_size))
 			Error("attempt to return dynamic string from %s", __func__);
 
-		Return(static_cast<string_t>(value - string_data.data()));
+		ReturnString(static_cast<string_t>(value - string_data.data()));
 	}
 
-	inline void Return(std::string &&str)
+	inline void ReturnString(std::string &&str)
 	{
-		SetGlobalStr(global_t::RETURN, std::move(str));
+		SetGlobalStr(GLOBAL_RETURN, std::move(str));
 	}
 
-	inline void Return(const string_t &str)
+	inline void ReturnString(const string_t &str)
 	{
-		SetGlobal(global_t::RETURN, str);
+		SetGlobal(GLOBAL_RETURN, str);
 	}
 
 	inline bool FindString(const std::string_view &value, string_t &rstr)
 	{
-		rstr = string_t::STRING_EMPTY;
+		rstr = STRING_EMPTY;
 
 		if (!value.length())
 			return true;
@@ -1035,39 +1063,37 @@ struct QCVM
 		size_t step_depth;
 	} debug;
 
-	using value_type = std::variant<int, float, vec3_t, string_t, ent_t, func_t, void*>;
-
-	inline value_type ValueFromPtr(const QCDefinition *def, const void *ptr)
+	inline evaluate_result_t ValueFromPtr(const QCDefinition *def, const void *ptr)
 	{
 		switch (def->id & ~TYPE_GLOBAL)
 		{
 		default:
-			return value_type();
+			return { };
 		case TYPE_STRING:
-			return *reinterpret_cast<const string_t *>(ptr);
+			return { .type = TYPE_STRING, .strid = *(const string_t *)(ptr) };
 		case TYPE_FLOAT:
-			return *reinterpret_cast<const vec_t *>(ptr);
+			return { .type = TYPE_FLOAT, .single = *(const vec_t *)(ptr) };
 		case TYPE_VECTOR:
-			return *reinterpret_cast<const vec3_t *>(ptr);
+			return { .type = TYPE_VECTOR, .vector = *(const vec3_t *)(ptr) };
 		case TYPE_ENTITY:
-			return *reinterpret_cast<const ent_t *>(ptr);
+			return { .type = TYPE_ENTITY, .entid = *(const ent_t *)(ptr) };
 		case TYPE_FIELD:
-			return value_type();
+			return { };
 		case TYPE_FUNCTION:
-			return *reinterpret_cast<const func_t *>(ptr);
+			return { .type = TYPE_FUNCTION, .funcid = *(const func_t *)(ptr) };
 		case TYPE_POINTER:
-			return value_type();
+			return { .type = TYPE_POINTER, .ptr = (void *)(*(const int *)(ptr)) };
 		case TYPE_INTEGER:
-			return *reinterpret_cast<const int32_t *>(ptr);
+			return { .type = TYPE_INTEGER, .integer = *(const int32_t *)(ptr) };
 		}
 	}
 
-	inline value_type ValueFromGlobal(const QCDefinition *def)
+	inline evaluate_result_t ValueFromGlobal(const QCDefinition *def)
 	{
 		return ValueFromPtr(def, GetGlobalByIndex(def->global_index));
 	}
 
-	value_type EvaluateFromLocalOrGlobal(const std::string_view &variable)
+	evaluate_result_t EvaluateFromLocalOrGlobal(const std::string_view &variable)
 	{
 		// we don't have a . so we're just checking for a base object.
 		// check locals
@@ -1080,7 +1106,7 @@ struct QCVM
 			{
 				auto def = definition_map_by_id[g];
 
-				if (!def || def->name_index == string_t::STRING_EMPTY || variable != GetString(def->name_index))
+				if (!def || def->name_index == STRING_EMPTY || variable != GetString(def->name_index))
 					continue;
 
 				return ValueFromGlobal(def);
@@ -1090,16 +1116,16 @@ struct QCVM
 		// no locals, so we can check all the globals
 		for (auto &def : definitions)
 		{
-			if (def.name_index == string_t::STRING_EMPTY || variable != GetString(def.name_index))
+			if (def.name_index == STRING_EMPTY || variable != GetString(def.name_index))
 				continue;
 
 			return ValueFromGlobal(&def);
 		}
 
-		return value_type();
+		return { };
 	}
 
-	value_type Evaluate(const std::string &variable)
+	evaluate_result_t Evaluate(const std::string &variable)
 	{
 		if (variable.find_first_of('.') != std::string::npos)
 		{
@@ -1107,19 +1133,19 @@ struct QCVM
 			auto context = std::string_view(variable).substr(0, variable.find_first_of('.'));
 			auto left_hand = EvaluateFromLocalOrGlobal(context);
 
-			if (std::holds_alternative<ent_t>(left_hand))
+			if (left_hand.type == TYPE_ENTITY)
 			{
 				auto right_context = std::string_view(variable).substr(context.length() + 1);
-				const ent_t &ent = std::get<ent_t>(left_hand);
+				const ent_t &ent = left_hand.entid;
 
-				if (ent == ent_t::ENT_INVALID)
-					return ent_t::ENT_INVALID;
+				if (ent == ENT_INVALID)
+					return left_hand;
 
 				const QCDefinition *field = nullptr;
 
 				for (auto &f : fields)
 				{
-					if (f.name_index == string_t::STRING_EMPTY || strcmp(GetString(f.name_index), right_context.data()))
+					if (f.name_index == STRING_EMPTY || strcmp(GetString(f.name_index), right_context.data()))
 						continue;
 
 					field = &f;
@@ -1127,9 +1153,9 @@ struct QCVM
 				}
 
 				if (!field)
-					return value_type();
+					return { };
 
-				return ValueFromPtr(field, GetEntityFieldPointer(*EntToEntity(ent), static_cast<int32_t>(field->global_index)));
+				return ValueFromPtr(field, GetEntityFieldPointer(EntToEntity(ent), static_cast<int32_t>(field->global_index)));
 			}
 		}
 
@@ -1173,7 +1199,7 @@ struct QCVM
 		// copy parameters
 		for (size_t i = 0, arg_id = static_cast<size_t>(function.first_arg); i < static_cast<size_t>(function.num_args); i++)
 			for (size_t s = 0; s < function.arg_sizes[i]; s++, arg_id++)
-				CopyGlobal<global_t>(static_cast<global_t>(arg_id), GlobalOffset(global_t::PARM0, (i * 3) + s));
+				CopyGlobal<global_t>(static_cast<global_t>(arg_id), GlobalOffset(GLOBAL_PARM0, (i * 3) + s));
 
 #ifdef ALLOW_PROFILING
 		new_stack.profile = &profile_data[&function - functions.data()];
@@ -1241,7 +1267,7 @@ struct QCVM
 			i++;
 		}
 
-		return func_t::FUNC_VOID;
+		return FUNC_VOID;
 	}
 	
 	inline const char *GetString(const string_t &str) const
@@ -1308,8 +1334,6 @@ struct QCVM
 		case OP_LOAD_I:
 		case OP_STOREP_I:
 			return TYPE_INTEGER;
-// EXTENSIONS !!!
-// EXTENSIONS !!!
 		case OP_STORE_P:
 		case OP_LOAD_P:
 			return TYPE_POINTER;
@@ -1319,19 +1343,19 @@ struct QCVM
 		}
 	}
 
-	inline int32_t *GetEntityFieldPointer(edict_t &ent, const int32_t &field)
+	inline int32_t *GetEntityFieldPointer(edict_t *ent, const int32_t &field)
 	{
-		return reinterpret_cast<int32_t *>(&ent) + field;
+		return (int32_t *)(ent) + field;
 	}
 
-	inline int32_t EntityFieldAddress(edict_t &ent, const int32_t &field)
+	inline int32_t EntityFieldAddress(edict_t *ent, const int32_t &field)
 	{
-		return reinterpret_cast<int32_t>(GetEntityFieldPointer(ent, field));
+		return (int32_t)GetEntityFieldPointer(ent, field);
 	}
 
 	inline void *AddressToEntityField(const int32_t &address)
 	{
-		return reinterpret_cast<uint8_t *>(address);
+		return (uint8_t *)address;
 	}
 
 	template<typename T>
@@ -1340,14 +1364,14 @@ struct QCVM
 		return reinterpret_cast<T *>(AddressToEntityField(address));
 	}
 
-	inline ptrdiff_t AddressToField(edict_t &entity, const int32_t &address)
+	inline ptrdiff_t AddressToField(edict_t *entity, const int32_t &address)
 	{
-		return AddressToEntityField<uint8_t>(address) - reinterpret_cast<uint8_t *>(&entity);
+		return AddressToEntityField<uint8_t>(address) - (uint8_t *)(entity);
 	}
 
-	inline edict_t &AddressToEntity(const int32_t &address)
+	inline edict_t *AddressToEntity(const int32_t &address)
 	{
-		return game.entity(address / globals.edict_size);
+		return itoe(address / globals.edict_size);
 	}
 
 	inline bool PointerValid(const ptrdiff_t &address, const bool allow_null = false, const size_t &len = sizeof(global_t)) const
@@ -1389,8 +1413,8 @@ struct QCVM
 
 	void Execute(QCFunction &function);
 	
-	void WriteState(std::ostream &stream);
-	void ReadState(std::istream &stream);
+	void WriteState(FILE *fp);
+	void ReadState(FILE *fp);
 
 #ifdef ALLOW_DEBUGGING
 	void SetBreakpoint(const int &mode, const std::string &file, const int &line);

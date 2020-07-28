@@ -14,31 +14,31 @@ static void QC_debugbreak(QCVM &vm)
 
 static void QC_dumpentity(QCVM &vm)
 {
-	std::filesystem::path file_path(vas("%s/dumpentity.text", game_var->string).data());
-	std::ofstream stream(file_path, std::ios::binary);
+	FILE *fp = fopen(va("%s/dumpentity.text", game_var->string), "a");
 
 	auto ent = vm.ArgvEntity(0);
 
 	for (auto f : vm.fields)
 	{
-		stream << vm.GetString(f.name_index) << ": ";
+		fprintf(fp, "%s: ", vm.GetString(f.name_index));
 
-		auto val = reinterpret_cast<ptrdiff_t>(vm.GetEntityFieldPointer(*ent, static_cast<int32_t>(f.global_index)));
+		auto val = reinterpret_cast<ptrdiff_t>(vm.GetEntityFieldPointer(ent, static_cast<int32_t>(f.global_index)));
 
 		switch (f.id)
 		{
 		case TYPE_FLOAT:
-			stream << *reinterpret_cast<vec_t *>(val);
+			fprintf(fp, "%f", *reinterpret_cast<vec_t *>(val));
 			break;
-		case TYPE_VECTOR:
-			stream << vtoss(*reinterpret_cast<vec3_t *>(val));
-			break;
+		case TYPE_VECTOR: {
+			vec_t *v = reinterpret_cast<vec_t *>(val);
+			fprintf(fp, "%f %f %f", v[0], v[1], v[2]);
+			break; }
 		default:
-			stream << *reinterpret_cast<int32_t *>(val);
+			fprintf(fp, "%i", *reinterpret_cast<int32_t *>(val));
 			break;
 		}
 
-		stream << "\r\n";
+		fprintf(fp, "\r\n");
 	}
 }
 
@@ -259,15 +259,19 @@ void CheckDebuggerCommands()
 		auto result = qvm.Evaluate(variable);
 		std::string value;
 		
-		if (std::holds_alternative<int32_t>(result))
-			value = vas("%i", std::get<int32_t>(result));
-		else if (std::holds_alternative<vec_t>(result))
-			value = vas("%g", std::get<vec_t>(result));
-		else if (std::holds_alternative<vec3_t>(result))
-			value = vas("\"%f %f %f\"", std::get<vec3_t>(result)[0], std::get<vec3_t>(result)[1], std::get<vec3_t>(result)[2]);
-		else if (std::holds_alternative<string_t>(result))
+		switch (result.type)
 		{
-			value = qvm.GetString(std::get<string_t>(result));
+		case TYPE_INTEGER:
+			value = vas("%i", result.integer);
+			break;
+		case TYPE_FLOAT:
+			value = vas("%g", result.single);
+			break;
+		case TYPE_VECTOR:
+			value = vas("\"%f %f %f\"", result.vector[0], result.vector[1], result.vector[2]);
+			break;
+		case TYPE_STRING:
+			value = qvm.GetString(result.strid);
 
 			if (value.find_first_of('\"', 0) != std::string::npos)
 			{
@@ -279,34 +283,30 @@ void CheckDebuggerCommands()
 
 				value = '"' + value + '"';
 			}
-		}
-		else if (std::holds_alternative<ent_t>(result))
-		{
-			auto ent = std::get<ent_t>(result);
-
-			if (ent == ent_t::ENT_INVALID)
+			break;
+		case TYPE_ENTITY:
+			if (result.entid == ENT_INVALID)
 				value = "\"invalid/null entity\"";
 			else
-				value = vas("\"entity %i\"", qvm.EntToEntity(ent)->s.number);
-		}
-		else if (std::holds_alternative<func_t>(result))
-		{
-			auto func_id = std::get<func_t>(result);
-
-			if (func_id == func_t::FUNC_VOID)
+				value = vas("\"entity %i\"", qvm.EntToEntity(result.entid)->s.number);
+			break;
+		case TYPE_FUNCTION:
+			if (result.funcid == FUNC_VOID)
 				value = "\"invalid/null function\"";
 			else
 			{
-				auto func = qvm.FindFunction(func_id);
+				auto func = qvm.FindFunction(result.funcid);
 
-				if (!func || func->name_index == string_t::STRING_EMPTY)
-					value = vas("\"can't resolve function: %i\"", func_id);
+				if (!func || func->name_index == STRING_EMPTY)
+					value = vas("\"can't resolve function: %i\"", result.funcid);
 				else
 					value = vas("%s", qvm.GetString(func->name_index));
 			}
-		}
-		else
+			break;
+		default:
 			value = "\"unable to evaluate\"";
+			break;
+		}
 
 		SendDebuggerCommand(vas("qcvalue \"%s\" %s\n", variable.data(), value.data()));
 	}

@@ -5,26 +5,26 @@
 static void QC_va(QCVM &vm)
 {
 	const auto &fmtid = vm.ArgvStringID(0);
-	vm.Return(ParseFormat(fmtid, vm, 1));
+	vm.ReturnString(ParseFormat(fmtid, vm, 1));
 }
 
 static void QC_stoi(QCVM &vm)
 {
 	const auto &a = vm.ArgvString(0);
-	vm.Return(strtol(a, nullptr, 10));
+	vm.ReturnInt(strtol(a, nullptr, 10));
 }
 
 static void QC_stof(QCVM &vm)
 {
 	const auto &a = vm.ArgvString(0);
-	vm.Return(strtof(a, nullptr));
+	vm.ReturnFloat(strtof(a, nullptr));
 }
 
 static void QC_stricmp(QCVM &vm)
 {
 	const auto &a = vm.ArgvString(0);
 	const auto &b = vm.ArgvString(1);
-	vm.Return(stricmp(a, b));
+	vm.ReturnInt(stricmp(a, b));
 }
 
 static void QC_strncmp(QCVM &vm)
@@ -33,13 +33,13 @@ static void QC_strncmp(QCVM &vm)
 	const auto &b = vm.ArgvString(1);
 	const auto &c = vm.ArgvInt32(2);
 
-	vm.Return(strncmp(a, b, c));
+	vm.ReturnInt(strncmp(a, b, c));
 }
 
 static void QC_strlen(QCVM &vm)
 {
 	const auto &a = vm.ArgvStringID(0);
-	vm.Return(static_cast<int32_t>(vm.StringLength(a)));
+	vm.ReturnInt(static_cast<int32_t>(vm.StringLength(a)));
 }
 
 static void QC_substr(QCVM &vm)
@@ -57,19 +57,19 @@ static void QC_substr(QCVM &vm)
 
 	length = min(str_len - start, length);
 
-	vm.Return(std::string(vm.GetString(strid) + start, length));
+	vm.ReturnString(std::string(vm.GetString(strid) + start, length));
 }
 
 static void QC_strconcat(QCVM &vm)
 {
 	if (vm.state.argc == 0)
 	{
-		vm.Return(vm.string_data.data());
+		vm.ReturnString(vm.string_data.data());
 		return;
 	}
 	else if (vm.state.argc == 1)
 	{
-		vm.Return(vm.ArgvStringID(0));
+		vm.ReturnString(vm.ArgvStringID(0));
 		return;
 	}
 
@@ -78,7 +78,7 @@ static void QC_strconcat(QCVM &vm)
 	for (int32_t i = 0; i < vm.state.argc; i++)
 		str += vm.ArgvString(i);
 
-	vm.Return(std::move(str));
+	vm.ReturnString(std::move(str));
 }
 
 static void QC_strstr(QCVM &vm)
@@ -87,7 +87,7 @@ static void QC_strstr(QCVM &vm)
 	const auto &b = vm.ArgvString(1);
 	const char *c = strstr(a, b);
 
-	vm.Return(c == nullptr ? -1 : (c - a));
+	vm.ReturnInt(c == nullptr ? -1 : (c - a));
 }
 
 static void QC_strchr(QCVM &vm)
@@ -96,8 +96,10 @@ static void QC_strchr(QCVM &vm)
 	const auto &b = vm.ArgvInt32(1);
 	const char *c = strchr(a, b);
 	
-	vm.Return(c == nullptr ? -1 : (c - a));
+	vm.ReturnInt(c == nullptr ? -1 : (c - a));
 }
+
+#include <ctime>
 
 static void QC_localtime(QCVM &vm)
 {
@@ -108,7 +110,7 @@ static void QC_localtime(QCVM &vm)
 	if (!ltime)
 		ltime = &empty_ltime;
 
-	vm.SetGlobal(global_t::PARM0, *ltime);
+	vm.SetGlobal(GLOBAL_PARM0, *ltime);
 }
 
 void InitStringBuiltins(QCVM &vm)

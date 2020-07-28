@@ -36,17 +36,17 @@ static void InitBuiltins()
 template<typename T>
 static void FieldWrapToT(void *out, const void *in)
 {
-	*reinterpret_cast<T *>(out) = *reinterpret_cast<const int32_t *>(in);
+	*(T *)(out) = *(const int32_t *)(in);
 }
 
 static void FieldCoord2Short(void *out, const void *in)
 {
-	*reinterpret_cast<short *>(out) = (*reinterpret_cast<const vec_t *>(in) * coord2short);
+	*(short *)(out) = (*(const vec_t *)(in) * coord2short);
 }
 
 static void FieldCoord2Angle(void *out, const void *in)
 {
-	*reinterpret_cast<short *>(out) = (*reinterpret_cast<const vec_t *>(in) * angle2short);
+	*(short *)(out) = (*(const vec_t *)(in) * angle2short);
 }
 
 static void InitFieldWraps()
@@ -172,22 +172,23 @@ static void InitGame ()
 	// Call GetGameAPI
 	auto func = qvm.FindFunction("GetGameAPI");
 	qvm.Execute(*func);
-	qce = qvm.GetGlobal<qc_export_t>(global_t::PARM0);
+	qce = qvm.GetGlobal<qc_export_t>(GLOBAL_PARM0);
 
 	// initialize all clients for this game
-	const cvar_t *maxclients = gi.cvar ("maxclients", "4", static_cast<cvar_flags_t>(CVAR_SERVERINFO | CVAR_LATCH));
-	game.clients.resize(maxclients->value);
+	const cvar_t *maxclients = gi.cvar ("maxclients", "4", CVAR_SERVERINFO | CVAR_LATCH);
+	game.num_clients = maxclients->value;
+	game.clients = (gclient_t *)gi.TagMalloc(sizeof(gclient_t) * game.num_clients, TAG_GAME);
 
 	size_t entity_data_size = 0;
 
 	for (auto &field : qvm.fields)
-		entity_data_size = max(entity_data_size, static_cast<size_t>(field.global_index) * sizeof(int32_t));
+		entity_data_size = max(entity_data_size, field.global_index * sizeof(int32_t));
 
 	// initialize all entities for this game
 	globals.max_edicts = MAX_EDICTS;
 	globals.edict_size = sizeof(edict_t) + entity_data_size;
-	globals.num_edicts = game.clients.size() + 1;
-	globals.edicts = reinterpret_cast<edict_t *>(gi.TagMalloc((globals.max_edicts + 1) * globals.edict_size, TAG_GAME));
+	globals.num_edicts = game.num_clients + 1;
+	globals.edicts = (edict_t *)gi.TagMalloc((globals.max_edicts + 1) * globals.edict_size, TAG_GAME);
 
 	func = qvm.FindFunction(qce.InitGame);
 	qvm.Execute(*func);
@@ -210,8 +211,8 @@ static void ShutdownGame()
 
 static void AssignClientPointers()
 {
-	for (size_t i = 0; i < game.clients.size(); i++)
-		game.entity(i + 1).client = &game.clients[i];
+	for (size_t i = 0; i < game.num_clients; i++)
+		itoe(i + 1)->client = &game.clients[i];
 }
 
 static void BackupClientData()
@@ -219,40 +220,43 @@ static void BackupClientData()
 	// in Q2, gclient_t was stored in a separate pointer, but in Q2QC they're fields
 	// and as such wiped with the entity structure. We have to mimic the original Q2 behavior of backing up
 	// the gclient_t structures.
-	game.client_load_data = reinterpret_cast<uint8_t *>(gi.TagMalloc(globals.edict_size * game.clients.size(), TAG_GAME));
-	memcpy(game.client_load_data, &game.entity(1), globals.edict_size * game.clients.size());
-	qvm.dynamic_strings.MarkIfHasRef(&game.entity(1), game.client_load_data, (globals.edict_size * game.clients.size()) / sizeof(global_t));
+	game.client_load_data = (uint8_t *)gi.TagMalloc(globals.edict_size * game.num_clients, TAG_GAME);
+	memcpy(game.client_load_data, itoe(1), globals.edict_size * game.num_clients);
+	qvm.dynamic_strings.MarkIfHasRef(itoe(1), game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(global_t));
 }
 
 static void RestoreClientData()
 {
 	// copy over any client-specific data back into the clients and re-sync
-	for (size_t i = 0; i < game.clients.size(); i++)
+	for (size_t i = 0; i < game.num_clients; i++)
 	{
-		auto &ent = game.entity(i + 1);
-		auto &backup = *reinterpret_cast<edict_t *>(game.client_load_data + (globals.edict_size * i));
+		auto ent = itoe(i + 1);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+		auto backup = (edict_t *)(game.client_load_data + (globals.edict_size * i));
+#pragma GCC diagnostic pop
 
 		// restore client structs
 		for (auto &def : qvm.fields)
 		{
 			const char *name = qvm.GetString(def.name_index);
 
-			if (def.name_index == string_t::STRING_EMPTY || strnicmp(name, "client.", 6))
+			if (def.name_index == STRING_EMPTY || strnicmp(name, "client.", 6))
 				continue;
 
 			const size_t len = def.id == TYPE_VECTOR ? 3 : 1;
 
-			auto dst = qvm.GetEntityFieldPointer(ent, static_cast<int32_t>(def.global_index));
-			auto src = qvm.GetEntityFieldPointer(backup, static_cast<int32_t>(def.global_index));
+			auto dst = qvm.GetEntityFieldPointer(ent, def.global_index);
+			auto src = qvm.GetEntityFieldPointer(backup, def.global_index);
 
 			memcpy(dst, src, sizeof(global_t) * len);
 		}
 
-		SyncPlayerState(qvm, &ent);
+		SyncPlayerState(qvm, ent);
 	}
 	
-	qvm.dynamic_strings.MarkIfHasRef(game.client_load_data, &game.entity(1), (globals.edict_size * game.clients.size()) / sizeof(global_t));
-	qvm.dynamic_strings.CheckRefUnset(game.client_load_data, (globals.edict_size * game.clients.size()) / sizeof(global_t), true);
+	qvm.dynamic_strings.MarkIfHasRef(game.client_load_data, itoe(1), (globals.edict_size * game.num_clients) / sizeof(global_t));
+	qvm.dynamic_strings.CheckRefUnset(game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(global_t), true);
 	gi.TagFree(game.client_load_data);
 	game.client_load_data = nullptr;
 }
@@ -262,7 +266,7 @@ static void WipeEntities()
 	memset(globals.edicts, 0, globals.max_edicts * globals.edict_size);
 
 	for (int32_t i = 0; i < globals.max_edicts; i++)
-		game.entity(i).s.number = i;
+		itoe(i)->s.number = i;
 
 	AssignClientPointers();
 }
@@ -283,9 +287,9 @@ static void SpawnEntities(const char *mapname, const char *entities, const char 
 	WipeEntities();
 
 	func = qvm.FindFunction(qce.SpawnEntities);
-	qvm.SetGlobalStr(global_t::PARM0, std::string(mapname));
-	qvm.SetGlobalStr(global_t::PARM1, std::string(entities));
-	qvm.SetGlobalStr(global_t::PARM2, std::string(spawnpoint));
+	qvm.SetGlobalStr(GLOBAL_PARM0, std::string(mapname));
+	qvm.SetGlobalStr(GLOBAL_PARM1, std::string(entities));
+	qvm.SetGlobalStr(GLOBAL_PARM2, std::string(spawnpoint));
 	qvm.Execute(*func);
 
 	func = qvm.FindFunction(qce.PostSpawnEntities);
@@ -301,13 +305,13 @@ static qboolean ClientConnect(edict_t *e, char *userinfo)
 #endif
 
 	auto func = qvm.FindFunction(qce.ClientConnect);
-	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
-	qvm.SetGlobalStr(global_t::PARM1, std::string(userinfo));
+	qvm.SetGlobal(GLOBAL_PARM0, qvm.EntityToEnt(e));
+	qvm.SetGlobalStr(GLOBAL_PARM1, std::string(userinfo));
 	qvm.Execute(*func);
 
-	Q_strlcpy(userinfo, qvm.GetString(qvm.GetGlobal<string_t>(global_t::PARM1)), MAX_INFO_STRING);
+	Q_strlcpy(userinfo, qvm.GetString(qvm.GetGlobal<string_t>(GLOBAL_PARM1)), MAX_INFO_STRING);
 
-	return qvm.GetGlobal<qboolean>(global_t::RETURN);
+	return qvm.GetGlobal<qboolean>(GLOBAL_RETURN);
 }
 
 static void ClientBegin(edict_t *e)
@@ -317,7 +321,7 @@ static void ClientBegin(edict_t *e)
 #endif
 
 	auto func = qvm.FindFunction(qce.ClientBegin);
-	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
+	qvm.SetGlobal(GLOBAL_PARM0, qvm.EntityToEnt(e));
 	qvm.Execute(*func);
 	SyncPlayerState(qvm, e);
 }
@@ -329,8 +333,8 @@ static void ClientUserinfoChanged(edict_t *e, char *userinfo)
 #endif
 
 	auto func = qvm.FindFunction(qce.ClientUserinfoChanged);
-	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
-	qvm.SetGlobalStr(global_t::PARM1, std::string(userinfo));
+	qvm.SetGlobal(GLOBAL_PARM0, qvm.EntityToEnt(e));
+	qvm.SetGlobalStr(GLOBAL_PARM1, std::string(userinfo));
 	qvm.Execute(*func);
 	SyncPlayerState(qvm, e);
 }
@@ -342,7 +346,7 @@ static void ClientDisconnect(edict_t *e)
 #endif
 
 	auto func = qvm.FindFunction(qce.ClientDisconnect);
-	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
+	qvm.SetGlobal(GLOBAL_PARM0, qvm.EntityToEnt(e));
 	qvm.Execute(*func);
 	SyncPlayerState(qvm, e);
 }
@@ -354,7 +358,7 @@ static void ClientCommand(edict_t *e)
 #endif
 
 	auto func = qvm.FindFunction(qce.ClientCommand);
-	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
+	qvm.SetGlobal(GLOBAL_PARM0, qvm.EntityToEnt(e));
 	qvm.Execute(*func);
 	SyncPlayerState(qvm, e);
 }
@@ -366,7 +370,7 @@ static void ClientThink(edict_t *e, usercmd_t *ucmd)
 #endif
 
 	auto func = qvm.FindFunction(qce.ClientThink);
-	qvm.SetGlobal(global_t::PARM0, qvm.EntityToEnt(e));
+	qvm.SetGlobal(GLOBAL_PARM0, qvm.EntityToEnt(e));
 
 	QC_usercmd_t cmd = {
 		ucmd->msec,
@@ -379,7 +383,7 @@ static void ClientThink(edict_t *e, usercmd_t *ucmd)
 		ucmd->lightlevel
 	};
 
-	qvm.SetGlobal(global_t::PARM1, cmd);
+	qvm.SetGlobal(GLOBAL_PARM1, cmd);
 
 	qvm.Execute(*func);
 	SyncPlayerState(qvm, e);
@@ -394,8 +398,8 @@ static void RunFrame()
 	auto func = qvm.FindFunction(qce.RunFrame);
 	qvm.Execute(*func);
 
-	for (size_t i = 0; i < game.clients.size(); i++)
-		SyncPlayerState(qvm, &game.entity(1 + i));
+	for (size_t i = 0; i < game.num_clients; i++)
+		SyncPlayerState(qvm, itoe(1 + i));
 }
 
 static void ServerCommand()
@@ -415,24 +419,24 @@ const uint32_t	SAVE_MAGIC1		= (('V'<<24)|('S'<<16)|('C'<<8)|'Q');	// "QCSV"
 const uint32_t	SAVE_MAGIC2		= (('A'<<24)|('S'<<16)|('C'<<8)|'Q');	// "QCSA"
 const uint32_t	SAVE_VERSION	= 666;
 
-enum class pointer_class_type_t : uint8_t
+enum pointer_class_type_t : uint8_t
 {
 	POINTER_NONE,
 	POINTER_GLOBAL,
 	POINTER_ENT
 };
 
-static void WriteDefinitionData(std::ostream &stream, const QCDefinition &def, const global_t *value)
+static void WriteDefinitionData(FILE *fp, const QCDefinition &def, const global_t *value)
 {
-	const deftype_t type = static_cast<deftype_t>(def.id & ~TYPE_GLOBAL);
+	const deftype_t type = def.id & ~TYPE_GLOBAL;
 
 	if (type == TYPE_STRING)
 	{
-		auto strid = static_cast<string_t>(*value);
+		auto strid = *value;
 		auto strlength = qvm.StringLength(strid);
 		const char *str = qvm.GetString(strid);
-		stream <= strlength;
-		stream.write(str, strlength);
+		fwrite(&strlength, sizeof(strlength), 1, fp);
+		fwrite(str, sizeof(char), strlength, fp);
 		return;
 	}
 	else if (type == TYPE_FUNCTION)
@@ -441,16 +445,18 @@ static void WriteDefinitionData(std::ostream &stream, const QCDefinition &def, c
 		auto &func_ptr = qvm.functions[static_cast<size_t>(func)];
 		const char *str = qvm.GetString(func_ptr.name_index);
 		auto strlength = qvm.StringLength(func_ptr.name_index);
-
-		stream <= strlength;
-		stream.write(str, strlength);
+		
+		fwrite(&strlength, sizeof(strlength), 1, fp);
+		fwrite(str, sizeof(char), strlength, fp);
 		return;
 	}
 	else if (type == TYPE_POINTER)
 	{
-		if (*value == global_t::QC_NULL)
+		pointer_class_type_t classtype = POINTER_NONE;
+
+		if (*value == GLOBAL_NULL)
 		{
-			stream <= pointer_class_type_t::POINTER_NONE;
+			fwrite(&classtype, sizeof(classtype), 1, fp);
 			return;
 		}
 
@@ -458,13 +464,14 @@ static void WriteDefinitionData(std::ostream &stream, const QCDefinition &def, c
 		
 		if (ptr_val >= reinterpret_cast<ptrdiff_t>(qvm.global_data) && ptr_val < reinterpret_cast<ptrdiff_t>(qvm.global_data + qvm.global_size))
 		{
-			stream <= pointer_class_type_t::POINTER_GLOBAL;
+			classtype = POINTER_GLOBAL;
+			fwrite(&classtype, sizeof(classtype), 1, fp);
 
 			// find closest def
 			global_t def_id = static_cast<global_t>((ptr_val - reinterpret_cast<ptrdiff_t>(qvm.global_data)) / sizeof(global_t));
 			size_t offset = 0;
 
-			while (def_id >= global_t::QC_OFS)
+			while (def_id >= GLOBAL_QC)
 			{
 				if (qvm.definition_map_by_id.contains(def_id))
 					break;
@@ -473,20 +480,22 @@ static void WriteDefinitionData(std::ostream &stream, const QCDefinition &def, c
 				offset++;
 			}
 
-			if (def_id < global_t::QC_OFS)
+			if (def_id < GLOBAL_QC)
 				qvm.Error("couldn't find ptr reference");
 
 			auto closest_def = qvm.definition_map_by_id.at(def_id);
 			const char *str = qvm.GetString(closest_def->name_index);
+			const size_t len = qvm.StringLength(closest_def->name_index);
 
-			stream <= strlen(str);
-			stream.write(str, strlen(str));
-			stream <= offset;
+			fwrite(&len, sizeof(len), 1, fp);
+			fwrite(str, sizeof(char), strlen(str), fp);
+			fwrite(&offset, sizeof(offset), 1, fp);
 		}
 		else if (ptr_val >= reinterpret_cast<ptrdiff_t>(globals.edicts) && ptr_val < reinterpret_cast<ptrdiff_t>(globals.edicts) + (globals.edict_size * globals.max_edicts))
 		{
-			qvm.Error("somehow got a bad field ptr");
-			//stream <= pointer_class_type_t::POINTER_ENT;
+			classtype = POINTER_ENT;
+			qvm.Error("ent field ptrs not supported at the moment");
+			//fwrite
 		}
 		else
 			qvm.Error("somehow got a bad field ptr");
@@ -498,24 +507,24 @@ static void WriteDefinitionData(std::ostream &stream, const QCDefinition &def, c
 		auto ent = qvm.EntToEntity(static_cast<ent_t>(*value));
 
 		if (ent == nullptr)
-			stream <= globals.max_edicts;
+			fwrite(&globals.max_edicts, sizeof(globals.max_edicts), 1, fp);
 		else
-			stream <= ent->s.number;
+			fwrite(&ent->s.number, sizeof(ent->s.number), 1, fp);
 
 		return;
 	}
 	
 	const size_t len = (type == TYPE_VECTOR) ? 3 : 1;
-	stream.write(reinterpret_cast<const char *>(value), sizeof(global_t) * len);
+	fwrite(value, sizeof(global_t), len, fp);
 }
 
-static void WriteEntityFieldData(std::ostream &stream, edict_t &ent, const QCDefinition &def)
+static void WriteEntityFieldData(FILE *fp, edict_t *ent, const QCDefinition &def)
 {
 	auto field = qvm.GetEntityFieldPointer(ent, static_cast<int32_t>(def.global_index));
-	WriteDefinitionData(stream, def, reinterpret_cast<global_t *>(field));
+	WriteDefinitionData(fp, def, reinterpret_cast<global_t *>(field));
 }
 
-static void ReadDefinitionData(std::istream &stream, const QCDefinition &def, global_t *value)
+static void ReadDefinitionData(FILE *fp, const QCDefinition &def, global_t *value)
 {
 	const deftype_t type = static_cast<deftype_t>(def.id & ~TYPE_GLOBAL);
 
@@ -523,9 +532,9 @@ static void ReadDefinitionData(std::istream &stream, const QCDefinition &def, gl
 	{
 		std::string def_value;
 		size_t def_len;
-		stream >= def_len;
+		fread(&def_len, sizeof(def_len), 1, fp);
 		def_value.resize(def_len);
-		stream.read(def_value.data(), def_len);
+		fread(def_value.data(), sizeof(char), def_len, fp);
 		qvm.SetStringPtr(value, std::move(def_value));
 		return;
 	}
@@ -533,18 +542,18 @@ static void ReadDefinitionData(std::istream &stream, const QCDefinition &def, gl
 	{
 		std::string func_name;
 		size_t func_len;
-		stream >= func_len;
+		fread(&func_len, sizeof(func_len), 1, fp);
 
 		if (!func_len)
-			*value = global_t::QC_NULL;
+			*value = GLOBAL_NULL;
 		else
 		{
 			func_name.resize(func_len);
-			stream.read(func_name.data(), func_len);
+			fread(func_name.data(), sizeof(char), func_len, fp);
 
 			*value = static_cast<global_t>(qvm.FindFunctionID(func_name.data()));
 
-			if (*value == global_t::QC_NULL)
+			if (*value == GLOBAL_NULL)
 				qvm.Error("can't find func %s", func_name.data());
 		}
 		return;
@@ -552,27 +561,27 @@ static void ReadDefinitionData(std::istream &stream, const QCDefinition &def, gl
 	else if (type == TYPE_POINTER)
 	{
 		pointer_class_type_t ptrclass;
-		stream >= ptrclass;
+		fread(&ptrclass, sizeof(ptrclass), 1, fp);
 
 		if (ptrclass == pointer_class_type_t::POINTER_NONE)
 		{
-			*value = global_t::QC_NULL;
+			*value = GLOBAL_NULL;
 			return;
 		}
 		else if (ptrclass == pointer_class_type_t::POINTER_GLOBAL)
 		{
 			std::string global_name;
 			size_t global_len;
-			stream >= global_len;
+			fread(&global_len, sizeof(global_len), 1, fp);
 			global_name.resize(global_len);
-			stream.read(global_name.data(), global_len);
+			fread(global_name.data(), sizeof(char), global_len, fp);
 
 			if (!qvm.definition_map_by_name.contains(global_name))
 				qvm.Error("bad pointer; can't map %s", global_name.data());
 
 			auto global_def = qvm.definition_map_by_name.at(global_name);
 			size_t global_offset;
-			stream >= global_offset;
+			fread(&global_offset, sizeof(global_offset), 1, fp);
 
 			auto ptr = qvm.GetGlobalByIndex(static_cast<global_t>(static_cast<uint32_t>(global_def->global_index) + global_offset));
 			*value = static_cast<global_t>(reinterpret_cast<ptrdiff_t>(ptr));
@@ -580,7 +589,7 @@ static void ReadDefinitionData(std::istream &stream, const QCDefinition &def, gl
 		}
 		else if (ptrclass == pointer_class_type_t::POINTER_ENT)
 		{
-			qvm.Error("bad pointer");
+			qvm.Error("ent pointers not supported");
 		}
 		
 		qvm.Error("bad pointer");
@@ -588,24 +597,24 @@ static void ReadDefinitionData(std::istream &stream, const QCDefinition &def, gl
 	else if (type == TYPE_ENTITY)
 	{
 		int32_t number;
-		stream >= number;
+		fread(&number, sizeof(number), 1, fp);
 
 		if (number == globals.max_edicts)
-			*value = static_cast<global_t>(ent_t::ENT_INVALID);
+			*value = static_cast<global_t>(ENT_INVALID);
 		else
-			*value = static_cast<global_t>(qvm.EntityToEnt(&game.entity(number)));
+			*value = static_cast<global_t>(qvm.EntityToEnt(itoe(number)));
 
 		return;
 	}
 	
 	const size_t len = (type == TYPE_VECTOR) ? 3 : 1;
-	stream.read(reinterpret_cast<char *>(value), sizeof(global_t) * len);
+	fread(value, sizeof(global_t), len, fp);
 }
 
-static void ReadEntityFieldData(std::istream &stream, edict_t &ent, const QCDefinition &def)
+static void ReadEntityFieldData(FILE *fp, edict_t *ent, const QCDefinition &def)
 {
 	auto field = qvm.GetEntityFieldPointer(ent, static_cast<int32_t>(def.global_index));
-	ReadDefinitionData(stream, def, reinterpret_cast<global_t *>(field));
+	ReadDefinitionData(fp, def, reinterpret_cast<global_t *>(field));
 }
 
 /*
@@ -624,19 +633,20 @@ last save position.
 */
 static void WriteGame(const char *filename, qboolean autosave)
 {
-	std::filesystem::path file_path(filename);
-	std::ofstream stream(file_path, std::ios::binary);
+	FILE *fp = fopen(filename, "wb");
 
 	auto func = qvm.FindFunction(qce.PreWriteGame);
-	qvm.SetGlobal(global_t::PARM0, autosave);
+	qvm.SetGlobal(GLOBAL_PARM0, autosave);
 	qvm.Execute(*func);
 	
-	stream <= SAVE_MAGIC1;
-	stream <= SAVE_VERSION;
-	stream <= globals.edict_size;
-	stream <= game.clients.size();
+	fwrite(&SAVE_MAGIC1, sizeof(SAVE_MAGIC1), 1, fp);
+	fwrite(&SAVE_VERSION, sizeof(SAVE_VERSION), 1, fp);
+	fwrite(&globals.edict_size, sizeof(globals.edict_size), 1, fp);
+	fwrite(&game.num_clients, sizeof(game.num_clients), 1, fp);
 
 	// save "game." values
+	size_t name_len;
+
 	for (auto &def : qvm.definitions)
 	{
 		if (!(def.id & TYPE_GLOBAL))
@@ -647,17 +657,17 @@ static void WriteGame(const char *filename, qboolean autosave)
 		if (strnicmp(name, "game.", 5))
 			continue;
 
-		size_t name_len = strlen(name);
-		
-		stream <= name_len;
-		stream.write(name, name_len);
+		name_len = strlen(name);
+		fwrite(&name_len, sizeof(name_len), 1, fp);
+		fwrite(name, sizeof(char), name_len, fp);
 
-		WriteDefinitionData(stream, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
+		WriteDefinitionData(fp, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
 	}
 
-	stream <= 0u;
+	name_len = 0;
+	fwrite(&name_len, sizeof(name_len), 1, fp);
 
-	// save client structs
+	// save client fields
 	for (auto &def : qvm.fields)
 	{
 		const char *name = qvm.GetString(def.name_index);
@@ -665,51 +675,53 @@ static void WriteGame(const char *filename, qboolean autosave)
 		if (strnicmp(name, "client.", 6))
 			continue;
 
-		size_t name_len = strlen(name);
+		name_len = strlen(name);
+		fwrite(&name_len, sizeof(name_len), 1, fp);
+		fwrite(name, sizeof(char), name_len, fp);
 
-		stream <= name_len;
-		stream.write(name, name_len);
-
-		for (size_t i = 0; i < game.clients.size(); i++)
-			WriteEntityFieldData(stream, game.entity(i + 1), def);
+		for (size_t i = 0; i < game.num_clients; i++)
+			WriteEntityFieldData(fp, itoe(i + 1), def);
 	}
-
-	stream <= 0u;
+	
+	name_len = 0;
+	fwrite(&name_len, sizeof(name_len), 1, fp);
 	
 	func = qvm.FindFunction(qce.PostWriteGame);
-	qvm.SetGlobal(global_t::PARM0, autosave);
+	qvm.SetGlobal(GLOBAL_PARM0, autosave);
 	qvm.Execute(*func);
+
+	fclose(fp);
 }
 
 static void ReadGame(const char *filename)
 {
-	std::filesystem::path file_path(filename);
-	std::ifstream stream(file_path, std::ios::binary);
+	FILE *fp = fopen(filename, "rb");
 
 	auto func = qvm.FindFunction(qce.PreReadGame);
 	qvm.Execute(*func);
 
 	uint32_t magic, version, edict_size, maxclients;
 
-	stream >= magic;
+	fread(&magic, sizeof(magic), 1, fp);
 
 	if (magic != SAVE_MAGIC1)
 		qvm.Error("Not a save game");
-
-	stream >= version;
+	
+	fread(&version, sizeof(version), 1, fp);
 
 	if (version != SAVE_VERSION)
 		qvm.Error("Savegame from different version (got %d, expected %d)", version, SAVE_VERSION);
-
-	stream >= edict_size;
-	stream >= maxclients;
-
-	// should agree with server's version
-	if (game.clients.size() != maxclients)
-		qvm.Error("Savegame has bad maxclients");
+	
+	fread(&edict_size, sizeof(edict_size), 1, fp);
 
 	if (globals.edict_size != edict_size)
 		qvm.Error("Savegame has bad fields (%i vs %i)", globals.edict_size, edict_size);
+
+	fread(&maxclients, sizeof(maxclients), 1, fp);
+
+	// should agree with server's version
+	if (game.num_clients != maxclients)
+		qvm.Error("Savegame has bad maxclients");
 
 	// setup entities
 	WipeEntities();
@@ -721,39 +733,37 @@ static void ReadGame(const char *filename)
 	std::string def_name;
 	std::string def_value;
 
+	size_t len;
+
 	while (true)
 	{
-		size_t len;
-
-		stream >= len;
+		fread(&len, sizeof(len), 1, fp);
 
 		if (!len)
 			break;
 
 		def_name.resize(len);
 
-		stream.read(def_name.data(), len);
+		fread(def_name.data(), sizeof(char), len, fp);
 
 		if (!qvm.definition_map_by_name.contains(def_name))
 			qvm.Error("Bad definition %s", def_name.data());
 
 		auto &def = *qvm.definition_map_by_name.at(def_name);
-		ReadDefinitionData(stream, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
+		ReadDefinitionData(fp, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
 	}
 
 	// load client fields
 	while (true)
 	{
-		size_t len;
-
-		stream >= len;
+		fread(&len, sizeof(len), 1, fp);
 
 		if (!len)
 			break;
 
 		def_name.resize(len);
 
-		stream.read(def_name.data(), len);
+		fread(def_name.data(), sizeof(char), len, fp);
 
 		string_t str;
 		
@@ -765,15 +775,17 @@ static void ReadGame(const char *filename)
 		
 		auto &field = *qvm.field_map_by_name.at(def_name);
 		
-		for (size_t i = 0; i < game.clients.size(); i++)
-			ReadEntityFieldData(stream, game.entity(i + 1), field);
+		for (size_t i = 0; i < game.num_clients; i++)
+			ReadEntityFieldData(fp, itoe(i + 1), field);
 	}
 
 	func = qvm.FindFunction(qce.PostReadGame);
 	qvm.Execute(*func);
 
-	for (size_t i = 0; i < game.clients.size(); i++)
-		SyncPlayerState(qvm, &game.entity(i + 1));
+	for (size_t i = 0; i < game.num_clients; i++)
+		SyncPlayerState(qvm, itoe(i + 1));
+
+	fclose(fp);
 }
 
 //==========================================================
@@ -787,18 +799,19 @@ WriteLevel
 */
 static void WriteLevel(const char *filename)
 {
-	std::filesystem::path file_path(filename);
-	std::ofstream stream(file_path, std::ios::binary);
+	FILE *fp = fopen(filename, "wb");
 
 	auto func = qvm.FindFunction(qce.PreWriteLevel);
 	qvm.Execute(*func);
 	
-	stream <= SAVE_MAGIC2;
-	stream <= SAVE_VERSION;
-	stream <= globals.edict_size;
-	stream <= game.clients.size();
+	fwrite(&SAVE_MAGIC2, sizeof(SAVE_MAGIC2), 1, fp);
+	fwrite(&SAVE_VERSION, sizeof(SAVE_VERSION), 1, fp);
+	fwrite(&globals.edict_size, sizeof(globals.edict_size), 1, fp);
+	fwrite(&game.num_clients, sizeof(game.num_clients), 1, fp);
 
 	// save "level." values
+	size_t name_len;
+
 	for (auto &def : qvm.definitions)
 	{
 		if (!(def.id & TYPE_GLOBAL))
@@ -809,46 +822,50 @@ static void WriteLevel(const char *filename)
 		if (strnicmp(name, "level.", 5))
 			continue;
 
-		size_t name_len = strlen(name);
+		name_len = strlen(name);
+		fwrite(&name_len, sizeof(name_len), 1, fp);
+		fwrite(name, sizeof(char), name_len, fp);
 
-		stream <= name_len;
-		stream.write(name, name_len);
-
-		WriteDefinitionData(stream, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
+		WriteDefinitionData(fp, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
 	}
 
-	stream <= 0u;
+	name_len = 0;
+	fwrite(&name_len, sizeof(name_len), 1, fp);
 
 	// save non-client structs
 	for (auto &def : qvm.fields)
 	{
 		const char *name = qvm.GetString(def.name_index);
 
-		if (def.name_index == string_t::STRING_EMPTY || strnicmp(name, "client.", 6) == 0)
+		if (def.name_index == STRING_EMPTY || strnicmp(name, "client.", 6) == 0)
 			continue;
 
-		size_t name_len = strlen(name);
-		stream <= name_len;
-		stream.write(name, name_len);
+		name_len = strlen(name);
+		fwrite(&name_len, sizeof(name_len), 1, fp);
+		fwrite(name, sizeof(char), name_len, fp);
 
 		for (size_t i = 0; i < globals.num_edicts; i++)
 		{
-			auto &ent = game.entity(i);
+			auto ent = itoe(i);
 
-			if (!ent.inuse)
+			if (!ent->inuse)
 				continue;
 
-			stream <= i;
-			WriteEntityFieldData(stream, ent, def);
+			fwrite(&i, sizeof(i), 1, fp);
+			WriteEntityFieldData(fp, ent, def);
 		}
 
-		stream <= -1u;
+		size_t i = -1;
+		fwrite(&i, sizeof(i), 1, fp);
 	}
 
-	stream <= 0u;
+	name_len = 0;
+	fwrite(&name_len, sizeof(name_len), 1, fp);
 	
 	func = qvm.FindFunction(qce.PostWriteLevel);
 	qvm.Execute(*func);
+
+	fclose(fp);
 }
 
 
@@ -870,40 +887,40 @@ No clients are connected yet.
 */
 static void ReadLevel(const char *filename)
 {
-	std::filesystem::path file_path(filename);
-	std::ifstream stream(file_path, std::ios::binary);
+	FILE *fp = fopen(filename, "rb");
 
 	auto func = qvm.FindFunction(qce.PreReadLevel);
 	qvm.Execute(*func);
 
 	uint32_t magic, version, edict_size, maxclients;
 
-	stream >= magic;
+	fread(&magic, sizeof(magic), 1, fp);
 
 	if (magic != SAVE_MAGIC2)
 		qvm.Error("Not a save game");
 
-	stream >= version;
+	fread(&version, sizeof(version), 1, fp);
 
 	if (version != SAVE_VERSION)
 		qvm.Error("Savegame from different version (got %d, expected %d)", version, SAVE_VERSION);
 
-	stream >= edict_size;
-	stream >= maxclients;
-
-	// should agree with server's version
-	if (game.clients.size() != maxclients)
-		qvm.Error("Savegame has bad maxclients");
+	fread(&edict_size, sizeof(edict_size), 1, fp);
 
 	if (globals.edict_size != edict_size)
 		qvm.Error("Savegame has bad fields");
+
+	fread(&maxclients, sizeof(maxclients), 1, fp);
+
+	// should agree with server's version
+	if (game.num_clients != maxclients)
+		qvm.Error("Savegame has bad maxclients");
 
 	// setup entities
 	BackupClientData();
 
 	WipeEntities();
 
-	globals.num_edicts = game.clients.size() + 1;
+	globals.num_edicts = game.num_clients + 1;
 	
 	// free any string refs inside of the entity structure
 	qvm.dynamic_strings.CheckRefUnset(globals.edicts, (globals.edict_size * globals.max_edicts) / sizeof(global_t));
@@ -915,36 +932,34 @@ static void ReadLevel(const char *filename)
 	while (true)
 	{
 		size_t len;
-
-		stream >= len;
+		fread(&len, sizeof(len), 1, fp);
 
 		if (!len)
 			break;
 
 		def_name.resize(len);
 
-		stream.read(def_name.data(), len);
+		fread(def_name.data(), sizeof(char), len, fp);
 
 		if (!qvm.definition_map_by_name.contains(def_name))
 			qvm.Error("Bad definition %s", def_name.data());
 
 		auto &def = *qvm.definition_map_by_name.at(def_name);
-		ReadDefinitionData(stream, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
+		ReadDefinitionData(fp, def, qvm.GetGlobalByIndex(static_cast<global_t>(def.global_index)));
 	}
 
 	// load entity fields
 	while (true)
 	{
 		size_t len;
-
-		stream >= len;
+		fread(&len, sizeof(len), 1, fp);
 
 		if (!len)
 			break;
 
 		def_name.resize(len);
 
-		stream.read(def_name.data(), len);
+		fread(def_name.data(), sizeof(char), len, fp);
 
 		string_t str;
 		
@@ -960,7 +975,7 @@ static void ReadLevel(const char *filename)
 
 		while (true)
 		{
-			stream >= ent_id;
+			fread(&ent_id, sizeof(ent_id), 1, fp);
 
 			if (ent_id == -1u)
 				break;
@@ -971,8 +986,8 @@ static void ReadLevel(const char *filename)
 			if (ent_id >= globals.num_edicts)
 				globals.num_edicts = ent_id + 1;
 
-			auto &ent = game.entity(ent_id);
-			ReadEntityFieldData(stream, ent, field);
+			auto ent = itoe(ent_id);
+			ReadEntityFieldData(fp, ent, field);
 		}
 	}
 
@@ -982,16 +997,18 @@ static void ReadLevel(const char *filename)
 
 	for (size_t i = 0; i < globals.num_edicts; i++)
 	{
-		auto &ent = game.entity(i);
+		auto ent = itoe(i);
 
 		// let the server rebuild world links for this ent
-		ent.area = {};
-		gi.linkentity(&ent);
+		ent->area = {};
+		gi.linkentity(ent);
 	}
 	
 	func = qvm.FindFunction(qce.PostReadLevel);
-	qvm.SetGlobal(global_t::PARM0, globals.num_edicts);
+	qvm.SetGlobal(GLOBAL_PARM0, globals.num_edicts);
 	qvm.Execute(*func);
+
+	fclose(fp);
 }
 
 game_export_t globals = {

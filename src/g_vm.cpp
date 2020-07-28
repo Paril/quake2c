@@ -267,18 +267,22 @@ void QCVMStringList::PushRef(const QCVMRefCountBackup &backup)
 	vm.Error("what");
 }
 
-void QCVMStringList::WriteState(std::ostream &stream)
+void QCVMStringList::WriteState(FILE *fp)
 {
+	size_t len;
+
 	for (const auto &s : strings)
 	{
-		stream <= s.second.str.length();
-		stream.write(s.second.str.data(), s.second.str.length());
+		len = s.second.str.length();
+		fwrite(&len, sizeof(len), 1, fp);
+		fwrite(s.second.str.data(), sizeof(char), len, fp);
 	}
 
-	stream <= 0u;
+	len = 0;
+	fwrite(&len, sizeof(len), 1, fp);
 }
 
-void QCVMStringList::ReadState(std::istream &stream)
+void QCVMStringList::ReadState(FILE *fp)
 {
 	std::string s;
 
@@ -286,14 +290,14 @@ void QCVMStringList::ReadState(std::istream &stream)
 	{
 		size_t len;
 
-		stream >= len;
+		fread(&len, sizeof(len), 1, fp);
 
 		if (!len)
 			break;
 
 		s.resize(len);
 
-		stream.read(s.data(), len);
+		fread(s.data(), sizeof(char), len, fp);
 
 		// does not acquire, since entity/game state does that itself
 		vm.StoreOrFind(std::move(s));
@@ -309,11 +313,11 @@ QCVMBuiltinList::QCVMBuiltinList(QCVM &invm) :
 
 std::string ParseFormat(const string_t &formatid, QCVM &vm, const uint8_t &start)
 {
-	enum class ParseToken
+	enum ParseToken
 	{
-		None,
-		Specifier,
-		Skip
+		PT_NONE,
+		PT_SPECIFIER,
+		PT_SKIP
 	};
 
 	std::stringstream buf;
@@ -337,9 +341,9 @@ std::string ParseFormat(const string_t &formatid, QCVM &vm, const uint8_t &start
 		i = next - format;
 
 		const char *specifier_start = next;
-		auto state = ParseToken::None;
+		auto state = ParseToken::PT_NONE;
 
-		while (state < ParseToken::Specifier)
+		while (state < ParseToken::PT_SPECIFIER)
 		{
 			next++;
 			i++;
@@ -363,16 +367,16 @@ std::string ParseFormat(const string_t &formatid, QCVM &vm, const uint8_t &start
 			case 'c':
 			case 's':
 			case 'p':
-				state = ParseToken::Specifier;
+				state = ParseToken::PT_SPECIFIER;
 				continue;
 			case '%':
 				buf.put('%');
-				state = ParseToken::Skip;
+				state = ParseToken::PT_SKIP;
 				continue;
 			}
 		}
 
-		if (state == ParseToken::Specifier)
+		if (state == ParseToken::PT_SPECIFIER)
 		{
 			Q_strlcpy(format_buffer, specifier_start, min(sizeof(format_buffer), static_cast<size_t>((next - specifier_start) + 1 + 1)));
 
@@ -417,7 +421,7 @@ void QCVMBuiltinList::Register(const char *name, QCBuiltin builtin)
 
 	for (auto &func : vm.functions)
 	{
-		if (func.id || func.name_index == string_t::STRING_EMPTY)
+		if (func.id || func.name_index == STRING_EMPTY)
 			continue;
 
 		if (strcmp(vm.GetString(func.name_index), name) == 0)
@@ -437,7 +441,7 @@ void QCVMFieldWrapList::Register(const char *field_name, const size_t &field_off
 {
 	for (auto &f : vm.fields)
 	{
-		if (f.name_index == string_t::STRING_EMPTY)
+		if (f.name_index == STRING_EMPTY)
 			continue;
 		else if (strcmp(vm.GetString(f.name_index), field_name))
 			continue;
@@ -664,7 +668,7 @@ inline void F_OP_LOAD(QCVM &vm, const operands &operands, int &depth)
 
 inline void F_OP_ADDRESS(QCVM &vm, const operands &operands, int &depth)
 {
-	auto &ent = *vm.EntToEntity(vm.GetGlobal<ent_t>(operands[0]), true);
+	auto ent = vm.EntToEntity(vm.GetGlobal<ent_t>(operands[0]), true);
 	auto field = vm.GetGlobal<int32_t>(operands[1]);
 	vm.SetGlobal(operands[2], vm.EntityFieldAddress(ent, field));
 }
@@ -696,7 +700,7 @@ inline void F_OP_STOREP(QCVM &vm, const operands &operands, int &depth)
 	*address_ptr = value;
 	vm.dynamic_strings.CheckRefUnset(address_ptr, span);
 
-	auto &ent = vm.AddressToEntity(address);
+	auto ent = vm.AddressToEntity(address);
 	const auto &field = vm.AddressToField(ent, address);
 
 	for (size_t i = 0; i < span; i++)
@@ -718,7 +722,7 @@ inline void F_NOT<string_t, vec_t>(QCVM &vm, const operands &operands, int &dept
 {
 	const auto &a = vm.GetGlobal<string_t>(operands[0]);
 
-	vm.SetGlobal<vec_t>(operands[2], a == string_t::STRING_EMPTY || !*vm.GetString(a));
+	vm.SetGlobal<vec_t>(operands[2], a == STRING_EMPTY || !*vm.GetString(a));
 }
 
 template<typename TType>
@@ -736,7 +740,7 @@ inline void F_IF<string_t>(QCVM &vm, const operands &operands, int &depth)
 {
 	const auto &s = vm.GetGlobal<string_t>(operands[0]);
 
-	if (s != string_t::STRING_EMPTY && *vm.GetString(s))
+	if (s != STRING_EMPTY && *vm.GetString(s))
 	{
 		auto &current = *(vm.state.current);
 		current.statement += static_cast<int16_t>(current.statement->args[1]) - 1;
@@ -758,7 +762,7 @@ inline void F_IFNOT<string_t>(QCVM &vm, const operands &operands, int &depth)
 {
 	const auto &s = vm.GetGlobal<string_t>(operands[0]);
 
-	if (s == string_t::STRING_EMPTY || !*vm.GetString(s))
+	if (s == STRING_EMPTY || !*vm.GetString(s))
 	{
 		auto &current = *(vm.state.current);
 		current.statement += static_cast<int16_t>(current.statement->args[1]) - 1;
@@ -769,10 +773,10 @@ template<size_t argc, bool hexen>
 inline void F_CALL(QCVM &vm, const operands &operands, int &depth)
 {
 	if constexpr (argc >= 2 && hexen)
-		vm.CopyGlobal<std::array<global_t, 3>>(global_t::PARM1, operands[2]);
+		vm.CopyGlobal<std::array<global_t, 3>>(GLOBAL_PARM1, operands[2]);
 
 	if constexpr (argc >= 1 && hexen)
-		vm.CopyGlobal<std::array<global_t, 3>>(global_t::PARM0, operands[1]);
+		vm.CopyGlobal<std::array<global_t, 3>>(GLOBAL_PARM0, operands[1]);
 
 	const int32_t &enter_func = vm.GetGlobal<int32_t>(operands[0]);
 
@@ -926,7 +930,7 @@ inline void F_OP_LOADA(QCVM &vm, const operands &operands, int &depth)
 	if (!vm.PointerValid(reinterpret_cast<ptrdiff_t>(vm.global_data + address), false, sizeof(TType)))
 		vm.Error("Invalid pointer %x", address);
 			
-	auto &field_value = *reinterpret_cast<TType *>(vm.global_data + address);
+	auto &field_value = *(TType *)(vm.global_data + address);
 	vm.SetGlobal(operands[2], field_value);
 	
 	constexpr size_t span = sizeof(TType) / sizeof(global_t);
@@ -1185,8 +1189,8 @@ static OPCodeFunc codeFuncs[] = {
 
 	[OP_RETURN] = [](auto vm, auto operands, auto depth)
 	{
-		if (operands[0] != global_t::QC_NULL)
-			vm.template CopyGlobal<std::array<global_t, 3>>(global_t::RETURN, operands[0]);
+		if (operands[0] != GLOBAL_NULL)
+			vm.template CopyGlobal<std::array<global_t, 3>>(GLOBAL_RETURN, operands[0]);
 
 		vm.Leave();
 		depth--;
@@ -1387,35 +1391,36 @@ void QCVM::Execute(QCFunction &function)
 
 const uint32_t QCVM_VERSION	= 1;
 
-void QCVM::WriteState(std::ostream &stream)
+void QCVM::WriteState(FILE *fp)
 {
-	stream <= QCVM_VERSION;
+	fwrite(&QCVM_VERSION, sizeof(QCVM_VERSION), 1, fp);
 
 	// write dynamic strings
-	dynamic_strings.WriteState(stream);
+	dynamic_strings.WriteState(fp);
 }
 
-void QCVM::ReadState(std::istream &stream)
+void QCVM::ReadState(FILE *fp)
 {
 	uint32_t ver;
 
-	stream >= ver;
+	fread(&ver, sizeof(ver), 1, fp);
 
 	if (ver != QCVM_VERSION)
 		Error("bad VM version");
 
 	// read dynamic strings
-	dynamic_strings.ReadState(stream);
+	dynamic_strings.ReadState(fp);
 }
 
 QCVM qvm;
 const cvar_t *game_var;
 
-static void VMLoadStatements(std::istream &stream, QCStatement *dst, QCHeader &header)
+static void VMLoadStatements(FILE *fp, QCStatement *dst, QCHeader &header)
 {
+	// simple, rustic
 	if (header.version == PROGS_FTE && header.secondary_version == PROG_SECONDARYVERSION32)
 	{
-		stream.read(reinterpret_cast<char *>(dst), header.sections.statement.size * sizeof(QCStatement));
+		fread(dst, sizeof(QCStatement), header.sections.statement.size, fp);
 		return;
 	}
 
@@ -1427,7 +1432,7 @@ static void VMLoadStatements(std::istream &stream, QCStatement *dst, QCHeader &h
 
 	std::vector<QCStatement16> statements;
 	statements.resize(header.sections.statement.size);
-	stream.read(reinterpret_cast<char *>(statements.data()), header.sections.statement.size * sizeof(QCStatement16));
+	fread(statements.data(), sizeof(QCStatement16), header.sections.statement.size, fp);
 
 	for (size_t i = 0; i < header.sections.statement.size; i++, dst++)
 	{
@@ -1442,12 +1447,12 @@ static void VMLoadStatements(std::istream &stream, QCStatement *dst, QCHeader &h
 	}
 }
 
-static void VMLoadDefinitions(std::istream &stream, QCDefinition *dst, QCHeader &header, const size_t &size)
+static void VMLoadDefinitions(FILE *fp, QCDefinition *dst, QCHeader &header, const size_t &size)
 {
 	// simple, rustic
 	if (header.version == PROGS_FTE && header.secondary_version == PROG_SECONDARYVERSION32)
 	{
-		stream.read(reinterpret_cast<char *>(dst), size * sizeof(QCDefinition));
+		fread(dst, sizeof(QCDefinition), size, fp);
 		return;
 	}
 
@@ -1460,7 +1465,7 @@ static void VMLoadDefinitions(std::istream &stream, QCDefinition *dst, QCHeader 
 
 	std::vector<QCDefinition16> statements;
 	statements.resize(size);
-	stream.read(reinterpret_cast<char *>(statements.data()), size * sizeof(QCDefinition16));
+	fread(statements.data(), sizeof(QCDefinition16), size, fp);
 
 	for (size_t i = 0; i < size; i++, dst++)
 	{
@@ -1481,16 +1486,14 @@ void InitVM()
 	if (!game_var->string)
 		qvm.Error("bad game");
 
-	std::filesystem::path progs_path(vas("%s/progs.dat", game_var->string).data());
+	FILE *fp = fopen(vas("%s/progs.dat", game_var->string).data(), "rb");
 
-	if (!std::filesystem::exists(progs_path))
+	if (!fp)
 		qvm.Error("no progs.dat");
-	
-	std::ifstream stream(progs_path, std::ios::binary);
 
 	QCHeader header;
 
-	stream.read(reinterpret_cast<char *>(&header), sizeof(header));
+	fread(&header, sizeof(header), 1, fp);
 
 	if (header.version != PROGS_Q1 && header.version != PROGS_FTE)
 		qvm.Error("bad version (only version 6 & 7 progs are supported)");
@@ -1499,8 +1502,8 @@ void InitVM()
 	qvm.string_data.resize(header.sections.string.size);
 	qvm.string_lengths.resize(header.sections.string.size);
 
-	stream.seekg(header.sections.string.offset);
-	stream.read(qvm.string_data.data(), header.sections.string.size);
+	fseek(fp, header.sections.string.offset, SEEK_SET);
+	fread(qvm.string_data.data(), sizeof(char), header.sections.string.size, fp);
 	
 	// create immutable string map, for fast hash action
 	for (size_t i = 0; i < qvm.string_size; i++)
@@ -1524,23 +1527,21 @@ void InitVM()
 
 	qvm.statements.resize(header.sections.statement.size);
 
-	stream.seekg(header.sections.statement.offset);
-	VMLoadStatements(stream, qvm.statements.data(), header);
+	fseek(fp, header.sections.statement.offset, SEEK_SET);
+	VMLoadStatements(fp, qvm.statements.data(), header);
 
-#if _DEBUG
 	for (auto &s : qvm.statements)
 		if (!codeFuncs[s.opcode])
 			qvm.Error("opcode not implemented: %i\n", s.opcode);
-#endif
 	
 	qvm.definitions.resize(header.sections.definition.size);
 
-	stream.seekg(header.sections.definition.offset);
-	VMLoadDefinitions(stream, qvm.definitions.data(), header, header.sections.definition.size);
+	fseek(fp, header.sections.definition.offset, SEEK_SET);
+	VMLoadDefinitions(fp, qvm.definitions.data(), header, header.sections.definition.size);
 	
 	for (auto &definition : qvm.definitions)
 	{
-		if (definition.name_index != string_t::STRING_EMPTY)
+		if (definition.name_index != STRING_EMPTY)
 			qvm.definition_map_by_name.emplace(qvm.string_data.data() + static_cast<int32_t>(definition.name_index), &definition);
 
 		qvm.definition_map_by_id.emplace(static_cast<global_t>(definition.global_index), &definition);
@@ -1549,8 +1550,8 @@ void InitVM()
 
 	qvm.fields.resize(header.sections.field.size);
 
-	stream.seekg(header.sections.field.offset);
-	VMLoadDefinitions(stream, qvm.fields.data(), header, header.sections.field.size);
+	fseek(fp, header.sections.field.offset, SEEK_SET);
+	VMLoadDefinitions(fp, qvm.fields.data(), header, header.sections.field.size);
 
 	for (auto &field : qvm.fields)
 	{
@@ -1565,14 +1566,14 @@ void InitVM()
 	qvm.profile_data.resize(header.sections.function.size);
 #endif
 
-	stream.seekg(header.sections.function.offset);
-	stream.read(reinterpret_cast<char *>(qvm.functions.data()), header.sections.function.size * sizeof(QCFunction));
+	fseek(fp, header.sections.function.offset, SEEK_SET);
+	fread(qvm.functions.data(), sizeof(QCFunction), header.sections.function.size, fp);
 
 	qvm.global_data = reinterpret_cast<global_t *>(gi.TagMalloc(header.sections.globals.size * sizeof(global_t), TAG_GAME));
 	qvm.global_size = header.sections.globals.size;
 
-	stream.seekg(header.sections.globals.offset);
-	stream.read(reinterpret_cast<char *>(qvm.global_data), qvm.global_size * sizeof(global_t));
+	fseek(fp, header.sections.globals.offset, SEEK_SET);
+	fread(qvm.global_data, sizeof(global_t), qvm.global_size, fp);
 
 	int32_t lowest_func = 0;
 
@@ -1582,41 +1583,41 @@ void InitVM()
 
 	qvm.builtins.SetFirstID(lowest_func - 1);
 
-	// Check for debugging info
-	std::filesystem::path lno_path(vas("%s/progs.lno", game_var->string).data());
+	fclose(fp);
 
-	if (std::filesystem::exists(lno_path))
+	// Check for debugging info
+	fp = fopen(vas("%s/progs.lno", game_var->string).data(), "rb");
+
+	if (fp)
 	{
 		constexpr int lnotype = 1179602508;
 		constexpr int version = 1;
 
-		int magic, ver, numglobaldefs, numglobals, numfielddefs, numstatements;
-
-		std::ifstream lno_stream(lno_path, std::ios::binary);
+		struct {
+			int magic, ver, numglobaldefs, numglobals, numfielddefs, numstatements;
+		} lno_header;
 		
-		lno_stream.read(reinterpret_cast<char *>(&magic), sizeof(magic));
-		lno_stream.read(reinterpret_cast<char *>(&ver), sizeof(ver));
-		lno_stream.read(reinterpret_cast<char *>(&numglobaldefs), sizeof(numglobaldefs));
-		lno_stream.read(reinterpret_cast<char *>(&numglobals), sizeof(numglobals));
-		lno_stream.read(reinterpret_cast<char *>(&numfielddefs), sizeof(numfielddefs));
-		lno_stream.read(reinterpret_cast<char *>(&numstatements), sizeof(numstatements));
+		fread(&lno_header, sizeof(lno_header), 1, fp);
 
-		if (magic == lnotype && ver == version && numglobaldefs == header.sections.definition.size &&
-			numglobals == header.sections.globals.size && numfielddefs == header.sections.field.size &&
-			numstatements == header.sections.statement.size)
+		if (lno_header.magic == lnotype && lno_header.ver == version && lno_header.numglobaldefs == header.sections.definition.size &&
+			lno_header.numglobals == header.sections.globals.size && lno_header.numfielddefs == header.sections.field.size &&
+			lno_header.numstatements == header.sections.statement.size)
 		{
 			qvm.linenumbers.resize(header.sections.statement.size);
-			lno_stream.read(reinterpret_cast<char *>(qvm.linenumbers.data()), sizeof(int) * header.sections.statement.size);
+			fread(qvm.linenumbers.data(), sizeof(int), header.sections.statement.size, fp);
+			gi.dprintf("progs.lno line numbers loaded\n");
 		}
 		else
 			gi.dprintf("Unsupported/outdated progs.lno file\n");
+
+		fclose(fp);
 	}
 }
 
 void CheckVM()
 {
 	for (auto &func : qvm.functions)
-		if (func.id == 0 && func.name_index != string_t::STRING_EMPTY)
+		if (func.id == 0 && func.name_index != STRING_EMPTY)
 			gi.dprintf("Missing builtin function: %s\n", qvm.GetString(func.name_index));
 }
 
@@ -1624,17 +1625,14 @@ void ShutdownVM()
 {
 #ifdef ALLOW_PROFILING
 	{
-		std::filesystem::path progs_path(vas("%s/profile.csv", game_var->string).data());
-		std::filebuf fb;
-		fb.open(progs_path, std::ios::out);
-		std::ostream stream(&fb);
+		FILE *fp = fopen(vas("%s/profile.csv", game_var->string).data(), "wb");
 
-		stream << "ID,Name,Total (ms),Self(ms),Funcs(ms)";
+		fprintf(fp, "ID,Name,Total (ms),Self(ms),Funcs(ms)");
 	
 		for (auto pf : profile_type_names)
-			stream << "," << pf;
+			fprintf(fp, ",%s", pf);
 	
-		stream << "\n";
+		fprintf(fp, "\n");
 
 		for (size_t i = 0; i < qvm.profile_data.size(); i++)
 		{
@@ -1649,22 +1647,21 @@ void ShutdownVM()
 			if (func_call_time)
 				self -= func_call_time;
 
-			stream << i << "," << name << "," << total << "," << self << "," << func_call_time;
+			fprintf(fp, "%i,%s,%f,%f,%f", i, name, total, self, func_call_time);
 		
 			for (profile_type_t f = static_cast<profile_type_t>(0); f < TotalProfileFields; f = static_cast<profile_type_t>(static_cast<size_t>(f) + 1))
-				stream << "," << profile.fields[f];
+				fprintf(fp, ",%i", profile.fields[f]);
 
-			stream << "\n";
+			fprintf(fp, "\n");
 		}
+
+		fclose(fp);
 	}
 
 	{
-		std::filesystem::path progs_path(vas("%s/timers.csv", game_var->string).data());
-		std::filebuf fb;
-		fb.open(progs_path, std::ios::out);
-		std::ostream stream(&fb);
+		FILE *fp = fopen(vas("%s/timers.csv", game_var->string).data(), "wb");
 
-		stream << "Name,Count,Total (ms)\n";
+		fprintf(fp, "Name,Count,Total (ms)\n");
 
 		for (size_t i = 0; i < std::extent_v<decltype(qvm.timers)>; i++)
 		{
@@ -1672,17 +1669,16 @@ void ShutdownVM()
 
 			auto total = std::chrono::duration<double, std::milli>(timer.time).count();
 
-			stream << timer_type_names[i] << "," << timer.count << "," << total << "\n";
+			fprintf(fp, "%s,%i,%f\n", timer_type_names[i], timer.count, total);
 		}
+
+		fclose(fp);
 	}
 
 	{
-		std::filesystem::path progs_path(vas("%s/opcodes.csv", game_var->string).data());
-		std::filebuf fb;
-		fb.open(progs_path, std::ios::out);
-		std::ostream stream(&fb);
+		FILE *fp = fopen(vas("%s/opcodes.csv", game_var->string).data(), "wb");
 
-		stream << "ID,Count,Total (ms)\n";
+		fprintf(fp, "ID,Count,Total (ms)\n");
 
 		for (size_t i = 0; i < std::extent_v<decltype(qvm.opcode_timers)>; i++)
 		{
@@ -1690,8 +1686,10 @@ void ShutdownVM()
 
 			auto total = std::chrono::duration<double, std::milli>(timer.time).count();
 
-			stream << i << "," << timer.count << "," << total << "\n";
+			fprintf(fp, "%i,%i,%f\n", i, timer.count, total);
 		}
+
+		fclose(fp);
 	}
 #endif
 }

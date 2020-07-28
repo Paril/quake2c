@@ -136,7 +136,9 @@ enum solid_t
 
 constexpr size_t MAX_ENT_CLUSTERS	= 16;
 
-struct edict_t
+typedef struct edict_s edict_t;
+
+struct edict_s
 {
 	entity_state_t	s;
 	gclient_t		*client;

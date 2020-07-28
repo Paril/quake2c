@@ -88,7 +88,7 @@ struct player_state_t
 };
 
 
-struct gclient_t
+struct gclient_s
 {
 	player_state_t	ps;		// communicated by server to clients
 	int				ping;

@@ -11,12 +11,16 @@ extern game_export_t globals;
 
 struct
 {
-	inline edict_t &entity(const size_t &n)
-	{
-		return *reinterpret_cast<edict_t *>(reinterpret_cast<uint8_t *>(globals.edicts) + (n * globals.edict_size));
-	}
-
-	std::vector<gclient_t>	clients;
+	gclient_t	*clients;
+	size_t		num_clients;
 
 	uint8_t		*client_load_data;
 } game;
+
+inline edict_t *itoe(const size_t n)
+{
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+	return (edict_t *)((uint8_t *)globals.edicts + (n * globals.edict_size));
+#pragma GCC diagnostic pop
+}
