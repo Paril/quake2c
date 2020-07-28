@@ -256,23 +256,23 @@ static void QC_unlinkentity(QCVM &vm)
 	gi.unlinkentity(ent);
 }
 
-using QC_entity_list_t = std::vector<edict_t *>;
+using QC_entity_set_t = std::vector<edict_t *>;
 
-static void QC_entity_list_alloc(QCVM &vm)
+static void QC_entity_set_alloc(QCVM &vm)
 {
-	QC_entity_list_t *edicts;
+	QC_entity_set_t *edicts;
 	
 	if (vm.state.argc)
-		edicts = new QC_entity_list_t(vm.ArgvInt32(0));
+		edicts = new QC_entity_set_t(vm.ArgvInt32(0));
 	else
-		edicts = new QC_entity_list_t;
+		edicts = new QC_entity_set_t;
 
 	vm.Return(reinterpret_cast<int32_t>(edicts));
 }
 
-static void QC_entity_list_get(QCVM &vm)
+static void QC_entity_set_get(QCVM &vm)
 {
-	auto *edicts = reinterpret_cast<QC_entity_list_t *>(vm.ArgvInt32(0));
+	auto *edicts = reinterpret_cast<QC_entity_set_t *>(vm.ArgvInt32(0));
 	const auto &index = vm.ArgvInt32(1);
 
 	if (index < 0 || index >= edicts->size())
@@ -281,51 +281,42 @@ static void QC_entity_list_get(QCVM &vm)
 	vm.Return(*edicts->at(index));
 }
 
-static void QC_entity_list_set(QCVM &vm)
+static void QC_entity_set_add(QCVM &vm)
 {
-	auto *edicts = reinterpret_cast<QC_entity_list_t *>(vm.ArgvInt32(0));
-	const auto &index = vm.ArgvInt32(1);
-	auto ent = vm.ArgvEntity(2);
-
-	if (index < 0 || index >= edicts->size())
-		vm.Error("Out of bounds access");
-
-	edicts->at(index) = ent;
-}
-
-static void QC_entity_list_add(QCVM &vm)
-{
-	auto *edicts = reinterpret_cast<QC_entity_list_t *>(vm.ArgvInt32(0));
+	auto *edicts = reinterpret_cast<QC_entity_set_t *>(vm.ArgvInt32(0));
 	auto ent = vm.ArgvEntity(1);
-	edicts->push_back(ent);
+
+	if (std::find(edicts->begin(), edicts->end(), ent) == edicts->end())
+		edicts->push_back(ent);
 }
 
-static void QC_entity_list_remove(QCVM &vm)
+static void QC_entity_set_remove(QCVM &vm)
 {
-	auto *edicts = reinterpret_cast<QC_entity_list_t *>(vm.ArgvInt32(0));
-	const auto &index = vm.ArgvInt32(1);
+	auto *edicts = reinterpret_cast<QC_entity_set_t *>(vm.ArgvInt32(0));
+	auto ent = vm.ArgvEntity(1);
+	auto where = std::find(edicts->begin(), edicts->end(), ent);
+	
+	if (where == edicts->end())
+		vm.Error("Remove entity not in list");
 
-	if (index < 0 || index >= edicts->size())
-		vm.Error("Out of bounds access");
-
-	edicts->erase(edicts->begin() + index);
+	edicts->erase(where);
 }
 
-static void QC_entity_list_length(QCVM &vm)
+static void QC_entity_set_length(QCVM &vm)
 {
-	auto *edicts = reinterpret_cast<QC_entity_list_t *>(vm.ArgvInt32(0));
+	auto *edicts = reinterpret_cast<QC_entity_set_t *>(vm.ArgvInt32(0));
 	vm.Return(static_cast<int32_t>(edicts->size()));
 }
 
-static void QC_entity_list_clear(QCVM &vm)
+static void QC_entity_set_clear(QCVM &vm)
 {
-	auto *edicts = reinterpret_cast<QC_entity_list_t *>(vm.ArgvInt32(0));
+	auto *edicts = reinterpret_cast<QC_entity_set_t *>(vm.ArgvInt32(0));
 	edicts->clear();
 }
 
-static void QC_entity_list_free(QCVM &vm)
+static void QC_entity_set_free(QCVM &vm)
 {
-	auto *edicts = reinterpret_cast<QC_entity_list_t *>(vm.ArgvInt32(0));
+	auto *edicts = reinterpret_cast<QC_entity_set_t *>(vm.ArgvInt32(0));
 	delete edicts;
 }
 
@@ -336,7 +327,7 @@ static void QC_BoxEdicts(QCVM &vm)
 	const auto &maxcount = vm.ArgvInt32(2);
 	const auto &areatype = static_cast<box_edicts_area_t>(vm.ArgvInt32(3));
 
-	auto edicts = new QC_entity_list_t(maxcount);
+	auto edicts = new QC_entity_set_t(maxcount);
 	auto count = gi.BoxEdicts(mins, maxs, edicts->data(), maxcount, areatype);
 	edicts->resize(count);
 	edicts->shrink_to_fit();
@@ -367,7 +358,7 @@ struct QC_pmove_t
 	bool			snapinitial;
 	
 	// out
-	QC_entity_list_t	*touchents;
+	QC_entity_set_t	*touchents;
 	
 	vec3_t	viewangles;
 	float	viewheight;
@@ -383,7 +374,7 @@ struct QC_pmove_t
 	func_t pointcontents;
 };
 
-static QC_entity_list_t touchents_memory;
+static QC_entity_set_t touchents_memory;
 
 static func_t QC_pm_pointcontents_func;
 
@@ -684,14 +675,13 @@ void InitGIBuiltins(QCVM &vm)
 
 	RegisterBuiltin(DebugGraph);
 	
-	RegisterBuiltin(entity_list_alloc);
-	RegisterBuiltin(entity_list_get);
-	RegisterBuiltin(entity_list_set);
-	RegisterBuiltin(entity_list_add);
-	RegisterBuiltin(entity_list_remove);
-	RegisterBuiltin(entity_list_length);
-	RegisterBuiltin(entity_list_clear);
-	RegisterBuiltin(entity_list_free);
+	RegisterBuiltin(entity_set_alloc);
+	RegisterBuiltin(entity_set_get);
+	RegisterBuiltin(entity_set_add);
+	RegisterBuiltin(entity_set_remove);
+	RegisterBuiltin(entity_set_length);
+	RegisterBuiltin(entity_set_clear);
+	RegisterBuiltin(entity_set_free);
 	
 	RegisterBuiltin(csurface_get_name);
 	RegisterBuiltin(csurface_get_flags);

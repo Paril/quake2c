@@ -124,25 +124,6 @@ static void QC_Q_rand_uniform(QCVM &vm)
 	vm.Return(static_cast<int32_t>(Q_rand_uniform(vm.ArgvInt32(0))));
 }
 
-static void QC_frandom(QCVM &vm)
-{
-	vm.Return(frand());
-}
-
-static void QC_crandom(QCVM &vm)
-{
-	vm.Return(frand(-1, 1));
-}
-
-static void QC_frandomv(QCVM &vm)
-{
-	vm.Return(vec3_t { frand(), frand(), frand() });
-}
-
-static void QC_crandomv(QCVM &vm)
-{
-	vm.Return(vec3_t { frand(-1, 1), frand(-1, 1), frand(-1, 1) });
-}
 
 void InitMathBuiltins(QCVM &vm)
 {
@@ -161,8 +142,4 @@ void InitMathBuiltins(QCVM &vm)
 	
 	RegisterBuiltin(Q_rand);
 	RegisterBuiltin(Q_rand_uniform);
-	RegisterBuiltin(frandom);
-	RegisterBuiltin(crandom);
-	RegisterBuiltin(frandomv);
-	RegisterBuiltin(crandomv);
 }
