@@ -709,7 +709,7 @@ static void ReadGame(const char *filename)
 		qvm.Error("Savegame has bad maxclients");
 
 	if (globals.edict_size != edict_size)
-		qvm.Error("Savegame has bad fields");
+		qvm.Error("Savegame has bad fields (%i vs %i)", globals.edict_size, edict_size);
 
 	// setup entities
 	WipeEntities();
