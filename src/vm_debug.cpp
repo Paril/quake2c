@@ -15,26 +15,25 @@ static void QC_debugbreak(QCVM &vm)
 static void QC_dumpentity(QCVM &vm)
 {
 	FILE *fp = fopen(va("%s/dumpentity.text", game_var->string), "a");
-
-	auto ent = vm.ArgvEntity(0);
+	edict_t *ent = vm.ArgvEntity(0);
 
 	for (auto f : vm.fields)
 	{
 		fprintf(fp, "%s: ", vm.GetString(f.name_index));
 
-		auto val = reinterpret_cast<ptrdiff_t>(vm.GetEntityFieldPointer(ent, static_cast<int32_t>(f.global_index)));
+		const size_t val = (size_t)vm.GetEntityFieldPointer(ent, (int32_t)f.global_index);
 
 		switch (f.id)
 		{
 		case TYPE_FLOAT:
-			fprintf(fp, "%f", *reinterpret_cast<vec_t *>(val));
+			fprintf(fp, "%f", *(vec_t *)val);
 			break;
 		case TYPE_VECTOR: {
-			vec_t *v = reinterpret_cast<vec_t *>(val);
+			vec_t *v = (vec_t *)val;
 			fprintf(fp, "%f %f %f", v[0], v[1], v[2]);
 			break; }
 		default:
-			fprintf(fp, "%i", *reinterpret_cast<int32_t *>(val));
+			fprintf(fp, "%i", *(int32_t *)val);
 			break;
 		}
 
@@ -88,10 +87,16 @@ static void DebuggerThread()
 
 void WaitForDebuggerCommands();
 
+#include <chrono>
+
+using namespace std::chrono_literals;
+
 void InitDebugger()
 {
 	if (!*gi.cvar("qc_debugger", "", CVAR_NONE)->string)
 		return;
+
+	std::this_thread::sleep_for(5s);
 
 	input_thread = std::thread(DebuggerThread);
 	running_thread = true;
@@ -256,7 +261,7 @@ void CheckDebuggerCommands()
 		int start = 10;
 		std::string variable = strtok(s, start);
 
-		auto result = qvm.Evaluate(variable);
+		evaluate_result_t result = qvm.Evaluate(variable);
 		std::string value;
 		
 		switch (result.type)
@@ -295,7 +300,7 @@ void CheckDebuggerCommands()
 				value = "\"invalid/null function\"";
 			else
 			{
-				auto func = qvm.FindFunction(result.funcid);
+				QCFunction *func = qvm.FindFunction(result.funcid);
 
 				if (!func || func->name_index == STRING_EMPTY)
 					value = vas("\"can't resolve function: %i\"", result.funcid);
@@ -311,10 +316,6 @@ void CheckDebuggerCommands()
 		SendDebuggerCommand(vas("qcvalue \"%s\" %s\n", variable.data(), value.data()));
 	}
 }
-
-#include <chrono>
-
-using namespace std::chrono_literals;
 
 void WaitForDebuggerCommands()
 {

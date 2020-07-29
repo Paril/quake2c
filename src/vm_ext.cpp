@@ -4,16 +4,16 @@
 
 static void QC_ModInt(QCVM &vm)
 {
-	const auto &a = vm.ArgvInt32(0);
-	const auto &b = vm.ArgvInt32(1);
+	const int a = vm.ArgvInt32(0);
+	const int b = vm.ArgvInt32(1);
 
 	vm.ReturnInt(a % b);
 }
 
 static void QC_func_get(QCVM &vm)
 {
-	const auto &s = vm.ArgvString(0);
-	auto func = vm.FindFunctionID(s);
+	const char *s = vm.ArgvString(0);
+	func_t func = vm.FindFunctionID(s);
 	vm.ReturnFunc(func);
 }
 

@@ -4,12 +4,12 @@
 
 static void QC_memcpy(QCVM &vm)
 {
-	const auto &dst = vm.ArgvInt32(0);
-	const auto &src = vm.ArgvInt32(1);
-	const auto &sz = vm.ArgvInt32(2);
+	const int32_t dst = vm.ArgvInt32(0);
+	const int32_t src = vm.ArgvInt32(1);
+	const int32_t sz = vm.ArgvInt32(2);
 	
-	auto dst_ptr = vm.AddressToEntityField(dst);
-	auto src_ptr = vm.AddressToEntityField(src);
+	void *dst_ptr = vm.AddressToEntityField(dst);
+	const void *src_ptr = vm.AddressToEntityField(src);
 
 	memcpy(dst_ptr, src_ptr, sz);
 
@@ -24,15 +24,15 @@ static void QC_memcpy(QCVM &vm)
 
 	// mark them as being inside of src as well now
 	for (auto &s : ids)
-		vm.dynamic_strings.MarkRefCopy(s.first, reinterpret_cast<global_t *>(dst_ptr) + s.second);
+		vm.dynamic_strings.MarkRefCopy(s.first, (global_t *)(dst_ptr) + s.second);
 }
 
 static void QC_memclear(QCVM &vm)
 {
-	const auto &dst = vm.ArgvInt32(0);
-	const auto &sz = vm.ArgvInt32(1);
+	const int32_t dst = vm.ArgvInt32(0);
+	const int32_t sz = vm.ArgvInt32(1);
 	
-	auto dst_ptr = vm.AddressToEntityField(dst);
+	void *dst_ptr = vm.AddressToEntityField(dst);
 
 	memset(dst_ptr, 0, sz);
 
@@ -41,12 +41,12 @@ static void QC_memclear(QCVM &vm)
 
 static void QC_memcmp(QCVM &vm)
 {
-	const auto &src = vm.ArgvInt32(0);
-	const auto &dst = vm.ArgvInt32(1);
-	const auto &sz = vm.ArgvInt32(2);
+	const int32_t src = vm.ArgvInt32(0);
+	const int32_t dst = vm.ArgvInt32(1);
+	const int32_t sz = vm.ArgvInt32(2);
 	
-	auto src_ptr = vm.AddressToEntityField(src);
-	auto dst_ptr = vm.AddressToEntityField(dst);
+	const void *src_ptr = vm.AddressToEntityField(src);
+	const void *dst_ptr = vm.AddressToEntityField(dst);
 
 	vm.ReturnInt(memcmp(dst_ptr, src_ptr, sz));
 }

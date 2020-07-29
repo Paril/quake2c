@@ -9,8 +9,8 @@ static void QC_SetNumEdicts(QCVM &vm)
 
 static void QC_ClearEntity(QCVM &vm)
 {
-	auto entity = vm.ArgvEntity(0);
-	int32_t number = entity->s.number;
+	edict_t *entity = vm.ArgvEntity(0);
+	const int32_t number = entity->s.number;
 
 	memset(entity, 0, globals.edict_size);
 	
@@ -26,14 +26,14 @@ void SyncPlayerState(QCVM &vm, edict_t *ent)
 {
 	for (auto &wrap : vm.field_wraps.GetFields())
 	{
-		const auto &field = vm.GetEntityFieldPointer(ent, wrap.first / sizeof(global_t));
+		const void *field = vm.GetEntityFieldPointer(ent, wrap.first / sizeof(global_t));
 		vm.field_wraps.WrapField(ent, wrap.first, field);
 	}
 }
 
 static void QC_SyncPlayerState(QCVM &vm)
 {
-	auto ent = vm.ArgvEntity(0);
+	edict_t *ent = vm.ArgvEntity(0);
 	SyncPlayerState(vm, ent);
 }
 
@@ -74,17 +74,17 @@ static inline void QC_parse_value_into_ptr(QCVM &vm, const deftype_t &type, cons
 	switch (type)
 	{
 	case TYPE_STRING:
-		*reinterpret_cast<string_t *>(ptr) = vm.StoreOrFind(ParseSlashes(value));
+		*(string_t *)ptr = vm.StoreOrFind(ParseSlashes(value));
 		break;
 	case TYPE_FLOAT:
-		*reinterpret_cast<vec_t *>(ptr) = strtof(value, nullptr);
+		*(vec_t *)ptr = strtof(value, nullptr);
 		break;
 	case TYPE_VECTOR:
 		data_span = 3;
-		sscanf(value, "%f %f %f", reinterpret_cast<vec_t *>(ptr), reinterpret_cast<vec_t *>(ptr) + 1, reinterpret_cast<vec_t *>(ptr) + 2);
+		sscanf(value, "%f %f %f", (vec_t *)ptr, (vec_t *)ptr + 1, (vec_t *)ptr + 2);
 		break;
 	case TYPE_INTEGER:
-		*reinterpret_cast<int32_t *>(ptr) = strtol(value, nullptr, 10);
+		*(int32_t *)ptr = strtol(value, nullptr, 10);
 		break;
 	default:
 		vm.Error("Couldn't parse field, bad type %i", type);
@@ -92,19 +92,19 @@ static inline void QC_parse_value_into_ptr(QCVM &vm, const deftype_t &type, cons
 	
 	vm.dynamic_strings.CheckRefUnset(ptr, data_span);
 
-	if (type == TYPE_STRING && vm.dynamic_strings.IsRefCounted(*reinterpret_cast<string_t *>(ptr)))
-		vm.dynamic_strings.MarkRefCopy(*reinterpret_cast<string_t *>(ptr), ptr);
+	if (type == TYPE_STRING && vm.dynamic_strings.IsRefCounted(*(string_t *)ptr))
+		vm.dynamic_strings.MarkRefCopy(*(string_t *)ptr, ptr);
 }
 
 static void QC_entity_key_parse(QCVM &vm)
 {
-	auto ent = vm.ArgvEntity(0);
-	const auto &field = vm.ArgvInt32(1);
-	const auto &value = vm.ArgvString(2);
+	edict_t *ent = vm.ArgvEntity(0);
+	const int32_t field = vm.ArgvInt32(1);
+	const char *value = vm.ArgvString(2);
 
 	void *ptr = vm.GetEntityFieldPointer(ent, field);
 
-	auto f = vm.field_map.find(static_cast<global_t>(field));
+	auto f = vm.field_map.find((global_t)field);
 
 	if (f == vm.field_map.end())
 		vm.Error("Couldn't match field %i", field);
@@ -114,11 +114,11 @@ static void QC_entity_key_parse(QCVM &vm)
 
 static void QC_struct_key_parse(QCVM &vm)
 {
-	const auto &struct_name = vm.ArgvString(0);
-	const auto &key_name = vm.ArgvString(1);
-	const auto &value = vm.ArgvString(2);
+	const char *struct_name = vm.ArgvString(0);
+	const char *key_name = vm.ArgvString(1);
+	const char *value = vm.ArgvString(2);
 	
-	auto full_name = vas("%s.%s", struct_name, key_name);
+	std::string full_name = vas("%s.%s", struct_name, key_name);
 	auto hashed = vm.definition_map_by_name.find(full_name);
 
 	if (hashed == vm.definition_map_by_name.end())
@@ -127,22 +127,22 @@ static void QC_struct_key_parse(QCVM &vm)
 		return;
 	}
 
-	auto g = (*hashed).second;
-	auto global = vm.GetGlobalByIndex(static_cast<global_t>(g->global_index));
-	QC_parse_value_into_ptr(vm, static_cast<deftype_t>(g->id & ~TYPE_GLOBAL), value, global);
+	QCDefinition *g = (*hashed).second;
+	void *global = vm.GetGlobalByIndex(g->global_index);
+	QC_parse_value_into_ptr(vm, g->id & ~TYPE_GLOBAL, value, global);
 	vm.ReturnInt(1);
 }
 
 static void QC_itoe(QCVM &vm)
 {
-	const auto &number = vm.ArgvInt32(0);
+	const int32_t number = vm.ArgvInt32(0);
 	vm.ReturnEntity(itoe(number));
 }
 
 static void QC_etoi(QCVM &vm)
 {
-	const auto &address = vm.ArgvInt32(0);
-	vm.ReturnInt((reinterpret_cast<uint8_t *>(address) - reinterpret_cast<uint8_t *>(globals.edicts)) / globals.edict_size);
+	const size_t address = vm.ArgvInt32(0);
+	vm.ReturnInt(((uint8_t *)address - (uint8_t *)globals.edicts) / globals.edict_size);
 }
 
 void InitGameBuiltins(QCVM &vm)

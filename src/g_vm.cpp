@@ -59,7 +59,7 @@ string_t QCVMStringList::Allocate()
 		return top;
 	}
 
-	return static_cast<string_t>(-static_cast<int32_t>(strings.size() + 1));
+	return (string_t)(-(int32_t)(strings.size() + 1));
 }
 
 string_t QCVMStringList::StoreRefCounted(std::string &&str)
@@ -76,10 +76,8 @@ string_t QCVMStringList::StoreRefCounted(std::string &&str)
 void QCVMStringList::Unstore(const string_t &id, const bool &free_index)
 {
 	assert(strings.contains(id));
-		
-	const auto &str = strings.at(id);
-		
-	assert(!str.ref_count);
+
+	assert(!strings.at(id).ref_count);
 		
 	strings.erase(id);
 
@@ -99,19 +97,15 @@ size_t QCVMStringList::Length(const string_t &id) const
 std::string &QCVMStringList::GetRefCounted(const string_t &id)
 {
 	assert(strings.contains(id));
-		
-	auto &str = strings.at(id);
 
-	return str.str;
+	return strings.at(id).str;
 }
 
 const char *QCVMStringList::Get(const string_t &id) const
 {
 	assert(strings.contains(id));
 
-	const auto &str = strings.at(id);
-
-	return str.str.c_str();
+	return strings.at(id).str.c_str();
 }
 
 void QCVMStringList::AcquireRefCounted(const string_t &id)
@@ -120,9 +114,7 @@ void QCVMStringList::AcquireRefCounted(const string_t &id)
 
 	assert(strings.contains(id));
 
-	auto &str = strings.at(id);
-
-	str.ref_count++;
+	strings.at(id).ref_count++;
 }
 
 void QCVMStringList::ReleaseRefCounted(const string_t &id)
@@ -131,13 +123,13 @@ void QCVMStringList::ReleaseRefCounted(const string_t &id)
 
 	assert(strings.contains(id));
 
-	auto &str = strings.at(id);
+	QCVMRefCountString *str = &strings.at(id);
 
-	assert(str.ref_count);
+	assert(str->ref_count);
 		
-	str.ref_count--;
+	str->ref_count--;
 
-	if (!str.ref_count)
+	if (!str->ref_count)
 		Unstore(id);
 }
 
@@ -176,16 +168,16 @@ void QCVMStringList::CheckRefUnset(const void *ptr, const size_t &span, const bo
 
 	for (size_t i = 0; i < span; i++)
 	{
-		auto gptr = reinterpret_cast<const global_t *>(ptr) + i;
+		const global_t *gptr = (const global_t *)ptr + i;
 
 		if (!ref_storage.contains(gptr))
 			continue;
 
-		auto old = ref_storage.at(gptr);
+		const string_t old = ref_storage.at(gptr);
 
 		if (!assume_changed)
 		{
-			auto newstr = *reinterpret_cast<const string_t *>(gptr);
+			auto newstr = *(const string_t *)gptr;
 
 			// still here, so we probably just copied to ourselves or something
 			if (newstr == old)
@@ -229,8 +221,8 @@ void QCVMStringList::MarkIfHasRef(const void *src_ptr, const void *dst_ptr, cons
 
 	for (size_t i = 0; i < span; i++)
 	{
-		auto src_gptr = reinterpret_cast<const global_t *>(src_ptr) + i;
-		auto dst_gptr = reinterpret_cast<const global_t *>(dst_ptr) + i;
+		const global_t *src_gptr = (const global_t *)src_ptr + i;
+		const global_t *dst_gptr = (const global_t *)dst_ptr + i;
 
 		if (ref_storage.contains(src_gptr))
 			MarkRefCopy(ref_storage.at(src_gptr), dst_gptr);
@@ -239,7 +231,7 @@ void QCVMStringList::MarkIfHasRef(const void *src_ptr, const void *dst_ptr, cons
 
 QCVMRefCountBackup QCVMStringList::PopRef(const void *ptr)
 {
-	auto id = ref_storage.at(ptr);
+	const string_t id = ref_storage.at(ptr);
 
 	QCVMRefCountBackup popped_ref { ptr, id };
 
@@ -341,7 +333,7 @@ std::string ParseFormat(const string_t &formatid, QCVM &vm, const uint8_t &start
 		i = next - format;
 
 		const char *specifier_start = next;
-		auto state = ParseToken::PT_NONE;
+		ParseToken state = ParseToken::PT_NONE;
 
 		while (state < ParseToken::PT_SPECIFIER)
 		{
@@ -378,7 +370,7 @@ std::string ParseFormat(const string_t &formatid, QCVM &vm, const uint8_t &start
 
 		if (state == ParseToken::PT_SPECIFIER)
 		{
-			Q_strlcpy(format_buffer, specifier_start, min(sizeof(format_buffer), static_cast<size_t>((next - specifier_start) + 1 + 1)));
+			Q_strlcpy(format_buffer, specifier_start, min(sizeof(format_buffer), (size_t)((next - specifier_start) + 1 + 1)));
 
 			switch (*next)
 			{
@@ -415,7 +407,7 @@ std::string ParseFormat(const string_t &formatid, QCVM &vm, const uint8_t &start
 
 void QCVMBuiltinList::Register(const char *name, QCBuiltin builtin)
 {
-	func_t id = static_cast<func_t>(this->next_id);
+	func_t id = (func_t)this->next_id;
 	this->next_id--;
 	this->builtins.emplace(id, builtin);
 
@@ -426,7 +418,7 @@ void QCVMBuiltinList::Register(const char *name, QCBuiltin builtin)
 
 		if (strcmp(vm.GetString(func.name_index), name) == 0)
 		{
-			func.id = static_cast<int32_t>(id);
+			func.id = (int32_t)id;
 			break;
 		}
 	}
@@ -446,7 +438,7 @@ void QCVMFieldWrapList::Register(const char *field_name, const size_t &field_off
 		else if (strcmp(vm.GetString(f.name_index), field_name))
 			continue;
 
-		wraps.emplace((static_cast<uint32_t>(f.global_index) + field_offset) * sizeof(global_t), (QCVMFieldWrap) {
+		wraps.emplace((f.global_index + field_offset) * sizeof(global_t), (QCVMFieldWrap) {
 			&f,
 			client_offset,
 			setter
@@ -524,9 +516,9 @@ void QCVM::SetBreakpoint(const int &mode, const std::string &file, const int &li
 			{
 				// got it
 				if (mode)
-					statement->opcode = static_cast<opcode_t>(static_cast<int32_t>(statement->opcode) | OP_BREAKPOINT);
+					statement->opcode |= OP_BREAKPOINT;
 				else
-					statement->opcode = static_cast<opcode_t>(static_cast<int32_t>(statement->opcode) & ~OP_BREAKPOINT);
+					statement->opcode &= ~OP_BREAKPOINT;
 				
 				gi.dprintf("Breakpoint set @ %s:%i\n", file.data(), line);
 				return;
@@ -586,8 +578,7 @@ inline void F_OP_EQ(QCVM &vm, const operands &operands, int &depth)
 	vm.SetGlobal<TResult>(operands[2], a == b);
 }
 
-template<>
-inline void F_OP_EQ<string_t, string_t, vec_t>(QCVM &vm, const operands &operands, int &depth)
+inline void F_OP_EQ_S(QCVM &vm, const operands &operands, int &depth)
 {
 	const auto &a = vm.GetGlobal<string_t>(operands[0]);
 	const auto &b = vm.GetGlobal<string_t>(operands[1]);
@@ -607,8 +598,7 @@ inline void F_OP_NE(QCVM &vm, const operands &operands, int &depth)
 	vm.SetGlobal<TResult>(operands[2], a != b);
 }
 
-template<>
-inline void F_OP_NE<string_t, string_t, vec_t>(QCVM &vm, const operands &operands, int &depth)
+inline void F_OP_NE_S(QCVM &vm, const operands &operands, int &depth)
 {
 	const auto &a = vm.GetGlobal<string_t>(operands[0]);
 	const auto &b = vm.GetGlobal<string_t>(operands[1]);
@@ -658,9 +648,9 @@ inline void F_OP_GT(QCVM &vm, const operands &operands, int &depth)
 template<typename TType>
 inline void F_OP_LOAD(QCVM &vm, const operands &operands, int &depth)
 {
-	auto &ent = *vm.EntToEntity(vm.GetGlobal<ent_t>(operands[0]), true);
-	auto &field_offset = vm.GetGlobal<int32_t>(operands[1]);
-	auto &field_value = *reinterpret_cast<TType *>(reinterpret_cast<int32_t*>(&ent) + field_offset);
+	edict_t *ent = vm.EntToEntity(vm.GetGlobal<ent_t>(operands[0]), true);
+	int32_t field_offset = vm.GetGlobal<int32_t>(operands[1]);
+	auto &field_value = *(TType *)((int32_t*)ent + field_offset);
 	vm.SetGlobal(operands[2], field_value);
 
 	vm.dynamic_strings.MarkIfHasRef<sizeof(TType) / sizeof(global_t)>(&field_value, vm.GetGlobalByIndex(operands[2]));
@@ -668,8 +658,8 @@ inline void F_OP_LOAD(QCVM &vm, const operands &operands, int &depth)
 
 inline void F_OP_ADDRESS(QCVM &vm, const operands &operands, int &depth)
 {
-	auto ent = vm.EntToEntity(vm.GetGlobal<ent_t>(operands[0]), true);
-	auto field = vm.GetGlobal<int32_t>(operands[1]);
+	edict_t *ent = vm.EntToEntity(vm.GetGlobal<ent_t>(operands[0]), true);
+	int32_t field = vm.GetGlobal<int32_t>(operands[1]);
 	vm.SetGlobal(operands[2], vm.EntityFieldAddress(ent, field));
 }
 
@@ -688,7 +678,7 @@ inline void F_OP_STORE(QCVM &vm, const operands &operands, int &depth)
 template<typename TType, typename TResult = TType>
 inline void F_OP_STOREP(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &address = vm.GetGlobal<int32_t>(operands[1]) + (vm.GetGlobal<ptrdiff_t>(operands[2]) * sizeof(global_t));
+	size_t address = vm.GetGlobal<int32_t>(operands[1]) + (vm.GetGlobal<ptrdiff_t>(operands[2]) * sizeof(global_t));
 	const auto &value = vm.GetGlobal<TType>(operands[0]);
 
 	if (!vm.PointerValid(address, false, sizeof(TResult)))
@@ -696,12 +686,12 @@ inline void F_OP_STOREP(QCVM &vm, const operands &operands, int &depth)
 
 	constexpr size_t span = sizeof(TType) / sizeof(global_t);
 
-	auto address_ptr = reinterpret_cast<TResult *>(address);
+	auto address_ptr = (TResult *)address;
 	*address_ptr = value;
 	vm.dynamic_strings.CheckRefUnset(address_ptr, span);
 
-	auto ent = vm.AddressToEntity(address);
-	const auto &field = vm.AddressToField(ent, address);
+	edict_t *ent = vm.AddressToEntity(address);
+	ptrdiff_t field = vm.AddressToField(ent, address);
 
 	for (size_t i = 0; i < span; i++)
 		vm.field_wraps.WrapField(ent, field + (i * sizeof(global_t)), &value + i);
@@ -717,10 +707,9 @@ inline void F_NOT(QCVM &vm, const operands &operands, int &depth)
 	vm.SetGlobal<TResult>(operands[2], !a);
 }
 
-template<>
-inline void F_NOT<string_t, vec_t>(QCVM &vm, const operands &operands, int &depth)
+inline void F_NOT_S(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &a = vm.GetGlobal<string_t>(operands[0]);
+	const string_t a = vm.GetGlobal<string_t>(operands[0]);
 
 	vm.SetGlobal<vec_t>(operands[2], a == STRING_EMPTY || !*vm.GetString(a));
 }
@@ -730,20 +719,19 @@ inline void F_IF(QCVM &vm, const operands &operands, int &depth)
 {
 	if (vm.GetGlobal<TType>(operands[0]))
 	{
-		auto &current = *(vm.state.current);
-		current.statement += static_cast<int16_t>(current.statement->args[1]) - 1;
+		QCStack *current = vm.state.current;
+		current->statement += (int16_t)current->statement->args[1] - 1;
 	}
 }
 
-template<>
-inline void F_IF<string_t>(QCVM &vm, const operands &operands, int &depth)
+inline void F_IF_S(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &s = vm.GetGlobal<string_t>(operands[0]);
+	const string_t s = vm.GetGlobal<string_t>(operands[0]);
 
 	if (s != STRING_EMPTY && *vm.GetString(s))
 	{
-		auto &current = *(vm.state.current);
-		current.statement += static_cast<int16_t>(current.statement->args[1]) - 1;
+		QCStack *current = vm.state.current;
+		current->statement += (int16_t)current->statement->args[1] - 1;
 	}
 }
 
@@ -752,20 +740,19 @@ inline void F_IFNOT(QCVM &vm, const operands &operands, int &depth)
 {
 	if (!vm.GetGlobal<TType>(operands[0]))
 	{
-		auto &current = *(vm.state.current);
-		current.statement += static_cast<int16_t>(current.statement->args[1]) - 1;
+		QCStack *current = vm.state.current;
+		current->statement += (int16_t)current->statement->args[1] - 1;
 	}
 }
 
-template<>
-inline void F_IFNOT<string_t>(QCVM &vm, const operands &operands, int &depth)
+inline void F_IFNOT_S(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &s = vm.GetGlobal<string_t>(operands[0]);
+	const string_t s = vm.GetGlobal<string_t>(operands[0]);
 
 	if (s == STRING_EMPTY || !*vm.GetString(s))
 	{
-		auto &current = *(vm.state.current);
-		current.statement += static_cast<int16_t>(current.statement->args[1]) - 1;
+		QCStack *current = vm.state.current;
+		current->statement += (int16_t)current->statement->args[1] - 1;
 	}
 }
 
@@ -785,16 +772,16 @@ inline void F_CALL(QCVM &vm, const operands &operands, int &depth)
 		vm.Error("NULL function");
 
 #ifdef ALLOW_PROFILING
-	auto &current = *(vm.state.current);
-	current.profile->fields[NumFuncCalls]++;
+	QCStack *current = vm.state.current;
+	current->profile->fields[NumFuncCalls]++;
 #endif
 
-	QCFunction &call = vm.functions[enter_func];
+	QCFunction *call = &vm.functions[enter_func];
 
-	if (!call.id)
-		vm.Error("Tried to call missing function %s", vm.GetString(call.name_index));
+	if (!call->id)
+		vm.Error("Tried to call missing function %s", vm.GetString(call->name_index));
 
-	if (call.id < 0)
+	if (call->id < 0)
 	{
 		// negative statements are built in functions
 		vm.CallBuiltin(call);
@@ -807,8 +794,8 @@ inline void F_CALL(QCVM &vm, const operands &operands, int &depth)
 
 inline void F_GOTO(QCVM &vm, const operands &operands, int &depth)
 {
-	auto &current = *(vm.state.current);
-	current.statement += static_cast<int16_t>(current.statement->args[0]) - 1;
+	QCStack *current = vm.state.current;
+	current->statement += (int16_t)current->statement->args[0] - 1;
 }
 
 template<typename TLeft, typename TRight, typename TResult>
@@ -832,8 +819,8 @@ inline void F_OP_OR(QCVM &vm, const operands &operands, int &depth)
 template<typename TLeft, typename TRight, typename TResult>
 inline void F_OP_BITAND(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &a = static_cast<int32_t>(vm.GetGlobal<TLeft>(operands[0]));
-	const auto &b = static_cast<int32_t>(vm.GetGlobal<TRight>(operands[1]));
+	const auto &a = (int32_t)vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = (int32_t)vm.GetGlobal<TRight>(operands[1]);
 
 	vm.SetGlobal<TResult>(operands[2], a & b);
 }
@@ -841,8 +828,8 @@ inline void F_OP_BITAND(QCVM &vm, const operands &operands, int &depth)
 template<typename TLeft, typename TRight, typename TResult>
 inline void F_OP_BITOR(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &a = static_cast<int32_t>(vm.GetGlobal<TLeft>(operands[0]));
-	const auto &b = static_cast<int32_t>(vm.GetGlobal<TRight>(operands[1]));
+	const auto &a = (int32_t)vm.GetGlobal<TLeft>(operands[0]);
+	const auto &b = (int32_t)vm.GetGlobal<TRight>(operands[1]);
 
 	vm.SetGlobal<TResult>(operands[2], a | b);
 }
@@ -859,75 +846,74 @@ inline void F_OP_FTOI(QCVM &vm, const operands &operands, int &depth)
 
 inline void F_OP_P_ITOF(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &address = vm.GetGlobal<int32_t>(operands[0]);
+	const size_t address = vm.GetGlobal<int32_t>(operands[0]);
 
 	if (!vm.PointerValid(address))
 		vm.Error("invalid address");
 
-	vm.SetGlobal<vec_t>(operands[2], *reinterpret_cast<int32_t *>(address));
+	vm.SetGlobal<vec_t>(operands[2], *(int32_t *)address);
 }
 
 inline void F_OP_P_FTOI(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &address = vm.GetGlobal<int32_t>(operands[0]);
+	const size_t address = vm.GetGlobal<int32_t>(operands[0]);
 
 	if (!vm.PointerValid(address))
 		vm.Error("invalid address");
 
-	vm.SetGlobal<int32_t>(operands[2], *reinterpret_cast<vec_t *>(address));
+	vm.SetGlobal<int32_t>(operands[2], *(vec_t *)address);
 }
 
 inline void F_OP_BITXOR(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &a = vm.GetGlobal<int32_t>(operands[0]);
-	const auto &b = vm.GetGlobal<int32_t>(operands[1]);
+	const int32_t a = vm.GetGlobal<int32_t>(operands[0]);
+	const int32_t b = vm.GetGlobal<int32_t>(operands[1]);
 
 	vm.SetGlobal<int32_t>(operands[2], a ^ b);
 }
 
 inline void F_OP_RSHIFT(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &a = vm.GetGlobal<int32_t>(operands[0]);
-	const auto &b = vm.GetGlobal<int32_t>(operands[1]);
+	const int32_t a = vm.GetGlobal<int32_t>(operands[0]);
+	const int32_t b = vm.GetGlobal<int32_t>(operands[1]);
 
 	vm.SetGlobal<int32_t>(operands[2], a >> b);
 }
 
 inline void F_OP_LSHIFT(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &a = vm.GetGlobal<int32_t>(operands[0]);
-	const auto &b = vm.GetGlobal<int32_t>(operands[1]);
+	const int32_t a = vm.GetGlobal<int32_t>(operands[0]);
+	const int32_t b = vm.GetGlobal<int32_t>(operands[1]);
 
 	vm.SetGlobal<int32_t>(operands[2], a << b);
 }
 
 inline void F_OP_GLOBALADDRESS(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &base = &vm.GetGlobal<int32_t>(operands[0]);
-	const auto &offset = vm.GetGlobal<int32_t>(operands[1]);
-	const auto &address = reinterpret_cast<int32_t>(base + offset);
+	const global_t *base = &vm.GetGlobal<global_t>(operands[0]);
+	const ptrdiff_t offset = vm.GetGlobal<int32_t>(operands[1]);
+	const size_t address = (size_t)(base + offset);
 
 	if (!vm.PointerValid(address))
 		vm.Error("bad pointer");
 
-	vm.SetGlobal(operands[2], address);
+	vm.SetGlobal(operands[2], (int32_t)address);
 }
 
 inline void F_OP_ADD_PIW(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &a = vm.GetGlobal<int32_t>(operands[0]);
-	const auto &b = vm.GetGlobal<int32_t>(operands[1]);
-	const ptrdiff_t address = a + (b * sizeof(float));
+	const int32_t a = vm.GetGlobal<int32_t>(operands[0]);
+	const int32_t b = vm.GetGlobal<int32_t>(operands[1]);
 
-	vm.SetGlobal(operands[2], address);
+	vm.SetGlobal(operands[2], (int32_t)(a + (b * sizeof(float))));
 }
 
 template<typename TType>
 inline void F_OP_LOADA(QCVM &vm, const operands &operands, int &depth)
 {
-	const ptrdiff_t address = static_cast<ptrdiff_t>(operands[0]) + vm.GetGlobal<int32_t>(operands[1]);
+	const ptrdiff_t address = (ptrdiff_t)operands[0] + vm.GetGlobal<int32_t>(operands[1]);
 			
-	if (!vm.PointerValid(reinterpret_cast<ptrdiff_t>(vm.global_data + address), false, sizeof(TType)))
+	if (!vm.PointerValid((ptrdiff_t)(vm.global_data + address), false, sizeof(TType)))
 		vm.Error("Invalid pointer %x", address);
 			
 	auto &field_value = *(TType *)(vm.global_data + address);
@@ -945,15 +931,14 @@ inline void F_OP_LOADP(QCVM &vm, const operands &operands, int &depth)
 	if (!vm.PointerValid(address, false, sizeof(TType)))
 		vm.Error("Invalid pointer %x", address);
 			
-	auto &field_value = *reinterpret_cast<TType *>(address);
+	auto &field_value = *(TType *)(address);
 	vm.SetGlobal(operands[2], field_value);
 	
 	constexpr size_t span = sizeof(TType) / sizeof(global_t);
 	vm.dynamic_strings.MarkIfHasRef<span>(&field_value, vm.GetGlobalByIndex(operands[2]));
 }
 
-template<>
-inline void F_OP_LOADP<uint8_t>(QCVM &vm, const operands &operands, int &depth)
+inline void F_OP_LOADP_C(QCVM &vm, const operands &operands, int &depth)
 {
 	const string_t strid = vm.GetGlobal<string_t>(operands[0]);
 	const size_t offset = vm.GetGlobal<int32_t>(operands[1]);
@@ -962,7 +947,7 @@ inline void F_OP_LOADP<uint8_t>(QCVM &vm, const operands &operands, int &depth)
 		vm.SetGlobal<int32_t>(operands[2], 0);
 	else
 	{
-		auto str = vm.GetString(strid);
+		const char *str = vm.GetString(strid);
 		vm.SetGlobal<int32_t>(operands[2], str[offset]);
 	}
 }
@@ -970,9 +955,9 @@ inline void F_OP_LOADP<uint8_t>(QCVM &vm, const operands &operands, int &depth)
 inline void F_OP_BOUNDCHECK(QCVM &vm, const operands &operands, int &depth)
 {
 #if _DEBUG
-	const auto &a = vm.GetGlobal<uint32_t>(operands[0]);
-	const auto &b = static_cast<uint32_t>(operands[1]);
-	const auto &c = static_cast<uint32_t>(operands[2]);
+	const uint32_t a = vm.GetGlobal<uint32_t>(operands[0]);
+	const uint32_t b = (uint32_t)operands[1];
+	const uint32_t c = (uint32_t)operands[2];
 
 	if (a < c || a >= b)
 		vm.Error("bounds check failed");
@@ -982,12 +967,12 @@ inline void F_OP_BOUNDCHECK(QCVM &vm, const operands &operands, int &depth)
 template<typename TType, typename TMul>
 inline void F_OP_MULSTOREP(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &address = vm.GetGlobal<int32_t>(operands[1]);
+	const size_t address = vm.GetGlobal<int32_t>(operands[1]);
 
 	if (!vm.PointerValid(address))
 		vm.Error("bad pointer");
 
-	TType *f = reinterpret_cast<TType *>(address);
+	TType *f = (TType *)address;
 
 	const auto &a = vm.GetGlobal<TMul>(operands[0]);
 
@@ -997,12 +982,12 @@ inline void F_OP_MULSTOREP(QCVM &vm, const operands &operands, int &depth)
 template<typename TType, typename TMul>
 inline void F_OP_DIVSTOREP(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &address = vm.GetGlobal<int32_t>(operands[1]);
+	const size_t address = vm.GetGlobal<int32_t>(operands[1]);
 
 	if (!vm.PointerValid(address))
 		vm.Error("bad pointer");
 
-	TType *f = reinterpret_cast<TType *>(address);
+	TType *f = (TType *)address;
 
 	const auto &a = vm.GetGlobal<TMul>(operands[0]);
 
@@ -1012,12 +997,12 @@ inline void F_OP_DIVSTOREP(QCVM &vm, const operands &operands, int &depth)
 template<typename TType, typename TMul>
 inline void F_OP_SUBSTOREP(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &address = vm.GetGlobal<int32_t>(operands[1]);
+	const size_t address = vm.GetGlobal<int32_t>(operands[1]);
 
 	if (!vm.PointerValid(address))
 		vm.Error("bad pointer");
 
-	TType *f = reinterpret_cast<TType *>(address);
+	TType *f = (TType *)address;
 
 	const auto &a = vm.GetGlobal<TMul>(operands[0]);
 
@@ -1027,12 +1012,12 @@ inline void F_OP_SUBSTOREP(QCVM &vm, const operands &operands, int &depth)
 template<typename TType, typename TMul>
 inline void F_OP_ADDSTOREP(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &address = vm.GetGlobal<int32_t>(operands[1]);
+	const size_t address = vm.GetGlobal<int32_t>(operands[1]);
 
 	if (!vm.PointerValid(address))
 		vm.Error("bad pointer");
 
-	TType *f = reinterpret_cast<TType *>(address);
+	TType *f = (TType *)address;
 
 	const auto &a = vm.GetGlobal<TMul>(operands[0]);
 
@@ -1061,29 +1046,29 @@ inline void F_OP_RANDV0(QCVM &vm, const operands &operands, int &depth)
 
 inline void F_OP_RANDV1(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &a = vm.GetGlobal<vec3_t>(operands[0]);
+	const vec3_t a = vm.GetGlobal<vec3_t>(operands[0]);
 	vm.SetGlobal<vec3_t>(operands[2], { frand(a[0]), frand(a[1]), frand(a[2]) });
 }
 
 inline void F_OP_RANDV2(QCVM &vm, const operands &operands, int &depth)
 {
-	const auto &a = vm.GetGlobal<vec3_t>(operands[0]);
-	const auto &b = vm.GetGlobal<vec3_t>(operands[1]);
+	const vec3_t a = vm.GetGlobal<vec3_t>(operands[0]);
+	const vec3_t b = vm.GetGlobal<vec3_t>(operands[1]);
 	vm.SetGlobal<vec3_t>(operands[2], { frand(a[0], b[0]), frand(a[1], b[1]), frand(a[2], b[2]) });
 }
 
 template<typename TType>
 inline void F_OP_STOREF(QCVM &vm, const operands &operands, int &depth)
 {
-	auto &ent = *vm.EntToEntity(vm.GetGlobal<ent_t>(operands[0]), true);
-	auto &field_offset = vm.GetGlobal<int32_t>(operands[1]);
-	const auto address = reinterpret_cast<ptrdiff_t>(reinterpret_cast<int32_t*>(&ent) + field_offset);
-	auto &field_value = *reinterpret_cast<TType *>(address);
-	auto value = reinterpret_cast<TType *>(vm.GetGlobalByIndex(operands[2]));
+	edict_t *ent = vm.EntToEntity(vm.GetGlobal<ent_t>(operands[0]), true);
+	const ptrdiff_t field_offset = vm.GetGlobal<int32_t>(operands[1]);
+	const size_t address = (size_t)((int32_t*)ent + field_offset);
+	TType *field_value = (TType *)address;
+	const TType *value = (TType *)vm.GetGlobalByIndex(operands[2]);
 
-	field_value = *value;
+	*field_value = *value;
 
-	vm.dynamic_strings.MarkIfHasRef<sizeof(TType) / sizeof(global_t)>(value, &field_value);
+	vm.dynamic_strings.MarkIfHasRef<sizeof(TType) / sizeof(global_t)>(value, field_value);
 }
 
 static OPCodeFunc codeFuncs[] = {
@@ -1119,7 +1104,7 @@ static OPCodeFunc codeFuncs[] = {
 	
 	[OP_EQ_F] = F_OP_EQ<vec_t, vec_t, vec_t>,
 	[OP_EQ_V] = F_OP_EQ<vec3_t, vec3_t, vec_t>,
-	[OP_EQ_S] = F_OP_EQ<string_t, string_t, vec_t>,
+	[OP_EQ_S] = F_OP_EQ_S,
 	[OP_EQ_E] = F_OP_EQ<ent_t, ent_t, vec_t>,
 	[OP_EQ_FNC] = F_OP_EQ<func_t, func_t, vec_t>,
 	[OP_EQ_I] = F_OP_EQ<int32_t, int32_t, int32_t>,
@@ -1128,7 +1113,7 @@ static OPCodeFunc codeFuncs[] = {
 
 	[OP_NE_F] = F_OP_NE<vec_t, vec_t, vec_t>,
 	[OP_NE_V] = F_OP_NE<vec3_t, vec3_t, vec_t>,
-	[OP_NE_S] = F_OP_NE<string_t, string_t, vec_t>,
+	[OP_NE_S] = F_OP_NE_S,
 	[OP_NE_E] = F_OP_NE<ent_t, ent_t, vec_t>,
 	[OP_NE_FNC] = F_OP_NE<func_t, func_t, vec_t>,
 	[OP_NE_I] = F_OP_NE<int32_t, int32_t, int32_t>,
@@ -1209,17 +1194,17 @@ static OPCodeFunc codeFuncs[] = {
 		
 	[OP_NOT_F] = F_NOT<vec_t, vec_t>,
 	[OP_NOT_V] = F_NOT<vec3_t, vec_t>,
-	[OP_NOT_S] = F_NOT<string_t, vec_t>,
+	[OP_NOT_S] = F_NOT_S,
 	[OP_NOT_FNC] = F_NOT</*func_t*/int32_t, vec_t>,
 	[OP_NOT_ENT] = F_NOT</*ent_t*/int32_t, vec_t>,
 	[OP_NOT_I] = F_NOT<int32_t, int32_t>,
 		
 	[OP_IF_I] = F_IF<int32_t>,
-	[OP_IF_S] = F_IF<string_t>,
+	[OP_IF_S] = F_IF_S,
 	[OP_IF_F] = F_IF<vec_t>,
 		
 	[OP_IFNOT_I] = F_IFNOT<int32_t>,
-	[OP_IFNOT_S] = F_IFNOT<string_t>,
+	[OP_IFNOT_S] = F_IFNOT_S,
 	[OP_IFNOT_F] = F_IFNOT<vec_t>,
 		
 	[OP_CALL0] = F_CALL<0, false>,
@@ -1290,7 +1275,7 @@ static OPCodeFunc codeFuncs[] = {
 	[OP_LOADP_FLD] = F_OP_LOADP<int32_t>,
 	[OP_LOADP_FNC] = F_OP_LOADP<func_t>,
 	[OP_LOADP_I] = F_OP_LOADP<int32_t>,
-	[OP_LOADP_C] = F_OP_LOADP<uint8_t>,
+	[OP_LOADP_C] = F_OP_LOADP_C,
 
 	[OP_BOUNDCHECK] = F_OP_BOUNDCHECK,
 		
@@ -1320,31 +1305,31 @@ void QCVM::BreakOnCurrentStatement()
 }
 #endif
 
-void QCVM::Execute(QCFunction &function)
+void QCVM::Execute(QCFunction *function)
 {
-	if (function.id < 0)
+	if (function->id < 0)
 	{
 		CallBuiltin(function);
 		return;
 	}
 
-	int enter_depth = 1;
+	int32_t enter_depth = 1;
 
 	Enter(function);
 
 	while (1)
 	{
 		// get next statement
-		auto &current = *state.current;
-		const QCStatement &statement = *(++current.statement);
-		__attribute__((unused)) auto timer = CreateOpcodeTimer(statement.opcode);
+		QCStack *current = state.current;
+		const QCStatement *statement = ++current->statement;
+		__attribute__((unused)) auto timer = CreateOpcodeTimer(statement->opcode & ~OP_BREAKPOINT);
 
 #ifdef ALLOW_PROFILING
-		(*state.current).profile->fields[NumInstructions]++;
+		state.current->profile->fields[NumInstructions]++;
 #endif
 
 #ifdef ALLOW_DEBUGGING
-		if (statement.opcode & OP_BREAKPOINT)
+		if (statement->opcode & OP_BREAKPOINT)
 			BreakOnCurrentStatement();
 		else
 		{
@@ -1352,7 +1337,7 @@ void QCVM::Execute(QCFunction &function)
 			// step into is easiest: next QC execution that is not on the same function+line combo
 			if (debug.state == DEBUG_STEP_INTO)
 			{
-				if (debug.step_function != current.function || LineNumberFor(debug.step_statement) != LineNumberFor(current.statement))
+				if (debug.step_function != current->function || LineNumberFor(debug.step_statement) != LineNumberFor(current->statement))
 					BreakOnCurrentStatement();
 			}
 			// I lied, step out is the easiest
@@ -1364,25 +1349,25 @@ void QCVM::Execute(QCFunction &function)
 			// step over: either step out, or the next step that is in the same function + stack depth + not on same line
 			else if (debug.state == DEBUG_STEP_OVER)
 			{
-				if (debug.step_depth > state.stack.size() || (debug.step_depth == state.stack.size() && debug.step_function == current.function && LineNumberFor(debug.step_statement) != LineNumberFor(current.statement)))
+				if (debug.step_depth > state.stack.size() || (debug.step_depth == state.stack.size() && debug.step_function == current->function && LineNumberFor(debug.step_statement) != LineNumberFor(current->statement)))
 					BreakOnCurrentStatement();
 			}
 		}
 
-		const opcode_t code = static_cast<opcode_t>(static_cast<int32_t>(statement.opcode) & ~OP_BREAKPOINT);
+		const opcode_t code = statement->opcode & ~OP_BREAKPOINT;
 #else
-		const opcode_t code = statement.opcode;
+		const opcode_t code = statement->opcode;
 #endif
 
 		if (code > std::extent_v<decltype(codeFuncs)>)
 			Error("unsupported opcode %i", code);
 
-		auto func = codeFuncs[code];
+		OPCodeFunc func = codeFuncs[code];
 
 		if (!func)
 			Error("unsupported opcode %i", code);
 
-		func(*this, statement.args, enter_depth);
+		func(*this, statement->args, enter_depth);
 
 		if (!enter_depth)
 			return;		// all done
@@ -1430,21 +1415,22 @@ static void VMLoadStatements(FILE *fp, QCStatement *dst, QCHeader &header)
 		std::array<uint16_t, 3>	args;
 	};
 
-	std::vector<QCStatement16> statements;
-	statements.resize(header.sections.statement.size);
-	fread(statements.data(), sizeof(QCStatement16), header.sections.statement.size, fp);
+	QCStatement16 *statements = (QCStatement16 *)gi.TagMalloc(sizeof(QCStatement16) * header.sections.statement.size, TAG_GAME);
+	fread(statements, sizeof(QCStatement16), header.sections.statement.size, fp);
 
 	for (size_t i = 0; i < header.sections.statement.size; i++, dst++)
 	{
-		auto &src = statements.at(i);
+		QCStatement16 *src = statements + i;
 
-		dst->opcode = static_cast<opcode_t>(src.opcode);
+		dst->opcode = (opcode_t)src->opcode;
 		dst->args = {
-			static_cast<global_t>(src.args[0]),
-			static_cast<global_t>(src.args[1]),
-			static_cast<global_t>(src.args[2])
+			(global_t)src->args[0],
+			(global_t)src->args[1],
+			(global_t)src->args[2]
 		};
 	}
+
+	gi.TagFree(statements);
 }
 
 static void VMLoadDefinitions(FILE *fp, QCDefinition *dst, QCHeader &header, const size_t &size)
@@ -1463,18 +1449,19 @@ static void VMLoadDefinitions(FILE *fp, QCDefinition *dst, QCHeader &header, con
 		string_t	name_index;
 	};
 
-	std::vector<QCDefinition16> statements;
-	statements.resize(size);
-	fread(statements.data(), sizeof(QCDefinition16), size, fp);
+	QCDefinition16 *defs = (QCDefinition16 *)gi.TagMalloc(sizeof(QCDefinition16) * size, TAG_GAME);
+	fread(defs, sizeof(QCDefinition16), size, fp);
 
 	for (size_t i = 0; i < size; i++, dst++)
 	{
-		auto &src = statements.at(i);
+		QCDefinition16 *src = defs + i;
 
-		dst->id = static_cast<deftype_t>(src.id);
-		dst->global_index = static_cast<global_t>(src.global_index);
-		dst->name_index = src.name_index;
+		dst->id = (deftype_t)src->id;
+		dst->global_index = (global_t)src->global_index;
+		dst->name_index = src->name_index;
 	}
+
+	gi.TagFree(defs);
 }
 
 void InitVM()
@@ -1499,26 +1486,26 @@ void InitVM()
 		qvm.Error("bad version (only version 6 & 7 progs are supported)");
 
 	qvm.string_size = header.sections.string.size;
-	qvm.string_data.resize(header.sections.string.size);
-	qvm.string_lengths.resize(header.sections.string.size);
+	qvm.string_data = (char *)gi.TagMalloc(sizeof(*qvm.string_data) * header.sections.string.size, TAG_GAME);
+	qvm.string_lengths = (size_t *)gi.TagMalloc(sizeof(*qvm.string_lengths) * header.sections.string.size, TAG_GAME);
 
 	fseek(fp, header.sections.string.offset, SEEK_SET);
-	fread(qvm.string_data.data(), sizeof(char), header.sections.string.size, fp);
+	fread(qvm.string_data, sizeof(char), header.sections.string.size, fp);
 	
 	// create immutable string map, for fast hash action
 	for (size_t i = 0; i < qvm.string_size; i++)
 	{
-		const char *s = qvm.string_data.data() + i;
+		const char *s = qvm.string_data + i;
 
 		if (!*s)
 			continue;
 
-		auto view = std::string_view(s);
+		std::string_view view(s);
 
 		for (size_t x = 0; x < view.length(); x++)
 		{
 			size_t len = view.length() - x;
-			qvm.string_lengths.at(i + x) = len;
+			qvm.string_lengths[i + x] = len;
 			qvm.string_hashes.emplace(std::string_view(s + x, len));
 		}
 
@@ -1542,10 +1529,10 @@ void InitVM()
 	for (auto &definition : qvm.definitions)
 	{
 		if (definition.name_index != STRING_EMPTY)
-			qvm.definition_map_by_name.emplace(qvm.string_data.data() + static_cast<int32_t>(definition.name_index), &definition);
+			qvm.definition_map_by_name.emplace(qvm.string_data + definition.name_index, &definition);
 
-		qvm.definition_map_by_id.emplace(static_cast<global_t>(definition.global_index), &definition);
-		qvm.string_hashes.emplace(qvm.string_data.data() + static_cast<int32_t>(definition.name_index));
+		qvm.definition_map_by_id.emplace(definition.global_index, &definition);
+		qvm.string_hashes.emplace(qvm.string_data + definition.name_index);
 	}
 
 	qvm.fields.resize(header.sections.field.size);
@@ -1556,9 +1543,9 @@ void InitVM()
 	for (auto &field : qvm.fields)
 	{
 		qvm.field_map.emplace(field.global_index, &field);
-		qvm.field_map_by_name.emplace(qvm.string_data.data() + static_cast<int32_t>(field.name_index), &field);
+		qvm.field_map_by_name.emplace(qvm.string_data + field.name_index, &field);
 
-		qvm.string_hashes.emplace(qvm.string_data.data() + static_cast<int32_t>(field.name_index));
+		qvm.string_hashes.emplace(qvm.string_data + field.name_index);
 	}
 
 	qvm.functions.resize(header.sections.function.size);
@@ -1569,7 +1556,7 @@ void InitVM()
 	fseek(fp, header.sections.function.offset, SEEK_SET);
 	fread(qvm.functions.data(), sizeof(QCFunction), header.sections.function.size, fp);
 
-	qvm.global_data = reinterpret_cast<global_t *>(gi.TagMalloc(header.sections.globals.size * sizeof(global_t), TAG_GAME));
+	qvm.global_data = (global_t *)gi.TagMalloc(header.sections.globals.size * sizeof(global_t), TAG_GAME);
 	qvm.global_size = header.sections.globals.size;
 
 	fseek(fp, header.sections.globals.offset, SEEK_SET);
@@ -1636,21 +1623,21 @@ void ShutdownVM()
 
 		for (size_t i = 0; i < qvm.profile_data.size(); i++)
 		{
-			auto &profile = qvm.profile_data[i];
-			auto &ff = qvm.functions[i];
-			const char *name = qvm.GetString(ff.name_index);
+			const QCProfile *profile = qvm.profile_data.data() + i;
+			const QCFunction *ff = qvm.functions.data() + i;
+			const char *name = qvm.GetString(ff->name_index);
 		
-			auto total = std::chrono::duration<double, std::milli>(profile.total).count();
+			const double total = profile->total / 1000000.0;
 			double self = total;
-			double func_call_time = std::chrono::duration<double, std::milli>(profile.call_into).count();
+			const double func_call_time = profile->call_into / 1000000.0;
 		
 			if (func_call_time)
 				self -= func_call_time;
 
 			fprintf(fp, "%i,%s,%f,%f,%f", i, name, total, self, func_call_time);
 		
-			for (profile_type_t f = static_cast<profile_type_t>(0); f < TotalProfileFields; f = static_cast<profile_type_t>(static_cast<size_t>(f) + 1))
-				fprintf(fp, ",%i", profile.fields[f]);
+			for (profile_type_t f = 0; f < TotalProfileFields; f++)
+				fprintf(fp, ",%i", profile->fields[f]);
 
 			fprintf(fp, "\n");
 		}
@@ -1665,11 +1652,10 @@ void ShutdownVM()
 
 		for (size_t i = 0; i < std::extent_v<decltype(qvm.timers)>; i++)
 		{
-			auto &timer = qvm.timers[i];
+			const profile_timer_t *timer = qvm.timers + i;
+			const double total = timer->time / 1000000.0;
 
-			auto total = std::chrono::duration<double, std::milli>(timer.time).count();
-
-			fprintf(fp, "%s,%i,%f\n", timer_type_names[i], timer.count, total);
+			fprintf(fp, "%s,%i,%f\n", timer_type_names[i], timer->count, total);
 		}
 
 		fclose(fp);
@@ -1682,11 +1668,10 @@ void ShutdownVM()
 
 		for (size_t i = 0; i < std::extent_v<decltype(qvm.opcode_timers)>; i++)
 		{
-			auto &timer = qvm.opcode_timers[i];
+			const profile_timer_t *timer = qvm.opcode_timers + i;
+			const double total = timer->time / 1000000.0;
 
-			auto total = std::chrono::duration<double, std::milli>(timer.time).count();
-
-			fprintf(fp, "%i,%i,%f\n", i, timer.count, total);
+			fprintf(fp, "%i,%i,%f\n", i, timer->count, total);
 		}
 
 		fclose(fp);

@@ -5,139 +5,139 @@
 
 static void QC_sound(QCVM &vm)
 {
-	auto entity = vm.ArgvEntity(0);
-	const auto &channel = static_cast<sound_channel_t>(vm.ArgvInt32(1));
-	const auto &soundindex = vm.ArgvInt32(2);
-	const auto &volume = vm.ArgvFloat(3);
-	const auto &attenuation = vm.ArgvFloat(4);
-	const auto &timeofs = vm.ArgvFloat(5);
+	edict_t *entity = vm.ArgvEntity(0);
+	const sound_channel_t channel = vm.ArgvInt32(1);
+	const int32_t soundindex = vm.ArgvInt32(2);
+	const vec_t volume = vm.ArgvFloat(3);
+	const vec_t attenuation = vm.ArgvFloat(4);
+	const vec_t timeofs = vm.ArgvFloat(5);
 
 	gi.sound(entity, channel, soundindex, volume, attenuation, timeofs);
 }
 
 static void QC_positioned_sound(QCVM &vm)
 {
-	const auto &position = vm.ArgvVector(0);
-	auto entity = vm.ArgvEntity(1);
-	const auto &channel = static_cast<sound_channel_t>(vm.ArgvInt32(2));
-	const auto &soundindex = vm.ArgvInt32(3);
-	const auto &volume = vm.ArgvFloat(4);
-	const auto &attenuation = vm.ArgvFloat(5);
-	const auto &timeofs = vm.ArgvFloat(6);
+	const vec3_t position = vm.ArgvVector(0);
+	edict_t *entity = vm.ArgvEntity(1);
+	const sound_channel_t channel = vm.ArgvInt32(2);
+	const int32_t soundindex = vm.ArgvInt32(3);
+	const vec_t volume = vm.ArgvFloat(4);
+	const vec_t attenuation = vm.ArgvFloat(5);
+	const vec_t timeofs = vm.ArgvFloat(6);
 
 	gi.positioned_sound(position, entity, channel, soundindex, volume, attenuation, timeofs);
 }
 
 static void QC_cvar_get_name(QCVM &vm)
 {
-	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
+	const cvar_t *cvar = (cvar_t *)vm.ArgvInt32(0);
 	vm.ReturnString(std::string(cvar->name));
 }
 
 static void QC_cvar_get_string(QCVM &vm)
 {
-	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
+	const cvar_t *cvar = (cvar_t *)vm.ArgvInt32(0);
 	vm.ReturnString(std::string(cvar->string));
 }
 
 static void QC_cvar_get_latched_string(QCVM &vm)
 {
-	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
+	const cvar_t *cvar = (cvar_t *)vm.ArgvInt32(0);
 	vm.ReturnString(std::string(cvar->latched_string));
 }
 
 static void QC_cvar_get_modified(QCVM &vm)
 {
-	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
+	const cvar_t *cvar = (cvar_t *)vm.ArgvInt32(0);
 	vm.ReturnInt(cvar->modified);
 }
 static void QC_cvar_get_flags(QCVM &vm)
 {
-	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
+	const cvar_t *cvar = (cvar_t *)vm.ArgvInt32(0);
 	vm.ReturnInt(cvar->flags);
 }
 
 static void QC_cvar_set_modified(QCVM &vm)
 {
-	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
-	const auto &value = vm.ArgvInt32(1);
+	cvar_t *cvar = (cvar_t *)vm.ArgvInt32(0);
+	const qboolean value = (qboolean)vm.ArgvInt32(1);
 
-	cvar->modified = static_cast<qboolean>(value);
+	cvar->modified = value;
 }
 
 static void QC_cvar_get_floatVal(QCVM &vm)
 {
-	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
+	const cvar_t *cvar = (cvar_t *)vm.ArgvInt32(0);
 	vm.ReturnFloat(cvar->value);
 }
 
 static void QC_cvar_get_intVal(QCVM &vm)
 {
-	auto cvar = reinterpret_cast<cvar_t *>(vm.ArgvInt32(0));
-	vm.ReturnInt(static_cast<int32_t>(cvar->value));
+	const cvar_t *cvar = (cvar_t *)vm.ArgvInt32(0);
+	vm.ReturnInt((int32_t)cvar->value);
 }
 
 static void QC_cvar(QCVM &vm)
 {
-	const auto &name = vm.ArgvString(0);
-	const auto &value = vm.ArgvString(1);
-	const auto &flags = static_cast<cvar_flags_t>(vm.ArgvInt32(2));
+	const char *name = vm.ArgvString(0);
+	const char *value = vm.ArgvString(1);
+	const cvar_flags_t flags = vm.ArgvInt32(2);
 
-	auto cvar = gi.cvar(name, value, flags);
+	cvar_t *cvar = gi.cvar(name, value, flags);
 
-	vm.ReturnInt(reinterpret_cast<int32_t>(cvar));
+	vm.ReturnInt((int32_t)cvar);
 }
 
 static void QC_cvar_set(QCVM &vm)
 {
-	const auto &name = vm.ArgvString(0);
-	const auto &value = vm.ArgvString(1);
+	const char *name = vm.ArgvString(0);
+	const char *value = vm.ArgvString(1);
 	gi.cvar_set(name, value);
 }
 
 static void QC_cvar_forceset(QCVM &vm)
 {
-	const auto &name = vm.ArgvString(0);
-	const auto &value = vm.ArgvString(1);
+	const char *name = vm.ArgvString(0);
+	const char *value = vm.ArgvString(1);
 	gi.cvar_forceset(name, value);
 }
 
 static void QC_configstring(QCVM &vm)
 {
-	const auto &id = static_cast<config_string_t>(vm.ArgvInt32(0));
-	const auto &str = vm.ArgvString(1);
+	const config_string_t id = vm.ArgvInt32(0);
+	const char *str = vm.ArgvString(1);
 
 	gi.configstring(id, str);
 }
 
 [[noreturn]] static void QC_error(QCVM &vm)
 {
-	const auto &fmtid = vm.ArgvStringID(0);
+	const string_t fmtid = vm.ArgvStringID(0);
 	vm.Error(ParseFormat(fmtid, vm, 1).data());
 }
 
 static void QC_modelindex(QCVM &vm)
 {
-	const auto &str = vm.ArgvString(0);
+	const char *str = vm.ArgvString(0);
 	vm.ReturnInt(gi.modelindex(str));
 }
 
 static void QC_soundindex(QCVM &vm)
 {
-	const auto &str = vm.ArgvString(0);
+	const char *str = vm.ArgvString(0);
 	vm.ReturnInt(gi.soundindex(str));
 }
 
 static void QC_imageindex(QCVM &vm)
 {
-	const auto &str = vm.ArgvString(0);
+	const char *str = vm.ArgvString(0);
 	vm.ReturnInt(gi.imageindex(str));
 }
 
 static void QC_setmodel(QCVM &vm)
 {
-	auto ent = vm.ArgvEntity(0);
-	const auto &str = vm.ArgvString(1);
+	edict_t *ent = vm.ArgvEntity(0);
+	const char *str = vm.ArgvString(1);
 
 	gi.setmodel(ent, str);
 }
@@ -146,7 +146,7 @@ typedef int QC_csurface_t;
 
 static void QC_csurface_get_name(QCVM &vm)
 {
-	auto surf = reinterpret_cast<csurface_t *>(vm.ArgvInt32(0));
+	const csurface_t *surf = (csurface_t *)vm.ArgvInt32(0);
 
 	if (!surf)
 		vm.ReturnString(STRING_EMPTY);
@@ -156,7 +156,7 @@ static void QC_csurface_get_name(QCVM &vm)
 
 static void QC_csurface_get_flags(QCVM &vm)
 {
-	auto surf = reinterpret_cast<csurface_t *>(vm.ArgvInt32(0));
+	const csurface_t *surf = (csurface_t *)vm.ArgvInt32(0);
 
 	if (!surf)
 		vm.ReturnInt(0);
@@ -166,7 +166,7 @@ static void QC_csurface_get_flags(QCVM &vm)
 
 static void QC_csurface_get_value(QCVM &vm)
 {
-	auto surf = reinterpret_cast<csurface_t *>(vm.ArgvInt32(0));
+	const csurface_t *surf = (csurface_t *)vm.ArgvInt32(0);
 
 	if (!surf)
 		vm.ReturnInt(0);
@@ -188,71 +188,71 @@ struct QC_trace_t
 
 static void QC_trace(QCVM &vm)
 {
-	auto &trace = *vm.GetGlobalPtr<QC_trace_t>(GLOBAL_PARM0);
-	const auto &start = vm.ArgvVector(1);
-	const auto &mins = vm.ArgvVector(2);
-	const auto &maxs = vm.ArgvVector(3);
-	const auto &end = vm.ArgvVector(4);
-	auto ent = vm.ArgvEntity(5);
-	const auto &contents = static_cast<content_flags_t>(vm.ArgvInt32(6));
+	QC_trace_t *trace = vm.GetGlobalPtr<QC_trace_t>(GLOBAL_PARM0);
+	const vec3_t start = vm.ArgvVector(1);
+	const vec3_t mins = vm.ArgvVector(2);
+	const vec3_t maxs = vm.ArgvVector(3);
+	const vec3_t end = vm.ArgvVector(4);
+	edict_t *ent = vm.ArgvEntity(5);
+	const content_flags_t contents = vm.ArgvInt32(6);
 
-	auto trace_result = gi.trace(start, mins, maxs, end, ent, contents);
+	trace_t trace_result = gi.trace(start, mins, maxs, end, ent, contents);
 	
-	trace.allsolid = trace_result.allsolid;
-	trace.startsolid = trace_result.startsolid;
-	trace.fraction = trace_result.fraction;
-	trace.endpos = trace_result.endpos;
-	trace.plane = trace_result.plane;
-	trace.surface = static_cast<QC_csurface_t>(reinterpret_cast<int32_t>(trace_result.surface));
-	trace.contents = trace_result.contents;
-	trace.ent = vm.EntityToEnt(trace_result.ent);
-	vm.dynamic_strings.CheckRefUnset(&trace, sizeof(trace) / sizeof(global_t));
+	trace->allsolid = trace_result.allsolid;
+	trace->startsolid = trace_result.startsolid;
+	trace->fraction = trace_result.fraction;
+	trace->endpos = trace_result.endpos;
+	trace->plane = trace_result.plane;
+	trace->surface = (QC_csurface_t)trace_result.surface;
+	trace->contents = trace_result.contents;
+	trace->ent = vm.EntityToEnt(trace_result.ent);
+	vm.dynamic_strings.CheckRefUnset(trace, sizeof(*trace) / sizeof(global_t));
 }
 
 static void QC_pointcontents(QCVM &vm)
 {
-	const auto &pos = vm.ArgvVector(0);
+	const vec3_t pos = vm.ArgvVector(0);
 	vm.ReturnInt(gi.pointcontents(pos));
 }
 
 static void QC_inPVS(QCVM &vm)
 {
-	const auto &a = vm.ArgvVector(0);
-	const auto &b = vm.ArgvVector(1);
+	const vec3_t a = vm.ArgvVector(0);
+	const vec3_t b = vm.ArgvVector(1);
 	vm.ReturnInt(gi.inPVS(a, b));
 }
 
 static void QC_inPHS(QCVM &vm)
 {
-	const auto &a = vm.ArgvVector(0);
-	const auto &b = vm.ArgvVector(1);
+	const vec3_t a = vm.ArgvVector(0);
+	const vec3_t b = vm.ArgvVector(1);
 	vm.ReturnInt(gi.inPHS(a, b));
 }
 
 static void QC_SetAreaPortalState(QCVM &vm)
 {
-	const auto &num = vm.ArgvInt32(0);
-	const auto &state = static_cast<qboolean>(vm.ArgvInt32(1));
+	const int32_t num = vm.ArgvInt32(0);
+	const qboolean state = (qboolean)vm.ArgvInt32(1);
 
 	gi.SetAreaPortalState(num, state);
 }
 
 static void QC_AreasConnected(QCVM &vm)
 {
-	const auto &a = vm.ArgvInt32(0);
-	const auto &b = vm.ArgvInt32(1);
+	const int32_t a = vm.ArgvInt32(0);
+	const int32_t b = vm.ArgvInt32(1);
 	vm.ReturnInt(gi.AreasConnected(a, b));
 }
 
 static void QC_linkentity(QCVM &vm)
 {
-	auto ent = vm.ArgvEntity(0);
+	edict_t *ent = vm.ArgvEntity(0);
 	gi.linkentity(ent);
 }
 
 static void QC_unlinkentity(QCVM &vm)
 {
-	auto ent = vm.ArgvEntity(0);
+	edict_t *ent = vm.ArgvEntity(0);
 	gi.unlinkentity(ent);
 }
 
@@ -267,13 +267,13 @@ static void QC_entity_set_alloc(QCVM &vm)
 	else
 		edicts = new QC_entity_set_t;
 
-	vm.ReturnInt(reinterpret_cast<int32_t>(edicts));
+	vm.ReturnInt((int32_t)edicts);
 }
 
 static void QC_entity_set_get(QCVM &vm)
 {
-	auto *edicts = reinterpret_cast<QC_entity_set_t *>(vm.ArgvInt32(0));
-	const auto &index = vm.ArgvInt32(1);
+	QC_entity_set_t *edicts = (QC_entity_set_t *)vm.ArgvInt32(0);
+	const int32_t index = vm.ArgvInt32(1);
 
 	if (index < 0 || index >= edicts->size())
 		vm.Error("Out of bounds access");
@@ -283,8 +283,8 @@ static void QC_entity_set_get(QCVM &vm)
 
 static void QC_entity_set_add(QCVM &vm)
 {
-	auto *edicts = reinterpret_cast<QC_entity_set_t *>(vm.ArgvInt32(0));
-	auto ent = vm.ArgvEntity(1);
+	QC_entity_set_t *edicts = (QC_entity_set_t *)vm.ArgvInt32(0);
+	edict_t *ent = vm.ArgvEntity(1);
 
 	if (std::find(edicts->begin(), edicts->end(), ent) == edicts->end())
 		edicts->push_back(ent);
@@ -292,8 +292,8 @@ static void QC_entity_set_add(QCVM &vm)
 
 static void QC_entity_set_remove(QCVM &vm)
 {
-	auto *edicts = reinterpret_cast<QC_entity_set_t *>(vm.ArgvInt32(0));
-	auto ent = vm.ArgvEntity(1);
+	QC_entity_set_t *edicts = (QC_entity_set_t *)vm.ArgvInt32(0);
+	edict_t *ent = vm.ArgvEntity(1);
 	auto where = std::find(edicts->begin(), edicts->end(), ent);
 	
 	if (where == edicts->end())
@@ -304,35 +304,35 @@ static void QC_entity_set_remove(QCVM &vm)
 
 static void QC_entity_set_length(QCVM &vm)
 {
-	auto *edicts = reinterpret_cast<QC_entity_set_t *>(vm.ArgvInt32(0));
-	vm.ReturnInt(static_cast<int32_t>(edicts->size()));
+	QC_entity_set_t *edicts = (QC_entity_set_t *)vm.ArgvInt32(0);
+	vm.ReturnInt((int32_t)edicts->size());
 }
 
 static void QC_entity_set_clear(QCVM &vm)
 {
-	auto *edicts = reinterpret_cast<QC_entity_set_t *>(vm.ArgvInt32(0));
+	QC_entity_set_t *edicts = (QC_entity_set_t *)vm.ArgvInt32(0);
 	edicts->clear();
 }
 
 static void QC_entity_set_free(QCVM &vm)
 {
-	auto *edicts = reinterpret_cast<QC_entity_set_t *>(vm.ArgvInt32(0));
+	QC_entity_set_t *edicts = (QC_entity_set_t *)vm.ArgvInt32(0);
 	delete edicts;
 }
 
 static void QC_BoxEdicts(QCVM &vm)
 {
-	const auto &mins = vm.ArgvVector(0);
-	const auto &maxs = vm.ArgvVector(1);
-	const auto &maxcount = vm.ArgvInt32(2);
-	const auto &areatype = static_cast<box_edicts_area_t>(vm.ArgvInt32(3));
+	const vec3_t mins = vm.ArgvVector(0);
+	const vec3_t maxs = vm.ArgvVector(1);
+	const int32_t maxcount = vm.ArgvInt32(2);
+	const box_edicts_area_t areatype = vm.ArgvInt32(3);
 
-	auto edicts = new QC_entity_set_t(maxcount);
-	auto count = gi.BoxEdicts(mins, maxs, edicts->data(), maxcount, areatype);
+	QC_entity_set_t *edicts = new QC_entity_set_t(maxcount);
+	const int32_t count = gi.BoxEdicts(mins, maxs, edicts->data(), maxcount, areatype);
 	edicts->resize(count);
 	edicts->shrink_to_fit();
 
-	vm.ReturnInt(reinterpret_cast<int32_t>(edicts));
+	vm.ReturnInt((int32_t)edicts);
 }
 
 struct QC_pmove_state_t
@@ -380,9 +380,9 @@ static func_t QC_pm_pointcontents_func;
 
 static content_flags_t QC_pm_pointcontents(const vec3_t &position)
 {
-	auto func = qvm.FindFunction(QC_pm_pointcontents_func);
+	QCFunction *func = qvm.FindFunction(QC_pm_pointcontents_func);
 	qvm.SetGlobal(GLOBAL_PARM0, position);
-	qvm.Execute(*func);
+	qvm.Execute(func);
 	return qvm.GetGlobal<content_flags_t>(GLOBAL_RETURN);
 }
 
@@ -392,23 +392,23 @@ static trace_t QC_pm_trace(const vec3_t &start, const vec3_t &mins, const vec3_t
 {
 	QC_trace_t qc_tr;
 
-	auto func = qvm.FindFunction(QC_pm_trace_func);
+	QCFunction *func = qvm.FindFunction(QC_pm_trace_func);
 	qvm.SetAllowedStack(&qc_tr, sizeof(qc_tr));
-	qvm.SetGlobal(GLOBAL_PARM0, reinterpret_cast<ptrdiff_t>(&qc_tr));
+	qvm.SetGlobal(GLOBAL_PARM0, (ptrdiff_t)&qc_tr);
 	qvm.SetGlobal(GLOBAL_PARM1, start);
 	qvm.SetGlobal(GLOBAL_PARM2, mins);
 	qvm.SetGlobal(GLOBAL_PARM3, maxs);
 	qvm.SetGlobal(GLOBAL_PARM4, end);
-	qvm.Execute(*func);
+	qvm.Execute(func);
 
 	trace_t tr;
-	tr.allsolid = static_cast<qboolean>(qc_tr.allsolid);
-	tr.startsolid = static_cast<qboolean>(qc_tr.startsolid);
+	tr.allsolid = (qboolean)qc_tr.allsolid;
+	tr.startsolid = (qboolean)qc_tr.startsolid;
 	tr.fraction = qc_tr.fraction;
 	tr.endpos = qc_tr.endpos;
 	tr.plane = qc_tr.plane;
-	tr.surface = reinterpret_cast<csurface_t *>(qc_tr.surface);
-	tr.contents = static_cast<content_flags_t>(qc_tr.contents);
+	tr.surface = (csurface_t *)qc_tr.surface;
+	tr.contents = (content_flags_t)qc_tr.contents;
 	tr.ent = qvm.EntToEntity(qc_tr.ent);
 
 	return tr;
@@ -416,51 +416,51 @@ static trace_t QC_pm_trace(const vec3_t &start, const vec3_t &mins, const vec3_t
 
 static void QC_Pmove(QCVM &vm)
 {
-	auto &qc_pm = *vm.GetGlobalPtr<QC_pmove_t>(GLOBAL_PARM0);
+	QC_pmove_t *qc_pm = vm.GetGlobalPtr<QC_pmove_t>(GLOBAL_PARM0);
 
 	pmove_t pm;
 
 	// set in parameters
-	pm.s.pm_type = qc_pm.s.pm_type;
+	pm.s.pm_type = qc_pm->s.pm_type;
 	for (int32_t i = 0; i < 3; i++)
 	{
-		pm.s.origin[i] = qc_pm.s.origin[i] * coord2short;
-		pm.s.velocity[i] = qc_pm.s.velocity[i] * coord2short;
-		pm.s.delta_angles[i] = qc_pm.s.delta_angles[i] * angle2short;
-		pm.cmd.angles[i] = qc_pm.cmd.angles[i] * angle2short;
+		pm.s.origin[i] = qc_pm->s.origin[i] * coord2short;
+		pm.s.velocity[i] = qc_pm->s.velocity[i] * coord2short;
+		pm.s.delta_angles[i] = qc_pm->s.delta_angles[i] * angle2short;
+		pm.cmd.angles[i] = qc_pm->cmd.angles[i] * angle2short;
 	}
-	pm.s.pm_flags = static_cast<pmflags_t>(qc_pm.s.pm_flags);
-	pm.s.pm_time = qc_pm.s.pm_time;
-	pm.s.gravity = qc_pm.s.gravity;
-	pm.cmd.buttons = static_cast<button_bits_t>(qc_pm.cmd.buttons);
-	pm.cmd.forwardmove = qc_pm.cmd.forwardmove;
-	pm.cmd.impulse = qc_pm.cmd.impulse;
-	pm.cmd.lightlevel = qc_pm.cmd.lightlevel;
-	pm.cmd.msec = qc_pm.cmd.msec;
-	pm.cmd.sidemove = qc_pm.cmd.sidemove;
-	pm.cmd.upmove = qc_pm.cmd.upmove;
+	pm.s.pm_flags = (pmflags_t)qc_pm->s.pm_flags;
+	pm.s.pm_time = qc_pm->s.pm_time;
+	pm.s.gravity = qc_pm->s.gravity;
+	pm.cmd.buttons = (button_bits_t)qc_pm->cmd.buttons;
+	pm.cmd.forwardmove = qc_pm->cmd.forwardmove;
+	pm.cmd.impulse = qc_pm->cmd.impulse;
+	pm.cmd.lightlevel = qc_pm->cmd.lightlevel;
+	pm.cmd.msec = qc_pm->cmd.msec;
+	pm.cmd.sidemove = qc_pm->cmd.sidemove;
+	pm.cmd.upmove = qc_pm->cmd.upmove;
 
-	QC_pm_pointcontents_func = qc_pm.pointcontents;
+	QC_pm_pointcontents_func = qc_pm->pointcontents;
 	pm.pointcontents = QC_pm_pointcontents;
 
-	QC_pm_trace_func = qc_pm.trace;
+	QC_pm_trace_func = qc_pm->trace;
 	pm.trace = QC_pm_trace;
 
 	gi.Pmove(&pm);
 
 	// copy out parameters
-	qc_pm.s.pm_type = pm.s.pm_type;
+	qc_pm->s.pm_type = pm.s.pm_type;
 	for (int32_t i = 0; i < 3; i++)
 	{
-		qc_pm.s.origin[i] = pm.s.origin[i] * short2coord;
-		qc_pm.s.velocity[i] = pm.s.velocity[i] * short2coord;
-		qc_pm.s.delta_angles[i] = pm.s.delta_angles[i] * short2angle;
+		qc_pm->s.origin[i] = pm.s.origin[i] * short2coord;
+		qc_pm->s.velocity[i] = pm.s.velocity[i] * short2coord;
+		qc_pm->s.delta_angles[i] = pm.s.delta_angles[i] * short2angle;
 	}
-	qc_pm.s.pm_flags = pm.s.pm_flags;
-	qc_pm.s.pm_time = pm.s.pm_time;
-	qc_pm.s.gravity = pm.s.gravity;
+	qc_pm->s.pm_flags = pm.s.pm_flags;
+	qc_pm->s.pm_time = pm.s.pm_time;
+	qc_pm->s.gravity = pm.s.gravity;
 
-	qc_pm.touchents = &touchents_memory;
+	qc_pm->touchents = &touchents_memory;
 
 	std::unordered_set<edict_t *>	touchents;
 
@@ -471,102 +471,103 @@ static void QC_Pmove(QCVM &vm)
 	
 	std::copy(touchents.begin(), touchents.end(), touchents_memory.begin());
 
-	qc_pm.viewangles = pm.viewangles;
-	qc_pm.viewheight = pm.viewheight;
+	qc_pm->viewangles = pm.viewangles;
+	qc_pm->viewheight = pm.viewheight;
 	
-	qc_pm.mins = pm.mins;
-	qc_pm.maxs = pm.maxs;
+	qc_pm->mins = pm.mins;
+	qc_pm->maxs = pm.maxs;
 
 	if (!pm.groundentity)
-		qc_pm.groundentity = ENT_INVALID;
+		qc_pm->groundentity = ENT_INVALID;
 	else
-		qc_pm.groundentity = vm.EntityToEnt(pm.groundentity);
-	qc_pm.watertype = pm.watertype;
-	qc_pm.waterlevel = pm.waterlevel;
-	vm.dynamic_strings.CheckRefUnset(&qc_pm, sizeof(qc_pm) / sizeof(global_t));
+		qc_pm->groundentity = vm.EntityToEnt(pm.groundentity);
+	qc_pm->watertype = pm.watertype;
+	qc_pm->waterlevel = pm.waterlevel;
+	vm.dynamic_strings.CheckRefUnset(qc_pm, sizeof(*qc_pm) / sizeof(global_t));
 }
 
 static void QC_multicast(QCVM &vm)
 {
-	const auto &pos = vm.ArgvVector(0);
-	const auto &type = vm.ArgvInt32(1);
+	const vec3_t pos = vm.ArgvVector(0);
+	const multicast_t type = vm.ArgvInt32(1);
 
-	gi.multicast(pos, static_cast<multicast_t>(type));
+	gi.multicast(pos, type);
 }
 
 static void QC_unicast(QCVM &vm)
 {
-	auto ent = vm.ArgvEntity(0);
-	const auto &reliable = vm.ArgvInt32(1);
+	edict_t *ent = vm.ArgvEntity(0);
+	const qboolean reliable = (qboolean)vm.ArgvInt32(1);
 
-	gi.unicast(ent, static_cast<qboolean>(reliable));
+	gi.unicast(ent, reliable);
 }
 
 static void QC_WriteChar(QCVM &vm)
 {
-	const auto &val = vm.ArgvInt32(0);
+	const int32_t val = vm.ArgvInt32(0);
 
 	gi.WriteChar(val);
 }
 
 static void QC_WriteByte(QCVM &vm)
 {
-	const auto &val = vm.ArgvInt32(0);
+	const int32_t val = vm.ArgvInt32(0);
 
 	gi.WriteByte(val);
 }
 
 static void QC_WriteShort(QCVM &vm)
 {
-	const auto &val = vm.ArgvInt32(0);
+	const int32_t val = vm.ArgvInt32(0);
 
 	gi.WriteShort(val);
 }
 
 static void QC_WriteLong(QCVM &vm)
 {
-	const auto &val = vm.ArgvInt32(0);
+	const int32_t val = vm.ArgvInt32(0);
 
 	gi.WriteLong(val);
 }
 
 static void QC_WriteFloat(QCVM &vm)
 {
-	const auto &val = vm.ArgvFloat(0);
+	const vec_t val = vm.ArgvFloat(0);
 
 	gi.WriteFloat(val);
 }
 
 static void QC_WriteString(QCVM &vm)
 {
-	const auto &val = vm.ArgvString(0);
+	const char *val = vm.ArgvString(0);
 
 	gi.WriteString(val);
 }
 
 static void QC_WritePosition(QCVM &vm)
 {
-	const auto &val = vm.ArgvVector(0);
+	const vec3_t val = vm.ArgvVector(0);
 
 	gi.WritePosition(val);
 }
 
 static void QC_WriteDir(QCVM &vm)
 {
-	const auto &val = vm.ArgvVector(0);
+	const vec3_t val = vm.ArgvVector(0);
 
 	gi.WriteDir(val);
 }
 
 static void QC_WriteAngle(QCVM &vm)
 {
-	const auto &val = vm.ArgvFloat(0);
+	const vec_t val = vm.ArgvFloat(0);
 
 	gi.WriteAngle(val);
 }
+
 static void QC_argv(QCVM &vm)
 {
-	const auto &n = vm.ArgvInt32(0);
+	const int32_t n = vm.ArgvInt32(0);
 	vm.ReturnString(std::string(gi.argv(n)));
 }
 
@@ -587,37 +588,36 @@ static void QC_AddCommandString(QCVM &vm)
 
 static void QC_bprintf(QCVM &vm)
 {
-	const auto &level = static_cast<print_level_t>(vm.ArgvInt32(0));
-	const auto &fmtid = vm.ArgvStringID(1);
+	const print_level_t level = vm.ArgvInt32(0);
+	const string_t fmtid = vm.ArgvStringID(1);
 	gi.bprintf(level, "%s", ParseFormat(fmtid, vm, 2).data());
 }
 
 static void QC_dprintf(QCVM &vm)
 {
-	const auto &fmtid = vm.ArgvStringID(0);
-	const auto &str = ParseFormat(fmtid, vm, 1);
-	gi.dprintf("%s", str.data());
+	const string_t fmtid = vm.ArgvStringID(0);
+	gi.dprintf("%s", ParseFormat(fmtid, vm, 1).data());
 }
 
 static void QC_cprintf(QCVM &vm)
 {
-	auto ent = vm.ArgvEntity(0);
-	const auto &level = static_cast<print_level_t>(vm.ArgvInt32(1));
-	const auto &fmtid = vm.ArgvStringID(2);
+	edict_t *ent = vm.ArgvEntity(0);
+	const print_level_t level = vm.ArgvInt32(1);
+	const string_t fmtid = vm.ArgvStringID(2);
 	gi.cprintf(ent, level, "%s", ParseFormat(fmtid, vm, 3).data());
 }
 
 static void QC_centerprintf(QCVM &vm)
 {
-	auto ent = vm.ArgvEntity(0);
-	const auto &fmtid = vm.ArgvStringID(1);
+	edict_t *ent = vm.ArgvEntity(0);
+	const string_t fmtid = vm.ArgvStringID(1);
 	gi.centerprintf(ent, "%s", ParseFormat(fmtid, vm, 2).data());
 }
 
 static void QC_DebugGraph(QCVM &vm)
 {
-	const auto &a = vm.ArgvFloat(0);
-	const auto &b = vm.ArgvInt32(1);
+	const vec_t a = vm.ArgvFloat(0);
+	const int32_t b = vm.ArgvInt32(1);
 	gi.DebugGraph(a, b);
 }
 

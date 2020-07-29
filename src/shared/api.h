@@ -33,15 +33,9 @@ constexpr int GAME_API_VERSION	= 3;
 //
 constexpr size_t MAX_CLIENTS		= 256;	// absolute limit
 constexpr size_t MAX_EDICTS			= 1024;	// must change protocol to increase more
-constexpr size_t MAX_LIGHTSTYLES	= 256;
-constexpr size_t MAX_MODELS			= 256;	// these are sent over the net as bytes
-constexpr size_t MAX_SOUNDS			= 256;	// so they cannot be blindly increased
-constexpr size_t MAX_IMAGES			= 256;
-constexpr size_t MAX_ITEMS			= 256;
-constexpr size_t MAX_GENERAL		= (MAX_CLIENTS * 2); // general config strings
 
 // game print flags
-enum print_level_t
+enum
 {
 	PRINT_LOW,		// pickup messages
 	PRINT_MEDIUM,	// death messages
@@ -49,8 +43,10 @@ enum print_level_t
 	PRINT_CHAT		// chat messages    
 };
 
+typedef int print_level_t;
+
 // destination class for gi.multicast()
-enum multicast_t
+enum
 {
 	MULTICAST_ALL,
 	MULTICAST_PHS,
@@ -60,366 +56,8 @@ enum multicast_t
 	MULTICAST_PVS_R
 };
 
-//
-// muzzle flashes / player effects
-//
-enum muzzleflash_t
-{
-	MZ_BLASTER,
-	MZ_MACHINEGUN,
-	MZ_SHOTGUN,
-	MZ_CHAINGUN1,
-	MZ_CHAINGUN2,
-	MZ_CHAINGUN3,
-	MZ_RAILGUN,
-	MZ_ROCKET,
-	MZ_GRENADE,
-	MZ_LOGIN,
-	MZ_LOGOUT,
-	MZ_RESPAWN,
-	MZ_BFG,
-	MZ_SSHOTGUN,
-	MZ_HYPERBLASTER,
-	MZ_ITEMRESPAWN,
-// RAFAEL
-	MZ_IONRIPPER,
-	MZ_BLUEHYPERBLASTER,
-	MZ_PHALANX,
-// RAFAEL
+typedef int multicast_t;
 
-//ROGUE
-	MZ_ETF_RIFLE	= 30,
-	MZ_UNUSED,
-	MZ_SHOTGUN2,
-	MZ_HEATBEAM,
-	MZ_BLASTER2,
-	MZ_TRACKER,
-	MZ_NUKE1,
-	MZ_NUKE2,
-	MZ_NUKE4,
-	MZ_NUKE8,
-//ROGUE
-
-	MZ_SILENCED		= 128	// bit flag ORed with one of the above numbers
-};
-
-//
-// monster muzzle flashes
-//
-enum monster_muzzleflash_t
-{
-	MZ2_TANK_BLASTER_1	= 1,
-	MZ2_TANK_BLASTER_2,
-	MZ2_TANK_BLASTER_3,
-	MZ2_TANK_MACHINEGUN_1,
-	MZ2_TANK_MACHINEGUN_2,
-	MZ2_TANK_MACHINEGUN_3,
-	MZ2_TANK_MACHINEGUN_4,
-	MZ2_TANK_MACHINEGUN_5,
-	MZ2_TANK_MACHINEGUN_6,
-	MZ2_TANK_MACHINEGUN_7,
-	MZ2_TANK_MACHINEGUN_8,
-	MZ2_TANK_MACHINEGUN_9,
-	MZ2_TANK_MACHINEGUN_10,
-	MZ2_TANK_MACHINEGUN_11,
-	MZ2_TANK_MACHINEGUN_12,
-	MZ2_TANK_MACHINEGUN_13,
-	MZ2_TANK_MACHINEGUN_14,
-	MZ2_TANK_MACHINEGUN_15,
-	MZ2_TANK_MACHINEGUN_16,
-	MZ2_TANK_MACHINEGUN_17,
-	MZ2_TANK_MACHINEGUN_18,
-	MZ2_TANK_MACHINEGUN_19,
-	MZ2_TANK_ROCKET_1,
-	MZ2_TANK_ROCKET_2,
-	MZ2_TANK_ROCKET_3,
-
-	MZ2_INFANTRY_MACHINEGUN_1,
-	MZ2_INFANTRY_MACHINEGUN_2,
-	MZ2_INFANTRY_MACHINEGUN_3,
-	MZ2_INFANTRY_MACHINEGUN_4,
-	MZ2_INFANTRY_MACHINEGUN_5,
-	MZ2_INFANTRY_MACHINEGUN_6,
-	MZ2_INFANTRY_MACHINEGUN_7,
-	MZ2_INFANTRY_MACHINEGUN_8,
-	MZ2_INFANTRY_MACHINEGUN_9,
-	MZ2_INFANTRY_MACHINEGUN_10,
-	MZ2_INFANTRY_MACHINEGUN_11,
-	MZ2_INFANTRY_MACHINEGUN_12,
-	MZ2_INFANTRY_MACHINEGUN_13,
-	
-	MZ2_SOLDIER_BLASTER_1,
-	MZ2_SOLDIER_BLASTER_2,
-	MZ2_SOLDIER_SHOTGUN_1,
-	MZ2_SOLDIER_SHOTGUN_2,
-	MZ2_SOLDIER_MACHINEGUN_1,
-	MZ2_SOLDIER_MACHINEGUN_2,
-	
-	MZ2_GUNNER_MACHINEGUN_1,
-	MZ2_GUNNER_MACHINEGUN_2,
-	MZ2_GUNNER_MACHINEGUN_3,
-	MZ2_GUNNER_MACHINEGUN_4,
-	MZ2_GUNNER_MACHINEGUN_5,
-	MZ2_GUNNER_MACHINEGUN_6,
-	MZ2_GUNNER_MACHINEGUN_7,
-	MZ2_GUNNER_MACHINEGUN_8,
-	MZ2_GUNNER_GRENADE_1,
-	MZ2_GUNNER_GRENADE_2,
-	MZ2_GUNNER_GRENADE_3,
-	MZ2_GUNNER_GRENADE_4,
-
-	MZ2_CHICK_ROCKET_1,
-	
-	MZ2_FLYER_BLASTER_1,
-	MZ2_FLYER_BLASTER_2,
-	
-	MZ2_MEDIC_BLASTER_1,
-	
-	MZ2_GLADIATOR_RAILGUN_1,
-	
-	MZ2_HOVER_BLASTER_1,
-	
-	MZ2_ACTOR_MACHINEGUN_1,
-	
-	MZ2_SUPERTANK_MACHINEGUN_1,
-	MZ2_SUPERTANK_MACHINEGUN_2,
-	MZ2_SUPERTANK_MACHINEGUN_3,
-	MZ2_SUPERTANK_MACHINEGUN_4,
-	MZ2_SUPERTANK_MACHINEGUN_5,
-	MZ2_SUPERTANK_MACHINEGUN_6,
-	MZ2_SUPERTANK_ROCKET_1,
-	MZ2_SUPERTANK_ROCKET_2,
-	MZ2_SUPERTANK_ROCKET_3,
-	
-	MZ2_BOSS2_MACHINEGUN_L1,
-	MZ2_BOSS2_MACHINEGUN_L2,
-	MZ2_BOSS2_MACHINEGUN_L3,
-	MZ2_BOSS2_MACHINEGUN_L4,
-	MZ2_BOSS2_MACHINEGUN_L5,
-	MZ2_BOSS2_ROCKET_1,
-	MZ2_BOSS2_ROCKET_2,
-	MZ2_BOSS2_ROCKET_3,
-	MZ2_BOSS2_ROCKET_4,
-	
-	MZ2_FLOAT_BLASTER_1,
-
-	MZ2_SOLDIER_BLASTER_3,
-	MZ2_SOLDIER_SHOTGUN_3,
-	MZ2_SOLDIER_MACHINEGUN_3,
-	MZ2_SOLDIER_BLASTER_4,
-	MZ2_SOLDIER_SHOTGUN_4,
-	MZ2_SOLDIER_MACHINEGUN_4,
-	MZ2_SOLDIER_BLASTER_5,
-	MZ2_SOLDIER_SHOTGUN_5,
-	MZ2_SOLDIER_MACHINEGUN_5,
-	MZ2_SOLDIER_BLASTER_6,
-	MZ2_SOLDIER_SHOTGUN_6,
-	MZ2_SOLDIER_MACHINEGUN_6,
-	MZ2_SOLDIER_BLASTER_7,
-	MZ2_SOLDIER_SHOTGUN_7,
-	MZ2_SOLDIER_MACHINEGUN_7,
-	MZ2_SOLDIER_BLASTER_8,
-	MZ2_SOLDIER_SHOTGUN_8,
-	MZ2_SOLDIER_MACHINEGUN_8,
-
-// Xian
-	MZ2_MAKRON_BFG,
-	MZ2_MAKRON_BLASTER_1,
-	MZ2_MAKRON_BLASTER_2,
-	MZ2_MAKRON_BLASTER_3,
-	MZ2_MAKRON_BLASTER_4,
-	MZ2_MAKRON_BLASTER_5,
-	MZ2_MAKRON_BLASTER_6,
-	MZ2_MAKRON_BLASTER_7,
-	MZ2_MAKRON_BLASTER_8,
-	MZ2_MAKRON_BLASTER_9,
-	MZ2_MAKRON_BLASTER_10,
-	MZ2_MAKRON_BLASTER_11,
-	MZ2_MAKRON_BLASTER_12,
-	MZ2_MAKRON_BLASTER_13,
-	MZ2_MAKRON_BLASTER_14,
-	MZ2_MAKRON_BLASTER_15,
-	MZ2_MAKRON_BLASTER_16,
-	MZ2_MAKRON_BLASTER_17,
-	MZ2_MAKRON_RAILGUN_1,
-	MZ2_JORG_MACHINEGUN_L1,
-	MZ2_JORG_MACHINEGUN_L2,
-	MZ2_JORG_MACHINEGUN_L3,
-	MZ2_JORG_MACHINEGUN_L4,
-	MZ2_JORG_MACHINEGUN_L5,
-	MZ2_JORG_MACHINEGUN_L6,
-	MZ2_JORG_MACHINEGUN_R1,
-	MZ2_JORG_MACHINEGUN_R2,
-	MZ2_JORG_MACHINEGUN_R3,
-	MZ2_JORG_MACHINEGUN_R4,
-	MZ2_JORG_MACHINEGUN_R5,
-	MZ2_JORG_MACHINEGUN_R6,
-	MZ2_JORG_BFG_1,
-	MZ2_BOSS2_MACHINEGUN_R1,
-	MZ2_BOSS2_MACHINEGUN_R2,
-	MZ2_BOSS2_MACHINEGUN_R3,
-	MZ2_BOSS2_MACHINEGUN_R4,
-	MZ2_BOSS2_MACHINEGUN_R5,
-// Xian
-
-//ROGUE
-	MZ2_CARRIER_MACHINEGUN_L1,
-	MZ2_CARRIER_MACHINEGUN_R1,
-	MZ2_CARRIER_GRENADE,
-	MZ2_TURRET_MACHINEGUN,
-	MZ2_TURRET_ROCKET,
-	MZ2_TURRET_BLASTER,
-	MZ2_STALKER_BLASTER,
-	MZ2_DAEDALUS_BLASTER,
-	MZ2_MEDIC_BLASTER_2,
-	MZ2_CARRIER_RAILGUN,
-	MZ2_WIDOW_DISRUPTOR,
-	MZ2_WIDOW_BLASTER,
-	MZ2_WIDOW_RAIL,
-	MZ2_WIDOW_PLASMABEAM,			// PMM - not used
-	MZ2_CARRIER_MACHINEGUN_L2,
-	MZ2_CARRIER_MACHINEGUN_R2,
-	MZ2_WIDOW_RAIL_LEFT,
-	MZ2_WIDOW_RAIL_RIGHT,
-	MZ2_WIDOW_BLASTER_SWEEP1,
-	MZ2_WIDOW_BLASTER_SWEEP2,
-	MZ2_WIDOW_BLASTER_SWEEP3,
-	MZ2_WIDOW_BLASTER_SWEEP4,
-	MZ2_WIDOW_BLASTER_SWEEP5,
-	MZ2_WIDOW_BLASTER_SWEEP6,
-	MZ2_WIDOW_BLASTER_SWEEP7,
-	MZ2_WIDOW_BLASTER_SWEEP8,
-	MZ2_WIDOW_BLASTER_SWEEP9,
-	MZ2_WIDOW_BLASTER_100,
-	MZ2_WIDOW_BLASTER_90,
-	MZ2_WIDOW_BLASTER_80,
-	MZ2_WIDOW_BLASTER_70,
-	MZ2_WIDOW_BLASTER_60,
-	MZ2_WIDOW_BLASTER_50,
-	MZ2_WIDOW_BLASTER_40,
-	MZ2_WIDOW_BLASTER_30,
-	MZ2_WIDOW_BLASTER_20,
-	MZ2_WIDOW_BLASTER_10,
-	MZ2_WIDOW_BLASTER_0,
-	MZ2_WIDOW_BLASTER_10L,
-	MZ2_WIDOW_BLASTER_20L,
-	MZ2_WIDOW_BLASTER_30L,
-	MZ2_WIDOW_BLASTER_40L,
-	MZ2_WIDOW_BLASTER_50L,
-	MZ2_WIDOW_BLASTER_60L,
-	MZ2_WIDOW_BLASTER_70L,
-	MZ2_WIDOW_RUN_1,
-	MZ2_WIDOW_RUN_2,
-	MZ2_WIDOW_RUN_3,
-	MZ2_WIDOW_RUN_4,
-	MZ2_WIDOW_RUN_5,
-	MZ2_WIDOW_RUN_6,
-	MZ2_WIDOW_RUN_7,
-	MZ2_WIDOW_RUN_8,
-	MZ2_CARRIER_ROCKET_1,
-	MZ2_CARRIER_ROCKET_2,
-	MZ2_CARRIER_ROCKET_3,
-	MZ2_CARRIER_ROCKET_4,
-	MZ2_WIDOW2_BEAMER_1,
-	MZ2_WIDOW2_BEAMER_2,
-	MZ2_WIDOW2_BEAMER_3,
-	MZ2_WIDOW2_BEAMER_4,
-	MZ2_WIDOW2_BEAMER_5,
-	MZ2_WIDOW2_BEAM_SWEEP_1,
-	MZ2_WIDOW2_BEAM_SWEEP_2,
-	MZ2_WIDOW2_BEAM_SWEEP_3,
-	MZ2_WIDOW2_BEAM_SWEEP_4,
-	MZ2_WIDOW2_BEAM_SWEEP_5,
-	MZ2_WIDOW2_BEAM_SWEEP_6,
-	MZ2_WIDOW2_BEAM_SWEEP_7,
-	MZ2_WIDOW2_BEAM_SWEEP_8,
-	MZ2_WIDOW2_BEAM_SWEEP_9,
-	MZ2_WIDOW2_BEAM_SWEEP_10,
-	MZ2_WIDOW2_BEAM_SWEEP_11
-// ROGUE
-};
-
-// temp entity events
-//
-// Temp entity events are for things that happen
-// at a location seperate from any existing entity.
-// Temporary entity messages are explicitly constructed
-// and broadcast.
-enum temp_event_t
-{
-	TE_GUNSHOT,
-	TE_BLOOD,
-	TE_BLASTER,
-	TE_RAILTRAIL,
-	TE_SHOTGUN,
-	TE_EXPLOSION1,
-	TE_EXPLOSION2,
-	TE_ROCKET_EXPLOSION,
-	TE_GRENADE_EXPLOSION,
-	TE_SPARKS,
-	TE_SPLASH,
-	TE_BUBBLETRAIL,
-	TE_SCREEN_SPARKS,
-	TE_SHIELD_SPARKS,
-	TE_BULLET_SPARKS,
-	TE_LASER_SPARKS,
-	TE_PARASITE_ATTACK,
-	TE_ROCKET_EXPLOSION_WATER,
-	TE_GRENADE_EXPLOSION_WATER,
-	TE_MEDIC_CABLE_ATTACK,
-	TE_BFG_EXPLOSION,
-	TE_BFG_BIGEXPLOSION,
-	TE_BOSSTPORT,	// used as '22' in a map, so DON'T RENUMBER!!!
-	TE_BFG_LASER,
-	TE_GRAPPLE_CABLE,
-	TE_WELDING_SPARKS,
-	TE_GREENBLOOD,
-	TE_BLUEHYPERBLASTER,
-	TE_PLASMA_EXPLOSION,
-	TE_TUNNEL_SPARKS,
-//ROGUE
-	TE_BLASTER2,
-	TE_RAILTRAIL2,
-	TE_FLAME,
-	TE_LIGHTNING,
-	TE_DEBUGTRAIL,
-	TE_PLAIN_EXPLOSION,
-	TE_FLASHLIGHT,
-	TE_FORCEWALL,
-	TE_HEATBEAM,
-	TE_MONSTER_HEATBEAM,
-	TE_STEAM,
-	TE_BUBBLETRAIL2,
-	TE_MOREBLOOD,
-	TE_HEATBEAM_SPARKS,
-	TE_HEATBEAM_STEAM,
-	TE_CHAINFIST_SMOKE,
-	TE_ELECTRIC_SPARKS,
-	TE_TRACKER_EXPLOSION,
-	TE_TELEPORT_EFFECT,
-	TE_DBALL_GOAL,
-	TE_WIDOWBEAMOUT,
-	TE_NUKEBLAST,
-	TE_WIDOWSPLASH,
-	TE_EXPLOSION1_BIG,
-	TE_EXPLOSION1_NP,
-	TE_FLECHETTE,
-//ROGUE
-
-	TE_NUM_ENTITIES
-};
-
-// color for TE_SPLASH
-enum splash_type_t
-{
-	SPLASH_UNKNOWN,
-	SPLASH_SPARKS,
-	SPLASH_BLUE_WATER,
-	SPLASH_BROWN_WATER,
-	SPLASH_SLIME,
-	SPLASH_LAVA,
-	SPLASH_BLOOD
-};
 
 //
 // SOUNDS
@@ -428,7 +66,7 @@ enum splash_type_t
 // sound channels
 // channel 0 never willingly overrides
 // other channels (1-7) allways override a playing sound on that channel
-enum sound_channel_t
+enum
 {
 	CHAN_AUTO,
 	CHAN_WEAPON,
@@ -442,47 +80,11 @@ enum sound_channel_t
 	CHAN_RELIABLE	= 16	// send by reliable message, not datagram
 };
 
-// sound attenuation values
-constexpr vec_t ATTN_NONE	= 0;	// full volume the entire level
-constexpr vec_t ATTN_NORM	= 1;
-constexpr vec_t	ATTN_IDLE	= 2;
-constexpr vec_t ATTN_STATIC	= 3;	// diminish very rapidly with distance
+typedef int sound_channel_t;
 
-using sound_attn_t = vec_t;
+typedef vec_t sound_attn_t;
 
-//
-// config strings are a general means of communication from
-// the server to all connected clients.
-// Each config string can be at most MAX_QPATH characters.
-//
-enum config_string_t
-{
-	CS_NAME,
-	CS_CDTRACK,
-	CS_SKY,
-	CS_SKYAXIS,		// %f %f %f format
-	CS_SKYROTATE,
-	CS_STATUSBAR,	// display program string
-	
-	CS_AIRACCEL	= 29,	// air acceleration control
-	CS_MAXCLIENTS,
-	CS_MAPCHECKSUM,		// for catching cheater maps
-	
-	CS_MODELS,
-	CS_SOUNDS			= CS_MODELS + MAX_MODELS,
-	CS_IMAGES			= CS_SOUNDS + MAX_SOUNDS,
-	CS_LIGHTS			= CS_IMAGES + MAX_IMAGES,
-	CS_ITEMS			= CS_LIGHTS + MAX_LIGHTSTYLES,
-	CS_PLAYERSKINS		= CS_ITEMS + MAX_ITEMS,
-	CS_GENERAL			= CS_PLAYERSKINS + MAX_CLIENTS,
-	MAX_CONFIGSTRINGS	= CS_GENERAL + MAX_GENERAL
-};
-
-// Some mods actually exploit CS_STATUSBAR to take space up to CS_AIRACCEL
-constexpr size_t CS_SIZE(const config_string_t &cs)
-{
-	return (cs >= CS_STATUSBAR && cs < CS_AIRACCEL ? MAX_QPATH * (CS_AIRACCEL - cs) : MAX_QPATH);
-}
+typedef int config_string_t;
 
 /*
 ==========================================================
@@ -525,89 +127,13 @@ COLLISION DETECTION
 */
 
 // lower bits are stronger, and will eat weaker brushes completely
-enum content_flags_t
-{
-	CONTENTS_SOLID			= 1,	// an eye is never valid in a solid
-	CONTENTS_WINDOW			= 2,	// translucent, but not watery
-	CONTENTS_AUX			= 4,
-	CONTENTS_LAVA			= 8,
-	CONTENTS_SLIME			= 16,
-	CONTENTS_WATER			= 32,
-	CONTENTS_MIST			= 64,
-	LAST_VISIBLE_CONTENTS	= 64,
+typedef int content_flags_t;
 
-// remaining contents are non-visible, and don't eat brushes
+typedef int surface_flags_t;
 
-	CONTENTS_AREAPORTAL		= 0x8000,
+typedef int box_edicts_area_t;
 
-	CONTENTS_PLAYERCLIP		= 0x10000,
-	CONTENTS_MONSTERCLIP	= 0x20000,
-
-// currents can be added to any other contents, and may be mixed
-	CONTENTS_CURRENT_0		= 0x40000,
-	CONTENTS_CURRENT_90		= 0x80000,
-	CONTENTS_CURRENT_180	= 0x100000,
-	CONTENTS_CURRENT_270	= 0x200000,
-	CONTENTS_CURRENT_UP		= 0x400000,
-	CONTENTS_CURRENT_DOWN	= 0x800000,
-	
-	CONTENTS_ORIGIN			= 0x1000000,	// removed before bsping an entity
-	
-	CONTENTS_MONSTER		= 0x2000000,	// should never be on a brush, only in game
-	CONTENTS_DEADMONSTER	= 0x4000000,
-	CONTENTS_DETAIL			= 0x8000000,	// brushes to be added after vis leafs
-	CONTENTS_TRANSLUCENT	= 0x10000000,	// auto set if any surface has trans
-	CONTENTS_LADDER			= 0x20000000,
-
-// content masks
-	MASK_ALL			= -1,
-	MASK_SOLID			= CONTENTS_SOLID | CONTENTS_WINDOW,
-	MASK_PLAYERSOLID	= CONTENTS_SOLID | CONTENTS_PLAYERCLIP | CONTENTS_WINDOW | CONTENTS_MONSTER,
-	MASK_DEADSOLID		= CONTENTS_SOLID | CONTENTS_PLAYERCLIP | CONTENTS_WINDOW,
-	MASK_MONSTERSOLID	= CONTENTS_SOLID | CONTENTS_MONSTERCLIP | CONTENTS_WINDOW | CONTENTS_MONSTER,
-	MASK_WATER			= CONTENTS_WATER | CONTENTS_LAVA | CONTENTS_SLIME,
-	MASK_OPAQUE			= CONTENTS_SOLID | CONTENTS_SLIME | CONTENTS_LAVA,
-	MASK_SHOT			= CONTENTS_SOLID | CONTENTS_MONSTER | CONTENTS_WINDOW | CONTENTS_DEADMONSTER,
-	MASK_CURRENT		= CONTENTS_CURRENT_0 | CONTENTS_CURRENT_90 | CONTENTS_CURRENT_180 | CONTENTS_CURRENT_270 | CONTENTS_CURRENT_UP | CONTENTS_CURRENT_DOWN
-};
-
-enum surface_flags_t
-{
-	SURF_LIGHT	= 0x1,	// value will hold the light strength
-	
-	SURF_SLICK	= 0x2,	// effects game physics
-	
-	SURF_SKY		= 0x4,	// don't draw, but add to skybox
-	SURF_WARP		= 0x8,	// turbulent water warp
-	SURF_TRANS33	= 0x10,
-	SURF_TRANS66	= 0x20,
-	SURF_FLOWING	= 0x40,	// scroll towards angle
-	SURF_NODRAW		= 0x80,	// don't bother referencing the texture
-	
-	SURF_ALPHATEST	= 0x02000000	// used by kmquake2
-};
-
-enum box_edicts_area_t
-{
-	AREA_SOLID		= 1,
-	AREA_TRIGGERS	= 2
-};
-
-enum plane_type_t : uint8_t
-{
-	// 0-2 are axial planes
-	PLANE_X,
-	PLANE_Y,
-	PLANE_Z,
-
-	// 3-5 are non-axial planes snapped to the nearest
-	PLANE_ANYX,
-	PLANE_ANYY,
-	PLANE_ANYZ,
-
-	// planes (x&~1) and (x&~1)+1 are always opposites
-	PLANE_NON_AXIAL
-};
+typedef uint8_t plane_type_t;
 
 // plane_t structure
 struct cplane_t
@@ -642,12 +168,14 @@ struct trace_t
 //
 // button bits
 //
-enum button_bits_t : uint8_t
+enum
 {
 	BUTTON_ATTACK		= 1,
 	BUTTON_USE			= 2,
 	BUTTON_ANY			= 128		// any key whatsoever
 };
+
+typedef uint8_t button_bits_t;
 
 // usercmd_t is sent to the server each client frame
 struct usercmd_t
@@ -662,7 +190,7 @@ struct usercmd_t
 
 // pmove_state_t is the information necessary for client side movement
 // prediction
-enum pmtype_t
+enum
 {
 	// can accelerate and turn
 	PM_NORMAL,
@@ -673,8 +201,10 @@ enum pmtype_t
 	PM_FREEZE
 };
 
+typedef int pmtype_t;
+
 // pmove->pm_flags
-enum pmflags_t : uint8_t
+enum
 {
 	PMF_DUCKED			= 1,
 	PMF_JUMP_HELD		= 2,
@@ -685,6 +215,8 @@ enum pmflags_t : uint8_t
 	PMF_NO_PREDICTION	= 64,	// temporarily disables prediction (used for grappling hook)
 	PMF_TELEPORT_BIT	= 128	// used by q2pro
 };
+
+typedef uint8_t pmflags_t;
 
 // this structure needs to be communicated bit-accurate
 // from the server to the client to guarantee that
@@ -870,9 +402,3 @@ extern "C" struct game_export_t
 	int			num_edicts;	// current number, <= max_edicts
 	int			max_edicts;
 };
-
-// default server FPS
-const uint32_t	BASE_FRAMERATE		= 10;
-const uint32_t	BASE_FRAMETIME		= 100;
-const vec_t		BASE_1_FRAMETIME	= 1.0 / BASE_FRAMERATE;
-const vec_t		BASE_FRAMETIME_1000	= BASE_FRAMETIME / 1000.f;

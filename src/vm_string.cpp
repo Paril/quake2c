@@ -4,48 +4,48 @@
 
 static void QC_va(QCVM &vm)
 {
-	const auto &fmtid = vm.ArgvStringID(0);
+	const string_t fmtid = vm.ArgvStringID(0);
 	vm.ReturnString(ParseFormat(fmtid, vm, 1));
 }
 
 static void QC_stoi(QCVM &vm)
 {
-	const auto &a = vm.ArgvString(0);
+	const char *a = vm.ArgvString(0);
 	vm.ReturnInt(strtol(a, nullptr, 10));
 }
 
 static void QC_stof(QCVM &vm)
 {
-	const auto &a = vm.ArgvString(0);
+	const char *a = vm.ArgvString(0);
 	vm.ReturnFloat(strtof(a, nullptr));
 }
 
 static void QC_stricmp(QCVM &vm)
 {
-	const auto &a = vm.ArgvString(0);
-	const auto &b = vm.ArgvString(1);
+	const char *a = vm.ArgvString(0);
+	const char *b = vm.ArgvString(1);
 	vm.ReturnInt(stricmp(a, b));
 }
 
 static void QC_strncmp(QCVM &vm)
 {
-	const auto &a = vm.ArgvString(0);
-	const auto &b = vm.ArgvString(1);
-	const auto &c = vm.ArgvInt32(2);
+	const char *a = vm.ArgvString(0);
+	const char *b = vm.ArgvString(1);
+	const int32_t c = vm.ArgvInt32(2);
 
 	vm.ReturnInt(strncmp(a, b, c));
 }
 
 static void QC_strlen(QCVM &vm)
 {
-	const auto &a = vm.ArgvStringID(0);
-	vm.ReturnInt(static_cast<int32_t>(vm.StringLength(a)));
+	const string_t a = vm.ArgvStringID(0);
+	vm.ReturnInt(vm.StringLength(a));
 }
 
 static void QC_substr(QCVM &vm)
 {
-	const auto &strid = vm.ArgvStringID(0);
-	const auto &start = vm.ArgvInt32(1);
+	const string_t strid = vm.ArgvStringID(0);
+	const int32_t start = vm.ArgvInt32(1);
 	const size_t str_len = vm.StringLength(strid);
 	size_t length = SIZE_MAX;
 
@@ -64,7 +64,7 @@ static void QC_strconcat(QCVM &vm)
 {
 	if (vm.state.argc == 0)
 	{
-		vm.ReturnString(vm.string_data.data());
+		vm.ReturnString(STRING_EMPTY);
 		return;
 	}
 	else if (vm.state.argc == 1)
@@ -83,8 +83,8 @@ static void QC_strconcat(QCVM &vm)
 
 static void QC_strstr(QCVM &vm)
 {
-	const auto &a = vm.ArgvString(0);
-	const auto &b = vm.ArgvString(1);
+	const char *a = vm.ArgvString(0);
+	const char *b = vm.ArgvString(1);
 	const char *c = strstr(a, b);
 
 	vm.ReturnInt(c == nullptr ? -1 : (c - a));
@@ -92,8 +92,8 @@ static void QC_strstr(QCVM &vm)
 
 static void QC_strchr(QCVM &vm)
 {
-	const auto &a = vm.ArgvString(0);
-	const auto &b = vm.ArgvInt32(1);
+	const char *a = vm.ArgvString(0);
+	const int32_t b = vm.ArgvInt32(1);
 	const char *c = strchr(a, b);
 	
 	vm.ReturnInt(c == nullptr ? -1 : (c - a));
