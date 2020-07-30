@@ -709,16 +709,20 @@ typedef struct
 struct QCVM
 {
 	// loaded from progs.dat
-	std::vector<QCDefinition>					definitions;
+	QCDefinition								*definitions;
+	size_t										definitions_size;
 	std::unordered_map<global_t, QCDefinition*> definition_map_by_id;
 	std::unordered_map<std::string_view, QCDefinition*> definition_map_by_name;
-	std::vector<QCDefinition>					fields;
+	QCDefinition								*fields;
+	size_t										fields_size;
 	std::unordered_map<global_t, QCDefinition*>	field_map;
 	std::unordered_map<std::string_view, QCDefinition*> field_map_by_name;
-	std::vector<QCStatement>					statements;
-	std::vector<QCFunction>						functions;
+	QCStatement									*statements;
+	size_t										statements_size;
+	QCFunction									*functions;
+	size_t										functions_size;
 #ifdef ALLOW_PROFILING
-	std::vector<QCProfile>						profile_data;
+	QCProfile									*profile_data;
 	profile_timer_t								timers[TotalTimerFields];
 	profile_timer_t								opcode_timers[OP_NUMOPS];
 #endif
@@ -731,7 +735,7 @@ struct QCVM
 	QCVMStringList								dynamic_strings;
 	QCVMBuiltinList								builtins;
 	QCVMFieldWrapList							field_wraps;
-	std::vector<int>							linenumbers;
+	int											*linenumbers;
 	const void									*allowed_stack;
 	size_t										allowed_stack_size;
 
@@ -1111,12 +1115,12 @@ struct QCVM
 		}
 
 		// no locals, so we can check all the globals
-		for (auto &def : definitions)
+		for (QCDefinition *def = definitions; def < definitions + definitions_size; def++)
 		{
-			if (def.name_index == STRING_EMPTY || variable != GetString(def.name_index))
+			if (def->name_index == STRING_EMPTY || variable != GetString(def->name_index))
 				continue;
 
-			return ValueFromGlobal(&def);
+			return ValueFromGlobal(def);
 		}
 
 		return { };
@@ -1139,13 +1143,13 @@ struct QCVM
 					return left_hand;
 
 				const QCDefinition *field = nullptr;
-
-				for (auto &f : fields)
+				
+				for (QCDefinition *f = fields; f < fields + fields_size; f++)
 				{
-					if (f.name_index == STRING_EMPTY || strcmp(GetString(f.name_index), right_context.data()))
+					if (f->name_index == STRING_EMPTY || strcmp(GetString(f->name_index), right_context.data()))
 						continue;
 
-					field = &f;
+					field = f;
 					break;
 				}
 
@@ -1164,7 +1168,7 @@ struct QCVM
 
 	inline int LineNumberFor(const QCStatement *statement)
 	{
-		return linenumbers[statement - statements.data()];
+		return linenumbers[statement - statements];
 	}
 
 	inline void Enter(QCFunction *function)
@@ -1199,7 +1203,7 @@ struct QCVM
 				CopyGlobal<global_t>(arg_id, GlobalOffset(GLOBAL_PARM0, (i * 3) + s));
 
 #ifdef ALLOW_PROFILING
-		new_stack->profile = &profile_data[function - functions.data()];
+		new_stack->profile = &profile_data[function - functions];
 		new_stack->profile->fields[NumSelfCalls]++;
 		new_stack->start = Q_time();
 #endif
@@ -1245,9 +1249,9 @@ struct QCVM
 
 	inline QCFunction *FindFunction(const char *name)
 	{
-		for (auto &func : functions)
-			if (!strcmp(GetString(func.name_index), name))
-				return &func;
+		for (QCFunction *func = functions; func < functions + functions_size; func++)
+			if (!strcmp(GetString(func->name_index), name))
+				return func;
 
 		return nullptr;
 	}
@@ -1256,9 +1260,9 @@ struct QCVM
 	{
 		size_t i = 0;
 
-		for (auto &func : functions)
+		for (QCFunction *func = functions; func < functions + functions_size; func++)
 		{
-			if (!strcmp(GetString(func.name_index), name))
+			if (!strcmp(GetString(func->name_index), name))
 				return (func_t)i;
 
 			i++;
@@ -1390,7 +1394,7 @@ struct QCVM
 			Error("Bad builtin call number");
 
 #ifdef ALLOW_PROFILING
-		QCProfile *profile = &profile_data[function - functions.data()];
+		QCProfile *profile = &profile_data[function - functions];
 		profile->fields[NumSelfCalls]++;
 		const uint64_t start = Q_time();
 #endif

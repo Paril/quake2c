@@ -411,14 +411,14 @@ void QCVMBuiltinList::Register(const char *name, QCBuiltin builtin)
 	this->next_id--;
 	this->builtins.emplace(id, builtin);
 
-	for (auto &func : vm.functions)
+	for (QCFunction *func = vm.functions; func < vm.functions + vm.functions_size; func++)
 	{
-		if (func.id || func.name_index == STRING_EMPTY)
+		if (func->id || func->name_index == STRING_EMPTY)
 			continue;
 
-		if (strcmp(vm.GetString(func.name_index), name) == 0)
+		if (strcmp(vm.GetString(func->name_index), name) == 0)
 		{
-			func.id = (int32_t)id;
+			func->id = (int32_t)id;
 			break;
 		}
 	}
@@ -431,15 +431,15 @@ QCVMFieldWrapList::QCVMFieldWrapList(QCVM &invm) :
 
 void QCVMFieldWrapList::Register(const char *field_name, const size_t &field_offset, const size_t &client_offset, QCVMFieldWrapper setter)
 {
-	for (auto &f : vm.fields)
+	for (QCDefinition *f = qvm.fields; f < qvm.fields + qvm.fields_size; f++)
 	{
-		if (f.name_index == STRING_EMPTY)
+		if (f->name_index == STRING_EMPTY)
 			continue;
-		else if (strcmp(vm.GetString(f.name_index), field_name))
+		else if (strcmp(vm.GetString(f->name_index), field_name))
 			continue;
 
-		wraps.emplace((f.global_index + field_offset) * sizeof(global_t), (QCVMFieldWrap) {
-			&f,
+		wraps.emplace((f->global_index + field_offset) * sizeof(global_t), (QCVMFieldWrap) {
+			f,
 			client_offset,
 			setter
 		});
@@ -458,7 +458,7 @@ QCVM::QCVM() :
 
 std::string QCVM::StackEntry(const QCStack &stack)
 {
-	if (!linenumbers.size())
+	if (!linenumbers)
 		return "dunno:dunno";
 
 	if (!stack.function)
@@ -474,7 +474,7 @@ std::string QCVM::StackEntry(const QCStack &stack)
 	if (!*file)
 		file = "dunno.qc";
 
-	return vas("%s (%s:%i @ %u)", file, func, LineNumberFor(stack.statement), stack.statement - statements.data());
+	return vas("%s (%s:%i @ %u)", file, func, LineNumberFor(stack.statement), stack.statement - statements);
 }
 
 std::string QCVM::StackTrace()
@@ -505,24 +505,24 @@ void QCVM::SetBreakpoint(const int &mode, const std::string &file, const int &li
 		return;
 	}
 
-	for (auto &function : functions)
+	for (QCFunction *function = functions; function < functions + functions_size; function++)
 	{
-		if (function.id <= 0 || function.file_index != id)
+		if (function->id <= 0 || function->file_index != id)
 			continue;
 
-		for (auto statement = &statements[function.id]; statement->opcode != OP_DONE; statement++)
+		for (QCStatement *statement = &statements[function->id]; statement->opcode != OP_DONE; statement++)
 		{
-			if (LineNumberFor(statement) == line)
-			{
-				// got it
-				if (mode)
-					statement->opcode |= OP_BREAKPOINT;
-				else
-					statement->opcode &= ~OP_BREAKPOINT;
+			if (LineNumberFor(statement) != line)
+				continue;
+
+			// got it
+			if (mode)
+				statement->opcode |= OP_BREAKPOINT;
+			else
+				statement->opcode &= ~OP_BREAKPOINT;
 				
-				gi.dprintf("Breakpoint set @ %s:%i\n", file.data(), line);
-				return;
-			}
+			gi.dprintf("Breakpoint set @ %s:%i\n", file.data(), line);
+			return;
 		}
 	}
 
@@ -768,7 +768,7 @@ inline void F_CALL(QCVM &vm, const operands &operands, int &depth)
 	const int32_t &enter_func = vm.GetGlobal<int32_t>(operands[0]);
 
 	vm.state.argc = argc;
-	if (enter_func <= 0 || enter_func >= vm.functions.size())
+	if (enter_func <= 0 || enter_func >= vm.functions_size)
 		vm.Error("NULL function");
 
 #ifdef ALLOW_PROFILING
@@ -1512,49 +1512,54 @@ void InitVM()
 		i += view.length();
 	}
 
-	qvm.statements.resize(header.sections.statement.size);
+	qvm.statements_size = header.sections.statement.size;
+	qvm.statements = (QCStatement *)gi.TagMalloc(sizeof(*qvm.statements) * qvm.statements_size, TAG_GAME);
 
 	fseek(fp, header.sections.statement.offset, SEEK_SET);
-	VMLoadStatements(fp, qvm.statements.data(), header);
+	VMLoadStatements(fp, qvm.statements, header);
 
-	for (auto &s : qvm.statements)
-		if (!codeFuncs[s.opcode])
-			qvm.Error("opcode not implemented: %i\n", s.opcode);
+	for (QCStatement *s = qvm.statements; s < qvm.statements + qvm.statements_size; s++)
+		if (!codeFuncs[s->opcode])
+			qvm.Error("opcode not implemented: %i\n", s->opcode);
 	
-	qvm.definitions.resize(header.sections.definition.size);
+	qvm.definitions_size = header.sections.definition.size;
+	qvm.definitions = (QCDefinition *)gi.TagMalloc(sizeof(*qvm.definitions) * qvm.definitions_size, TAG_GAME);
 
 	fseek(fp, header.sections.definition.offset, SEEK_SET);
-	VMLoadDefinitions(fp, qvm.definitions.data(), header, header.sections.definition.size);
+	VMLoadDefinitions(fp, qvm.definitions, header, header.sections.definition.size);
 	
-	for (auto &definition : qvm.definitions)
+	for (QCDefinition *definition = qvm.definitions; definition < qvm.definitions + qvm.definitions_size; definition++)
 	{
-		if (definition.name_index != STRING_EMPTY)
-			qvm.definition_map_by_name.emplace(qvm.string_data + definition.name_index, &definition);
+		if (definition->name_index != STRING_EMPTY)
+			qvm.definition_map_by_name.emplace(qvm.string_data + definition->name_index, definition);
 
-		qvm.definition_map_by_id.emplace(definition.global_index, &definition);
-		qvm.string_hashes.emplace(qvm.string_data + definition.name_index);
+		qvm.definition_map_by_id.emplace(definition->global_index, definition);
+		qvm.string_hashes.emplace(qvm.string_data + definition->name_index);
 	}
 
-	qvm.fields.resize(header.sections.field.size);
+	qvm.fields_size = header.sections.field.size;
+	qvm.fields = (QCDefinition *)gi.TagMalloc(sizeof(*qvm.fields) * qvm.fields_size, TAG_GAME);
 
 	fseek(fp, header.sections.field.offset, SEEK_SET);
-	VMLoadDefinitions(fp, qvm.fields.data(), header, header.sections.field.size);
+	VMLoadDefinitions(fp, qvm.fields, header, header.sections.field.size);
 
-	for (auto &field : qvm.fields)
+	for (QCDefinition *field = qvm.fields; field < qvm.fields + qvm.fields_size; field++)
 	{
-		qvm.field_map.emplace(field.global_index, &field);
-		qvm.field_map_by_name.emplace(qvm.string_data + field.name_index, &field);
+		qvm.field_map.emplace(field->global_index, field);
+		qvm.field_map_by_name.emplace(qvm.string_data + field->name_index, field);
 
-		qvm.string_hashes.emplace(qvm.string_data + field.name_index);
+		qvm.string_hashes.emplace(qvm.string_data + field->name_index);
 	}
 
-	qvm.functions.resize(header.sections.function.size);
+	qvm.functions_size = header.sections.function.size;
+	qvm.functions = (QCFunction *)gi.TagMalloc(sizeof(*qvm.functions) * qvm.functions_size, TAG_GAME);
+
 #ifdef ALLOW_PROFILING
-	qvm.profile_data.resize(header.sections.function.size);
+	qvm.profile_data = (QCProfile *)gi.TagMalloc(sizeof(*qvm.profile_data) * qvm.functions_size, TAG_GAME);
 #endif
 
 	fseek(fp, header.sections.function.offset, SEEK_SET);
-	fread(qvm.functions.data(), sizeof(QCFunction), header.sections.function.size, fp);
+	fread(qvm.functions, sizeof(QCFunction), header.sections.function.size, fp);
 
 	qvm.global_data = (global_t *)gi.TagMalloc(header.sections.globals.size * sizeof(global_t), TAG_GAME);
 	qvm.global_size = header.sections.globals.size;
@@ -1564,9 +1569,9 @@ void InitVM()
 
 	int32_t lowest_func = 0;
 
-	for (auto &func : qvm.functions)
-		if (func.id < 0)
-			lowest_func = min(func.id, lowest_func);
+	for (QCFunction *func = qvm.functions; func < qvm.functions + qvm.functions_size; func++)
+		if (func->id < 0)
+			lowest_func = min(func->id, lowest_func);
 
 	qvm.builtins.SetFirstID(lowest_func - 1);
 
@@ -1590,8 +1595,8 @@ void InitVM()
 			lno_header.numglobals == header.sections.globals.size && lno_header.numfielddefs == header.sections.field.size &&
 			lno_header.numstatements == header.sections.statement.size)
 		{
-			qvm.linenumbers.resize(header.sections.statement.size);
-			fread(qvm.linenumbers.data(), sizeof(int), header.sections.statement.size, fp);
+			qvm.linenumbers = (int *)gi.TagMalloc(sizeof(*qvm.linenumbers) * header.sections.statement.size, TAG_GAME);
+			fread(qvm.linenumbers, sizeof(int), header.sections.statement.size, fp);
 			gi.dprintf("progs.lno line numbers loaded\n");
 		}
 		else
@@ -1603,9 +1608,9 @@ void InitVM()
 
 void CheckVM()
 {
-	for (auto &func : qvm.functions)
-		if (func.id == 0 && func.name_index != STRING_EMPTY)
-			gi.dprintf("Missing builtin function: %s\n", qvm.GetString(func.name_index));
+	for (QCFunction *func = qvm.functions; func < qvm.functions + qvm.functions_size; func++)
+		if (func->id == 0 && func->name_index != STRING_EMPTY)
+			gi.dprintf("Missing builtin function: %s\n", qvm.GetString(func->name_index));
 }
 
 void ShutdownVM()
@@ -1621,10 +1626,10 @@ void ShutdownVM()
 	
 		fprintf(fp, "\n");
 
-		for (size_t i = 0; i < qvm.profile_data.size(); i++)
+		for (size_t i = 0; i < qvm.functions_size; i++)
 		{
-			const QCProfile *profile = qvm.profile_data.data() + i;
-			const QCFunction *ff = qvm.functions.data() + i;
+			const QCProfile *profile = qvm.profile_data + i;
+			const QCFunction *ff = qvm.functions + i;
 			const char *name = qvm.GetString(ff->name_index);
 		
 			const double total = profile->total / 1000000.0;

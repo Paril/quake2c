@@ -181,8 +181,8 @@ static void InitGame ()
 
 	size_t entity_data_size = 0;
 
-	for (auto &field : qvm.fields)
-		entity_data_size = max(entity_data_size, field.global_index * sizeof(int32_t));
+	for (QCDefinition *field = qvm.fields; field < qvm.fields + qvm.fields_size; field++)
+		entity_data_size = max(entity_data_size, field->global_index * sizeof(int32_t));
 
 	// initialize all entities for this game
 	globals.max_edicts = MAX_EDICTS;
@@ -237,17 +237,17 @@ static void RestoreClientData()
 #pragma GCC diagnostic pop
 
 		// restore client structs
-		for (auto &def : qvm.fields)
+		for (QCDefinition *def = qvm.fields; def < qvm.fields + qvm.fields_size; def++)
 		{
-			const char *name = qvm.GetString(def.name_index);
+			const char *name = qvm.GetString(def->name_index);
 
-			if (def.name_index == STRING_EMPTY || strnicmp(name, "client.", 6))
+			if (def->name_index == STRING_EMPTY || strnicmp(name, "client.", 6))
 				continue;
 
-			const size_t len = def.id == TYPE_VECTOR ? 3 : 1;
+			const size_t len = def->id == TYPE_VECTOR ? 3 : 1;
 
-			void *dst = qvm.GetEntityFieldPointer(ent, def.global_index);
-			void *src = qvm.GetEntityFieldPointer(backup, def.global_index);
+			void *dst = qvm.GetEntityFieldPointer(ent, def->global_index);
+			void *src = qvm.GetEntityFieldPointer(backup, def->global_index);
 
 			memcpy(dst, src, sizeof(global_t) * len);
 		}
@@ -647,12 +647,12 @@ static void WriteGame(const char *filename, qboolean autosave)
 	// save "game." values
 	size_t name_len;
 
-	for (auto &def : qvm.definitions)
+	for (QCDefinition *def = qvm.definitions; def < qvm.definitions + qvm.definitions_size; def++)
 	{
-		if (!(def.id & TYPE_GLOBAL))
+		if (!(def->id & TYPE_GLOBAL))
 			continue;
 
-		const char *name = qvm.GetString(def.name_index);
+		const char *name = qvm.GetString(def->name_index);
 
 		if (strnicmp(name, "game.", 5))
 			continue;
@@ -661,16 +661,16 @@ static void WriteGame(const char *filename, qboolean autosave)
 		fwrite(&name_len, sizeof(name_len), 1, fp);
 		fwrite(name, sizeof(char), name_len, fp);
 
-		WriteDefinitionData(fp, &def, qvm.GetGlobalByIndex(def.global_index));
+		WriteDefinitionData(fp, def, qvm.GetGlobalByIndex(def->global_index));
 	}
 
 	name_len = 0;
 	fwrite(&name_len, sizeof(name_len), 1, fp);
 
 	// save client fields
-	for (auto &def : qvm.fields)
+	for (QCDefinition *def = qvm.fields; def < qvm.fields + qvm.fields_size; def++)
 	{
-		const char *name = qvm.GetString(def.name_index);
+		const char *name = qvm.GetString(def->name_index);
 
 		if (strnicmp(name, "client.", 6))
 			continue;
@@ -680,7 +680,7 @@ static void WriteGame(const char *filename, qboolean autosave)
 		fwrite(name, sizeof(char), name_len, fp);
 
 		for (size_t i = 0; i < game.num_clients; i++)
-			WriteEntityFieldData(fp, itoe(i + 1), &def);
+			WriteEntityFieldData(fp, itoe(i + 1), def);
 	}
 	
 	name_len = 0;
@@ -811,13 +811,13 @@ static void WriteLevel(const char *filename)
 
 	// save "level." values
 	size_t name_len;
-
-	for (auto &def : qvm.definitions)
+	
+	for (QCDefinition *def = qvm.definitions; def < qvm.definitions + qvm.definitions_size; def++)
 	{
-		if (!(def.id & TYPE_GLOBAL))
+		if (!(def->id & TYPE_GLOBAL))
 			continue;
 
-		const char *name = qvm.GetString(def.name_index);
+		const char *name = qvm.GetString(def->name_index);
 
 		if (strnicmp(name, "level.", 5))
 			continue;
@@ -826,18 +826,18 @@ static void WriteLevel(const char *filename)
 		fwrite(&name_len, sizeof(name_len), 1, fp);
 		fwrite(name, sizeof(char), name_len, fp);
 
-		WriteDefinitionData(fp, &def, qvm.GetGlobalByIndex(def.global_index));
+		WriteDefinitionData(fp, def, qvm.GetGlobalByIndex(def->global_index));
 	}
 
 	name_len = 0;
 	fwrite(&name_len, sizeof(name_len), 1, fp);
 
 	// save non-client structs
-	for (auto &def : qvm.fields)
+	for (QCDefinition *def = qvm.fields; def < qvm.fields + qvm.fields_size; def++)
 	{
-		const char *name = qvm.GetString(def.name_index);
+		const char *name = qvm.GetString(def->name_index);
 
-		if (def.name_index == STRING_EMPTY || strnicmp(name, "client.", 6) == 0)
+		if (def->name_index == STRING_EMPTY || strnicmp(name, "client.", 6) == 0)
 			continue;
 
 		name_len = strlen(name);
@@ -852,7 +852,7 @@ static void WriteLevel(const char *filename)
 				continue;
 
 			fwrite(&i, sizeof(i), 1, fp);
-			WriteEntityFieldData(fp, ent, &def);
+			WriteEntityFieldData(fp, ent, def);
 		}
 
 		size_t i = -1;

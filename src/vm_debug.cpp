@@ -16,14 +16,14 @@ static void QC_dumpentity(QCVM &vm)
 {
 	FILE *fp = fopen(va("%s/dumpentity.text", game_var->string), "a");
 	edict_t *ent = vm.ArgvEntity(0);
-
-	for (auto f : vm.fields)
+	
+	for (QCDefinition *f = vm.fields; f < vm.fields + vm.fields_size; f++)
 	{
-		fprintf(fp, "%s: ", vm.GetString(f.name_index));
+		fprintf(fp, "%s: ", vm.GetString(f->name_index));
 
-		const size_t val = (size_t)vm.GetEntityFieldPointer(ent, (int32_t)f.global_index);
+		const size_t val = (size_t)vm.GetEntityFieldPointer(ent, (int32_t)f->global_index);
 
-		switch (f.id)
+		switch (f->id)
 		{
 		case TYPE_FLOAT:
 			fprintf(fp, "%f", *(vec_t *)val);

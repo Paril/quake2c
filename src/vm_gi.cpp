@@ -256,90 +256,187 @@ static void QC_unlinkentity(QCVM &vm)
 	gi.unlinkentity(ent);
 }
 
-using QC_entity_set_t = std::vector<edict_t *>;
+typedef struct entity_set_link_s
+{
+	edict_t						*entity;
+	struct entity_set_link_s	*next;
+} entity_set_link_t;
+
+typedef struct
+{
+	entity_set_link_t	*head;
+	size_t				count, allocated;
+} entity_set_t;
+
+static entity_set_t *entity_set_alloc(const size_t reserved)
+{
+	entity_set_t *set = (entity_set_t *)gi.TagMalloc(sizeof(entity_set_t), TAG_GAME);
+
+	if (!reserved)
+		return set;
+
+	set->allocated = reserved;
+
+	entity_set_link_t **tail = &set->head;
+
+	for (size_t i = 0; i < reserved; i++)
+	{
+		*tail = (entity_set_link_t *)gi.TagMalloc(sizeof(entity_set_link_t), TAG_GAME);
+		tail = &(*tail)->next;
+	}
+
+	return set;
+}
+
+static edict_t *entity_set_get(const entity_set_t *set, size_t index)
+{
+	if (index >= set->count)
+		qvm.Error("Out of bounds access");
+
+	entity_set_link_t *link;
+	
+	for (link = set->head; index && link; index--, link = link->next) ;
+	
+#ifdef _DEBUG
+	if (index || !link->entity)
+		qvm.Error("Out of bounds access");
+#endif
+
+	return link->entity;
+}
+
+static void entity_set_add(entity_set_t *set, edict_t *ent)
+{
+	for (entity_set_link_t **link = &set->head; ; link = &(*link)->next)
+	{
+		if (!(*link))
+		{
+			*link = (entity_set_link_t *)gi.TagMalloc(sizeof(entity_set_link_t), TAG_GAME);
+			set->allocated++;
+		}
+
+		if (!(*link)->entity)
+		{
+			(*link)->entity = ent;
+			set->count++;
+			return;
+		}
+		else if ((*link)->entity == ent)
+			return;
+	}
+}
+
+static void entity_set_remove(entity_set_t *set, edict_t *ent)
+{
+	for (entity_set_link_t **link = &set->head; (*link) && (*link)->entity; link = &(*link)->next)
+	{
+		if ((*link)->entity != ent)
+			continue;
+
+		(*link)->entity = nullptr;
+
+		entity_set_link_t *removed_link = *link;
+		*link = (*link)->next;
+
+		while ((*link)->next) link = &(*link)->next;
+
+		(*link)->next = removed_link;
+		set->count--;
+		set->allocated--;
+		return;
+	}
+
+	qvm.Error("Remove entity not in list");
+}
+
+static void entity_set_clear(entity_set_t *set)
+{
+	set->count = 0;
+
+	for (entity_set_link_t *link = set->head; link; link = link->next)
+		link->entity = nullptr;
+}
+
+static void entity_set_free(entity_set_t *set)
+{
+	for (entity_set_link_t *link = set->head; link; )
+	{
+		entity_set_link_t *next = link->next;
+		gi.TagFree(link);
+		link = next;
+	}
+
+	gi.TagFree(set);
+}
 
 static void QC_entity_set_alloc(QCVM &vm)
 {
-	QC_entity_set_t *edicts;
-	
-	if (vm.state.argc)
-		edicts = new QC_entity_set_t(vm.ArgvInt32(0));
-	else
-		edicts = new QC_entity_set_t;
-
-	vm.ReturnInt((int32_t)edicts);
+	entity_set_t *set = entity_set_alloc((vm.state.argc && vm.ArgvInt32(0) > 1) ? vm.ArgvInt32(0) : 0);
+	vm.ReturnInt((int32_t)set);
 }
 
 static void QC_entity_set_get(QCVM &vm)
 {
-	QC_entity_set_t *edicts = (QC_entity_set_t *)vm.ArgvInt32(0);
+	const entity_set_t *set = (entity_set_t *)vm.ArgvInt32(0);
 	const int32_t index = vm.ArgvInt32(1);
 
-	if (index < 0 || index >= edicts->size())
-		vm.Error("Out of bounds access");
-
-	vm.ReturnEntity(edicts->at(index));
+	vm.ReturnEntity(entity_set_get(set, index));
 }
 
 static void QC_entity_set_add(QCVM &vm)
 {
-	QC_entity_set_t *edicts = (QC_entity_set_t *)vm.ArgvInt32(0);
+	entity_set_t *set = (entity_set_t *)vm.ArgvInt32(0);
 	edict_t *ent = vm.ArgvEntity(1);
-
-	if (std::find(edicts->begin(), edicts->end(), ent) == edicts->end())
-		edicts->push_back(ent);
+	entity_set_add(set, ent);
 }
 
 static void QC_entity_set_remove(QCVM &vm)
 {
-	QC_entity_set_t *edicts = (QC_entity_set_t *)vm.ArgvInt32(0);
+	entity_set_t *set = (entity_set_t *)vm.ArgvInt32(0);
 	edict_t *ent = vm.ArgvEntity(1);
-	auto where = std::find(edicts->begin(), edicts->end(), ent);
-	
-	if (where == edicts->end())
-		vm.Error("Remove entity not in list");
-
-	edicts->erase(where);
+	entity_set_remove(set, ent);
 }
 
 static void QC_entity_set_length(QCVM &vm)
 {
-	QC_entity_set_t *edicts = (QC_entity_set_t *)vm.ArgvInt32(0);
-	vm.ReturnInt((int32_t)edicts->size());
+	entity_set_t *set = (entity_set_t *)vm.ArgvInt32(0);
+	vm.ReturnInt((int32_t)set->count);
 }
 
 static void QC_entity_set_clear(QCVM &vm)
 {
-	QC_entity_set_t *edicts = (QC_entity_set_t *)vm.ArgvInt32(0);
-	edicts->clear();
+	entity_set_t *set = (entity_set_t *)vm.ArgvInt32(0);
+	entity_set_clear(set);
 }
 
 static void QC_entity_set_free(QCVM &vm)
 {
-	QC_entity_set_t *edicts = (QC_entity_set_t *)vm.ArgvInt32(0);
-	delete edicts;
+	entity_set_t *set = (entity_set_t *)vm.ArgvInt32(0);
+	entity_set_free(set);
 }
 
 static void QC_BoxEdicts(QCVM &vm)
 {
-	const vec3_t mins = vm.ArgvVector(0);
-	const vec3_t maxs = vm.ArgvVector(1);
-	const int32_t maxcount = vm.ArgvInt32(2);
-	const box_edicts_area_t areatype = vm.ArgvInt32(3);
+	entity_set_t *set = (entity_set_t *)vm.ArgvInt32(0);
+	const vec3_t mins = vm.ArgvVector(1);
+	const vec3_t maxs = vm.ArgvVector(2);
+	const int32_t maxcount = vm.ArgvInt32(3);
+	const box_edicts_area_t areatype = vm.ArgvInt32(4);
+	static edict_t *raw_entities[MAX_EDICTS]; // FIXME: too big :(
 
-	QC_entity_set_t *edicts = new QC_entity_set_t(maxcount);
-	const int32_t count = gi.BoxEdicts(mins, maxs, edicts->data(), maxcount, areatype);
-	edicts->resize(count);
-	edicts->shrink_to_fit();
+	const int32_t count = gi.BoxEdicts(mins, maxs, raw_entities, min(32, maxcount), areatype);
 
-	vm.ReturnInt((int32_t)edicts);
+	entity_set_clear(set);
+
+	for (int32_t i = 0; i < count; i++)
+		entity_set_add(set, raw_entities[i]);
 }
 
 struct QC_pmove_state_t
 {
     pmtype_t pm_type;
 
-    vec3_t	origin;		// 12.3
+    vec3_t origin;		// 12.3
     vec3_t velocity;	// 12.3
     int	pm_flags;		// ducked, jump_held, etc
     int	pm_time;		// each unit = 8 ms
@@ -358,7 +455,7 @@ struct QC_pmove_t
 	bool			snapinitial;
 	
 	// out
-	QC_entity_set_t	*touchents;
+	entity_set_t	*touchents;
 	
 	vec3_t	viewangles;
 	float	viewheight;
@@ -374,7 +471,7 @@ struct QC_pmove_t
 	func_t pointcontents;
 };
 
-static QC_entity_set_t touchents_memory;
+static entity_set_t touchents_memory;
 
 static func_t QC_pm_pointcontents_func;
 
@@ -461,15 +558,10 @@ static void QC_Pmove(QCVM &vm)
 	qc_pm->s.gravity = pm.s.gravity;
 
 	qc_pm->touchents = &touchents_memory;
-
-	std::unordered_set<edict_t *>	touchents;
+	entity_set_clear(&touchents_memory);
 
 	for (int32_t i = 0; i < pm.numtouch; i++)
-		touchents.emplace(pm.touchents[i]);
-
-	touchents_memory.resize(touchents.size());
-	
-	std::copy(touchents.begin(), touchents.end(), touchents_memory.begin());
+		entity_set_add(&touchents_memory, pm.touchents[i]);
 
 	qc_pm->viewangles = pm.viewangles;
 	qc_pm->viewheight = pm.viewheight;
