@@ -19,7 +19,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #pragma once
 
 // player_state_t->refdef flags
-enum refdef_flags_t
+typedef enum
 {
 	RDF_UNDERWATER		= 1,	// warp the screen as apropriate
 	RDF_NOWORLDMODEL	= 2,	// used for player configuration screen
@@ -28,10 +28,10 @@ enum refdef_flags_t
 	RDF_IRGOGGLES	= 4,
 	RDF_UVGOGGLES	= 8
 //ROGUE
-};
+} refdef_flags_t;
 
 // player_state->stats[] indexes
-enum player_stat_t : int16_t
+typedef enum : int16_t
 {
 	// For engine compatibility, these 18 IDs should remain the same
 	// and keep their described usage
@@ -56,7 +56,7 @@ enum player_stat_t : int16_t
 	// Bits from here to 31 are free for mods
 
 	MAX_STATS	= 32
-};
+} player_stat_t;
 
 // player_state_t is the information needed in addition to pmove_state_t
 // to rendered a view.  There will only be 10 player_state_t sent each second,
@@ -84,7 +84,7 @@ struct player_state_t
 
 	refdef_flags_t	rdflags;        // refdef flags
 
-	std::array<player_stat_t, MAX_STATS>	stats;       // fast status bar updates
+	player_stat_t	stats[MAX_STATS];       // fast status bar updates
 };
 
 

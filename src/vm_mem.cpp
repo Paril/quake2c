@@ -2,56 +2,47 @@
 #include "game.h"
 #include "g_vm.h"
 
-static void QC_memcpy(QCVM &vm)
+static void QC_memcpy(qcvm_t *vm)
 {
-	const int32_t dst = vm.ArgvInt32(0);
-	const int32_t src = vm.ArgvInt32(1);
-	const int32_t sz = vm.ArgvInt32(2);
+	const int32_t dst = qcvm_argv_int32(vm, 0);
+	const int32_t src = qcvm_argv_int32(vm, 1);
+	const int32_t sz = qcvm_argv_int32(vm, 2);
 	
-	void *dst_ptr = vm.AddressToEntityField(dst);
-	const void *src_ptr = vm.AddressToEntityField(src);
+	void *dst_ptr = qcvm_address_to_entity_field(dst);
+	const void *src_ptr = qcvm_address_to_entity_field(src);
 
 	memcpy(dst_ptr, src_ptr, sz);
 
-	// unref any strings that were in dst
-	vm.dynamic_strings.CheckRefUnset(dst_ptr, sz / sizeof(global_t));
+	const size_t span = sz / sizeof(global_t);
 
-	// grab list of fields that have strings
-	std::unordered_map<string_t, size_t> ids;
-
-	if (!vm.dynamic_strings.HasRef(src_ptr, sz / sizeof(global_t), ids))
-		return;
-
-	// mark them as being inside of src as well now
-	for (auto &s : ids)
-		vm.dynamic_strings.MarkRefCopy(s.first, (global_t *)(dst_ptr) + s.second);
+	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, src_ptr, dst_ptr, span);
 }
 
-static void QC_memclear(QCVM &vm)
+static void QC_memclear(qcvm_t *vm)
 {
-	const int32_t dst = vm.ArgvInt32(0);
-	const int32_t sz = vm.ArgvInt32(1);
+	const int32_t dst = qcvm_argv_int32(vm, 0);
+	const int32_t sz = qcvm_argv_int32(vm, 1);
 	
-	void *dst_ptr = vm.AddressToEntityField(dst);
+	void *dst_ptr = qcvm_address_to_entity_field(dst);
 
 	memset(dst_ptr, 0, sz);
 
-	vm.dynamic_strings.CheckRefUnset(dst_ptr, sz / sizeof(global_t));
+	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, dst_ptr, sz / sizeof(global_t), false);
 }
 
-static void QC_memcmp(QCVM &vm)
+static void QC_memcmp(qcvm_t *vm)
 {
-	const int32_t src = vm.ArgvInt32(0);
-	const int32_t dst = vm.ArgvInt32(1);
-	const int32_t sz = vm.ArgvInt32(2);
+	const int32_t src = qcvm_argv_int32(vm, 0);
+	const int32_t dst = qcvm_argv_int32(vm, 1);
+	const int32_t sz = qcvm_argv_int32(vm, 2);
 	
-	const void *src_ptr = vm.AddressToEntityField(src);
-	const void *dst_ptr = vm.AddressToEntityField(dst);
+	const void *src_ptr = qcvm_address_to_entity_field(src);
+	const void *dst_ptr = qcvm_address_to_entity_field(dst);
 
-	vm.ReturnInt(memcmp(dst_ptr, src_ptr, sz));
+	qcvm_return_int32(vm, memcmp(dst_ptr, src_ptr, sz));
 }
 
-void InitMemBuiltins(QCVM &vm)
+void InitMemBuiltins(qcvm_t *vm)
 {
 	RegisterBuiltin(memcpy);
 	RegisterBuiltin(memclear);

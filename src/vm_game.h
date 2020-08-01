@@ -12,23 +12,23 @@ struct QC_usercmd_t
 };
 
 // Builtin "modules"
-void InitGIBuiltins(QCVM &vm);
-void InitGameBuiltins(QCVM &vm);
-void InitExtBuiltins(QCVM &vm);
-void InitStringBuiltins(QCVM &vm);
-void InitMemBuiltins(QCVM &vm);
-void InitDebugBuiltins(QCVM &vm);
-void InitMathBuiltins(QCVM &vm);
+void InitGIBuiltins(qcvm_t *vm);
+void InitGameBuiltins(qcvm_t *vm);
+void InitExtBuiltins(qcvm_t *vm);
+void InitStringBuiltins(qcvm_t *vm);
+void InitMemBuiltins(qcvm_t *vm);
+void qcvm_init_debug_builtins(qcvm_t *vm);
+void InitMathBuiltins(qcvm_t *vm);
 
 // exports from modules
-float frand();
-float frand(const float &max);
-float frand(const float &min, const float &max);
+vec_t frand();
+vec_t frand(const vec_t max);
+vec_t frand(const vec_t min, const vec_t max);
 
-void SyncPlayerState(QCVM &vm, edict_t *ent);
+void SyncPlayerState(qcvm_t *vm, edict_t *ent);
 
 #ifdef ALLOW_DEBUGGING
-void CheckDebuggerCommands();
-void SendDebuggerCommand(const std::string &cmd);
-void WaitForDebuggerCommands();
+void qcvm_check_debugger_commands(qcvm_t *vm);
+void qcvm_send_debugger_command(const qcvm_t *vm, const char *cmd);
+void qcvm_wait_for_debugger_commands(qcvm_t *vm);
 #endif

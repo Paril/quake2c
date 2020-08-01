@@ -2,26 +2,26 @@
 #include "game.h"
 #include "g_vm.h"
 
-static void QC_stacktrace(QCVM &vm)
+static void QC_stacktrace(qcvm_t *vm)
 {
-	gi.dprintf("%s\n", vm.StackTrace().data());
+	gi.dprintf("%s\n", qcvm_stack_trace(vm).data());
 }
 
-static void QC_debugbreak(QCVM &vm)
+static void QC_debugbreak(qcvm_t *vm)
 {
-	__debugbreak();
+	qcvm_break_on_current_statement(vm);
 }
 
-static void QC_dumpentity(QCVM &vm)
+static void QC_dumpentity(qcvm_t *vm)
 {
-	FILE *fp = fopen(va("%s/dumpentity.text", game_var->string), "a");
-	edict_t *ent = vm.ArgvEntity(0);
+	FILE *fp = fopen(va("%sdumpentity.text", vm->path), "a");
+	edict_t *ent = qcvm_argv_entity(vm, 0);
 	
-	for (QCDefinition *f = vm.fields; f < vm.fields + vm.fields_size; f++)
+	for (QCDefinition *f = vm->fields; f < vm->fields + vm->fields_size; f++)
 	{
-		fprintf(fp, "%s: ", vm.GetString(f->name_index));
+		fprintf(fp, "%s: ", qcvm_get_string(vm, f->name_index));
 
-		const size_t val = (size_t)vm.GetEntityFieldPointer(ent, (int32_t)f->global_index);
+		const size_t val = (size_t)qcvm_get_entity_field_pointer(ent, (int32_t)f->global_index);
 
 		switch (f->id)
 		{
@@ -39,9 +39,11 @@ static void QC_dumpentity(QCVM &vm)
 
 		fprintf(fp, "\r\n");
 	}
+
+	fclose(fp);
 }
 
-void InitDebugBuiltins(QCVM &vm)
+void qcvm_init_debug_builtins(qcvm_t *vm)
 {
 	RegisterBuiltin(stacktrace);
 	RegisterBuiltin(debugbreak);
@@ -60,7 +62,7 @@ static std::mutex input_mutex;
 static std::thread input_thread;
 static bool running_thread = false;
 
-static void DebuggerThread()
+static void qcvm_debugger_thread()
 {
 	std::string teststr;
 
@@ -85,24 +87,24 @@ static void DebuggerThread()
 	}
 }
 
-void WaitForDebuggerCommands();
+void qcvm_wait_for_debugger_commands(qcvm_t *vm);
 
 #include <chrono>
 
 using namespace std::chrono_literals;
 
-void InitDebugger()
+static void qcvm_init_debugger(qcvm_t *vm)
 {
 	if (!*gi.cvar("qc_debugger", "", CVAR_NONE)->string)
 		return;
 
 	std::this_thread::sleep_for(5s);
 
-	input_thread = std::thread(DebuggerThread);
+	input_thread = std::thread(qcvm_debugger_thread);
 	running_thread = true;
-	qvm.debug.state = DEBUG_BROKE;
+	vm->debug.state = DEBUG_BROKE;
 
-	WaitForDebuggerCommands();
+	qcvm_wait_for_debugger_commands(vm);
 }
 
 /*
@@ -113,6 +115,7 @@ Parse a token out of a string.
 Handles C and C++ comments.
 ==============
 */
+// FIXME: pull this from QC instead
 std::string strtok(std::string data, int &start)
 {
 	int token_start = start, token_end;
@@ -195,19 +198,19 @@ skipwhite:
 	return data.substr(token_start, token_end - token_start);
 }
 
-void SendDebuggerCommand(const std::string &cmd)
+void qcvm_send_debugger_command(const qcvm_t *vm, const char *cmd)
 {
-	gi.dprintf("TO DEBUGGER: %s\n", cmd.data());
+	gi.dprintf("TO DEBUGGER: %s\n", cmd);
 	std::cout << cmd << '\n';
 	std::cout.flush();
 }
 
 #include <regex>
 
-void CheckDebuggerCommands()
+void qcvm_check_debugger_commands(qcvm_t *vm)
 {
 	if (!running_thread)
-		InitDebugger();
+		qcvm_init_debugger(vm);
 
 	input_mutex.lock();
 
@@ -228,8 +231,9 @@ void CheckDebuggerCommands()
 
 	if (s.starts_with("debuggerwnd "))
 	{
+		vm->debug.attached = true;
 		debuggerwnd = strtoul(s.data() + 12, NULL, 0);
-		SendDebuggerCommand(vas("qcreloaded \"%s\" \"%s\"\n", "QuakeII", "progs.dat"));
+		qcvm_send_debugger_command(vm, vas("qcreloaded \"%s\" \"%s\"\n", vm->engine_name, vm->path).data());
 	}
 	else if (s.starts_with("qcbreakpoint "))
 	{
@@ -238,11 +242,11 @@ void CheckDebuggerCommands()
 		std::string file = strtok(s, start);
 		int line = strtol(strtok(s, start).data(), NULL, 10);
 
-		qvm.SetBreakpoint(mode, file, line);
+		qcvm_set_breakpoint(vm, mode, file.data(), line);
 	}
 	else if (s == "qcresume")
 	{
-		qvm.debug.state = DEBUG_NONE;
+		vm->debug.state = DEBUG_NONE;
 	}
 	else if (s.starts_with("qcstep "))
 	{
@@ -250,18 +254,18 @@ void CheckDebuggerCommands()
 		std::string mode = strtok(s, start);
 
 		if (mode == "into")
-			qvm.debug.state = DEBUG_STEP_INTO;
+			vm->debug.state = DEBUG_STEP_INTO;
 		else if (mode == "out")
-			qvm.debug.state = DEBUG_STEP_OUT;
+			vm->debug.state = DEBUG_STEP_OUT;
 		else
-			qvm.debug.state = DEBUG_STEP_OVER;
+			vm->debug.state = DEBUG_STEP_OVER;
 	}
 	else if (s.starts_with("qcinspect "))
 	{
 		int start = 10;
 		std::string variable = strtok(s, start);
 
-		evaluate_result_t result = qvm.Evaluate(variable);
+		evaluate_result_t result = qcvm_evaluate(vm, variable);
 		std::string value;
 		
 		switch (result.type)
@@ -273,10 +277,10 @@ void CheckDebuggerCommands()
 			value = vas("%g", result.single);
 			break;
 		case TYPE_VECTOR:
-			value = vas("\"%f %f %f\"", result.vector[0], result.vector[1], result.vector[2]);
+			value = vas("\"%f %f %f\"", result.vector.x, result.vector.y, result.vector.z);
 			break;
 		case TYPE_STRING:
-			value = qvm.GetString(result.strid);
+			value = qcvm_get_string(vm, result.strid);
 
 			if (value.find_first_of('\"', 0) != std::string::npos)
 			{
@@ -293,19 +297,19 @@ void CheckDebuggerCommands()
 			if (result.entid == ENT_INVALID)
 				value = "\"invalid/null entity\"";
 			else
-				value = vas("\"entity %i\"", qvm.EntToEntity(result.entid)->s.number);
+				value = vas("\"entity %i\"", qcvm_ent_to_entity(result.entid, false)->s.number);
 			break;
 		case TYPE_FUNCTION:
 			if (result.funcid == FUNC_VOID)
 				value = "\"invalid/null function\"";
 			else
 			{
-				QCFunction *func = qvm.FindFunction(result.funcid);
+				QCFunction *func = qcvm_get_function(vm, result.funcid);
 
 				if (!func || func->name_index == STRING_EMPTY)
 					value = vas("\"can't resolve function: %i\"", result.funcid);
 				else
-					value = vas("%s", qvm.GetString(func->name_index));
+					value = vas("%s", qcvm_get_string(vm, func->name_index));
 			}
 			break;
 		default:
@@ -313,15 +317,15 @@ void CheckDebuggerCommands()
 			break;
 		}
 
-		SendDebuggerCommand(vas("qcvalue \"%s\" %s\n", variable.data(), value.data()));
+		qcvm_send_debugger_command(vm, vas("qcvalue \"%s\" %s\n", variable.data(), value.data()).data());
 	}
 }
 
-void WaitForDebuggerCommands()
+void qcvm_wait_for_debugger_commands(qcvm_t *vm)
 {
-	while (qvm.debug.state == DEBUG_BROKE)
+	while (vm->debug.state == DEBUG_BROKE)
 	{
-		CheckDebuggerCommands();
+		qcvm_check_debugger_commands(vm);
 		std::this_thread::sleep_for(1ms);
 	}
 }

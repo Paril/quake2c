@@ -68,90 +68,78 @@ MATHLIB
 
 using vec_t = float;
 
-struct vec3_t : std::array<vec_t, 3>
+typedef struct
 {
-	constexpr vec_t operator*(const vec3_t &r) const
-	{
-		return this->at(0) * r.at(0) + this->at(1) * r.at(1) + this->at(2) * r.at(2);
-	}
+	float	x, y, z;
+} vec3_t;
 
-	constexpr vec3_t operator+(const vec3_t &r) const
-	{
-		return {
-			this->at(0) + r.at(0),
-			this->at(1) + r.at(1),
-			this->at(2) + r.at(2)
-		};
-	}
-
-	constexpr vec3_t operator-(const vec3_t &r) const
-	{
-		return {
-			this->at(0) - r.at(0),
-			this->at(1) - r.at(1),
-			this->at(2) - r.at(2)
-		};
-	}
-
-	constexpr bool operator!() const
-	{
-		return !this->at(0) && !this->at(1) && !this->at(2);
-	}
-
-	template<typename TR>
-	constexpr vec3_t operator*(const TR &r) const
-	{
-		return {
-			this->at(0) * r,
-			this->at(1) * r,
-			this->at(2) * r 
-		};
-	}
-
-	template<typename TR>
-	constexpr vec3_t operator/(const TR &r) const
-	{
-		return {
-			this->at(0) / r,
-			this->at(1) / r,
-			this->at(2) / r 
-		};
-	}
-
-	constexpr vec3_t &operator*=(const vec_t &r)
-	{
-		*this = *this * r;
-		return *this;
-	}
-
-	constexpr vec3_t &operator/=(const vec_t &r)
-	{
-		*this = *this / r;
-		return *this;
-	}
-
-	constexpr vec3_t &operator+=(const vec3_t &r)
-	{
-		*this = *this + r;
-		return *this;
-	}
-
-	constexpr vec3_t &operator-=(const vec3_t &r)
-	{
-		*this = *this - r;
-		return *this;
-	}
-};
-
-template<typename TR>
-constexpr vec3_t operator*(const TR &l, const vec3_t &r)
+inline vec_t DotProduct(const vec3_t l, const vec3_t r)
 {
-	return r * l;
+	return l.x * r.x + l.y * r.y + l.z * r.z;
 }
 
-constexpr vec_t DotProduct(const vec3_t &x, const vec3_t &y)
+inline vec3_t VectorAdd(const vec3_t l, const vec3_t r)
 {
-	return x * y;
+	return {
+		l.x + r.x,
+		l.y + r.y,
+		l.z + r.z
+	};
+}
+
+inline vec3_t VectorSubtract(const vec3_t l, const vec3_t r)
+{
+	return {
+		l.x - r.x,
+		l.y - r.y,
+		l.z - r.z
+	};
+}
+
+inline bool VectorEmpty(const vec3_t v)
+{
+	return !v.x && !v.y && !v.z;
+}
+
+inline bool VectorEquals(const vec3_t a, const vec3_t b)
+{
+	return a.x == b.x && a.y == b.y && a.z == b.z;
+}
+
+inline vec3_t VectorScaleF(const vec3_t v, const vec_t r)
+{
+	return {
+		v.x * r,
+		v.y * r,
+		v.z * r 
+	};
+}
+
+inline vec3_t VectorScaleI(const vec3_t v, const int32_t r)
+{
+	return {
+		v.x * r,
+		v.y * r,
+		v.z * r 
+	};
+}
+
+inline vec3_t VectorDivideF(const vec3_t v, const vec_t r)
+{
+	return {
+		v.x / r,
+		v.y / r,
+		v.z / r 
+	};
+}
+
+inline vec3_t VectorDivideI(const vec3_t v, const int32_t r)
+{
+	return {
+		v.x / r,
+		v.y / r,
+		v.z / r 
+	};
 }
 
 /*
@@ -216,11 +204,6 @@ template<>
 inline std::string vas(const char *data)
 {
 	return data;
-}
-
-inline std::string vtoss(const vec3_t v)
-{
-	return vas("%f %f %f", v[0], v[1], v[2]);
 }
 
 constexpr size_t MAX_INFO_STRING	= 512;

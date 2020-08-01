@@ -2,77 +2,77 @@
 #include "game.h"
 #include "g_vm.h"
 
-static void QC_fabsf(QCVM &vm)
+static void QC_fabsf(qcvm_t *vm)
 {
-	const vec_t v = vm.ArgvFloat(0);
-	vm.ReturnFloat(fabsf(v));
+	const vec_t v = qcvm_argv_float(vm, 0);
+	qcvm_return_float(vm, fabsf(v));
 }
 
-static void QC_sqrtf(QCVM &vm)
+static void QC_sqrtf(qcvm_t *vm)
 {
-	const vec_t v = vm.ArgvFloat(0);
-	vm.ReturnFloat(sqrtf(v));
+	const vec_t v = qcvm_argv_float(vm, 0);
+	qcvm_return_float(vm, sqrtf(v));
 }
 
-static void QC_sinf(QCVM &vm)
+static void QC_sinf(qcvm_t *vm)
 {
-	const vec_t v = vm.ArgvFloat(0);
-	vm.ReturnFloat(sinf(v));
+	const vec_t v = qcvm_argv_float(vm, 0);
+	qcvm_return_float(vm, sinf(v));
 }
 
-static void QC_cosf(QCVM &vm)
+static void QC_cosf(qcvm_t *vm)
 {
-	const vec_t v = vm.ArgvFloat(0);
-	vm.ReturnFloat(cosf(v));
+	const vec_t v = qcvm_argv_float(vm, 0);
+	qcvm_return_float(vm, cosf(v));
 }
 
-static void QC_atan2f(QCVM &vm)
+static void QC_atan2f(qcvm_t *vm)
 {
-	const vec_t x = vm.ArgvFloat(0);
-	const vec_t y = vm.ArgvFloat(1);
-	vm.ReturnFloat(atan2f(x, y));
+	const vec_t x = qcvm_argv_float(vm, 0);
+	const vec_t y = qcvm_argv_float(vm, 1);
+	qcvm_return_float(vm, atan2f(x, y));
 }
 
-static void QC_atanf(QCVM &vm)
+static void QC_atanf(qcvm_t *vm)
 {
-	const vec_t x = vm.ArgvFloat(0);
-	vm.ReturnFloat(atanf(x));
+	const vec_t x = qcvm_argv_float(vm, 0);
+	qcvm_return_float(vm, atanf(x));
 }
 
-static void QC_asinf(QCVM &vm)
+static void QC_asinf(qcvm_t *vm)
 {
-	const vec_t x = vm.ArgvFloat(0);
-	vm.ReturnFloat(asinf(x));
+	const vec_t x = qcvm_argv_float(vm, 0);
+	qcvm_return_float(vm, asinf(x));
 }
 
-static void QC_isnan(QCVM &vm)
+static void QC_isnan(qcvm_t *vm)
 {
-	const vec_t x = vm.ArgvFloat(0);
-	vm.ReturnFloat(isnan(x));
+	const vec_t x = qcvm_argv_float(vm, 0);
+	qcvm_return_float(vm, isnan(x));
 }
 
-static void QC_floorf(QCVM &vm)
+static void QC_floorf(qcvm_t *vm)
 {
-	const vec_t v = vm.ArgvFloat(0);
-	vm.ReturnFloat(floorf(v));
+	const vec_t v = qcvm_argv_float(vm, 0);
+	qcvm_return_float(vm, floorf(v));
 }
 
-static void QC_ceilf(QCVM &vm)
+static void QC_ceilf(qcvm_t *vm)
 {
-	const vec_t v = vm.ArgvFloat(0);
-	vm.ReturnFloat(ceilf(v));
+	const vec_t v = qcvm_argv_float(vm, 0);
+	qcvm_return_float(vm, ceilf(v));
 }
 
-static void QC_roundf(QCVM &vm)
+static void QC_roundf(qcvm_t *vm)
 {
-	const vec_t v = vm.ArgvFloat(0);
-	vm.ReturnFloat(roundf(v));
+	const vec_t v = qcvm_argv_float(vm, 0);
+	qcvm_return_float(vm, roundf(v));
 }
 
-static void QC_tanf(QCVM &vm)
+static void QC_tanf(qcvm_t *vm)
 {
-	const vec_t v = vm.ArgvFloat(0);
-	vm.ReturnFloat(tanf(v));
+	const vec_t v = qcvm_argv_float(vm, 0);
+	qcvm_return_float(vm, tanf(v));
 }
 
 /*
@@ -98,33 +98,32 @@ inline uint32_t Q_rand_uniform(uint32_t n)
 	return std::uniform_int_distribution<uint32_t>(0, n - 1)(mt);
 }
 
-float frand()
+vec_t frand()
 {
-	return std::uniform_real<float>()(mt);
+	return std::uniform_real<vec_t>()(mt);
 }
 
-float frand(const float &max)
+vec_t frand(const vec_t max)
 {
-	return std::uniform_real<float>(0.f, max)(mt);
+	return std::uniform_real<vec_t>(0.f, max)(mt);
 }
 
-float frand(const float &min, const float &max)
+vec_t frand(const vec_t min, const vec_t max)
 {
-	return std::uniform_real<float>(min, max)(mt);
+	return std::uniform_real<vec_t>(min, max)(mt);
 }
 
-static void QC_Q_rand(QCVM &vm)
+static void QC_Q_rand(qcvm_t *vm)
 {
-	vm.ReturnInt(Q_rand() & 0x7FFFFFFF);
+	qcvm_return_int32(vm, Q_rand() & 0x7FFFFFFF);
 }
 
-static void QC_Q_rand_uniform(QCVM &vm)
+static void QC_Q_rand_uniform(qcvm_t *vm)
 {
-	vm.ReturnInt(Q_rand_uniform(vm.ArgvInt32(0)));
+	qcvm_return_int32(vm, Q_rand_uniform(qcvm_argv_int32(vm, 0)));
 }
 
-
-void InitMathBuiltins(QCVM &vm)
+void InitMathBuiltins(qcvm_t *vm)
 {
 	RegisterBuiltin(fabsf);
 	RegisterBuiltin(sqrtf);

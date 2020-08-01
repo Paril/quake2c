@@ -2,14 +2,14 @@
 #include "game.h"
 #include "g_vm.h"
 
-static void QC_SetNumEdicts(QCVM &vm)
+static void QC_SetNumEdicts(qcvm_t *vm)
 {
-	globals.num_edicts = vm.ArgvInt32(0);
+	globals.num_edicts = qcvm_argv_int32(vm, 0);
 }
 
-static void QC_ClearEntity(QCVM &vm)
+static void QC_ClearEntity(qcvm_t *vm)
 {
-	edict_t *entity = vm.ArgvEntity(0);
+	edict_t *entity = qcvm_argv_entity(vm, 0);
 	const int32_t number = entity->s.number;
 
 	memset(entity, 0, globals.edict_size);
@@ -19,62 +19,77 @@ static void QC_ClearEntity(QCVM &vm)
 	if (number > 0 && number <= game.num_clients)
 		entity->client = &game.clients[number - 1];
 
-	vm.dynamic_strings.CheckRefUnset(entity, sizeof(*entity) / sizeof(global_t));
+	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, entity, globals.edict_size / sizeof(global_t), false);
 }
 
-void SyncPlayerState(QCVM &vm, edict_t *ent)
+void SyncPlayerState(qcvm_t *vm, edict_t *ent)
 {
-	for (auto &wrap : vm.field_wraps.GetFields())
+	for (auto &wrap : vm->field_wraps.wraps)
 	{
-		const void *field = vm.GetEntityFieldPointer(ent, wrap.first / sizeof(global_t));
-		vm.field_wraps.WrapField(ent, wrap.first, field);
+		const void *field = qcvm_get_entity_field_pointer(ent, wrap.first / sizeof(global_t));
+		qcvm_field_wrap_list_wrap(&vm->field_wraps, ent, wrap.first, field);
 	}
 }
 
-static void QC_SyncPlayerState(QCVM &vm)
+static void QC_SyncPlayerState(qcvm_t *vm)
 {
-	edict_t *ent = vm.ArgvEntity(0);
+	edict_t *ent = qcvm_argv_entity(vm, 0);
 	SyncPlayerState(vm, ent);
 }
 
-std::string ParseSlashes(const char *value)
+const char *ParseSlashes(const char *value)
 {
-	std::string v(value);
+	// no slashes to parse
+	if (!strchr(value, '\\'))
+		return value;
 
-	size_t index = 0;
+	// in Q2 this was 128, but just in case...
+	// TODO: honestly I'd prefer to make this dynamic in future
+	static char slashless_string[MAX_INFO_STRING];
 
-	while (true)
+	if (strlen(value) >= sizeof(slashless_string))
+		gi.error("string overflow :(((((((");
+
+	const char *src = value;
+	char *dst = slashless_string;
+
+	while (*src)
 	{
-		index = v.find_first_of('\\', index);
+		const char c = *src;
 
-		if (index == v.npos || index + 1 >= v.length())
-			break;
+		if (c == '\\')
+		{
+			const char next = *(src + 1);
 
-		if (v.at(index + 1) == 'n')
-		{
-			v.replace(index, 2, 1, '\n');
-			index++;
+			if (!next)
+				gi.error("bad string");
+			else if (next == '\\' || next == 'n')
+			{
+				*dst = (next == 'n') ? '\n' : '\\';
+				src += 2;
+				dst++;
+
+				continue;
+			}
 		}
-		else if (v.at(index + 1) == '\\')
-		{
-			v.replace(index, 2, 1, '\\');
-			index++;
-		}
-		else
-			index += 2;
+
+		*dst = c;
+		src++;
+		dst++;
 	}
 
-	return v;
+	*dst = 0;
+	return slashless_string;
 }
 
-static inline void QC_parse_value_into_ptr(QCVM &vm, const deftype_t &type, const char *value, void *ptr)
+static inline void QC_parse_value_into_ptr(qcvm_t *vm, const deftype_t &type, const char *value, void *ptr)
 {
 	size_t data_span = 1;
 
 	switch (type)
 	{
 	case TYPE_STRING:
-		*(string_t *)ptr = vm.StoreOrFind(ParseSlashes(value));
+		*(string_t *)ptr = qcvm_store_or_find_string(vm, ParseSlashes(value));
 		break;
 	case TYPE_FLOAT:
 		*(vec_t *)ptr = strtof(value, nullptr);
@@ -87,65 +102,65 @@ static inline void QC_parse_value_into_ptr(QCVM &vm, const deftype_t &type, cons
 		*(int32_t *)ptr = strtol(value, nullptr, 10);
 		break;
 	default:
-		vm.Error("Couldn't parse field, bad type %i", type);
+		qcvm_error(vm, "Couldn't parse field, bad type %i", type);
 	}
 	
-	vm.dynamic_strings.CheckRefUnset(ptr, data_span);
+	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, ptr, data_span, false);
 
-	if (type == TYPE_STRING && vm.dynamic_strings.IsRefCounted(*(string_t *)ptr))
-		vm.dynamic_strings.MarkRefCopy(*(string_t *)ptr, ptr);
+	if (type == TYPE_STRING && qcvm_string_list_is_ref_counted(&vm->dynamic_strings, *(string_t *)ptr))
+		qcvm_string_list_mark_ref_copy(&vm->dynamic_strings, *(string_t *)ptr, ptr);
 }
 
-static void QC_entity_key_parse(QCVM &vm)
+static void QC_entity_key_parse(qcvm_t *vm)
 {
-	edict_t *ent = vm.ArgvEntity(0);
-	const int32_t field = vm.ArgvInt32(1);
-	const char *value = vm.ArgvString(2);
+	edict_t *ent = qcvm_argv_entity(vm, 0);
+	const int32_t field = qcvm_argv_int32(vm, 1);
+	const char *value = qcvm_argv_string(vm, 2);
 
-	void *ptr = vm.GetEntityFieldPointer(ent, field);
+	void *ptr = qcvm_get_entity_field_pointer(ent, field);
 
-	auto f = vm.field_map.find((global_t)field);
+	auto f = vm->field_map.find((global_t)field);
 
-	if (f == vm.field_map.end())
-		vm.Error("Couldn't match field %i", field);
+	if (f == vm->field_map.end())
+		qcvm_error(vm, "Couldn't match field %i", field);
 
 	QC_parse_value_into_ptr(vm, (*f).second->id, value, ptr);
 }
 
-static void QC_struct_key_parse(QCVM &vm)
+static void QC_struct_key_parse(qcvm_t *vm)
 {
-	const char *struct_name = vm.ArgvString(0);
-	const char *key_name = vm.ArgvString(1);
-	const char *value = vm.ArgvString(2);
+	const char *struct_name = qcvm_argv_string(vm, 0);
+	const char *key_name = qcvm_argv_string(vm, 1);
+	const char *value = qcvm_argv_string(vm, 2);
 	
 	std::string full_name = vas("%s.%s", struct_name, key_name);
-	auto hashed = vm.definition_map_by_name.find(full_name);
+	auto hashed = vm->definition_map_by_name.find(full_name);
 
-	if (hashed == vm.definition_map_by_name.end())
+	if (hashed == vm->definition_map_by_name.end())
 	{
-		vm.ReturnInt(0);
+		qcvm_return_int32(vm, 0);
 		return;
 	}
 
 	QCDefinition *g = (*hashed).second;
-	void *global = vm.GetGlobalByIndex(g->global_index);
+	void *global = qcvm_get_global(vm, g->global_index);
 	QC_parse_value_into_ptr(vm, g->id & ~TYPE_GLOBAL, value, global);
-	vm.ReturnInt(1);
+	qcvm_return_int32(vm, 1);
 }
 
-static void QC_itoe(QCVM &vm)
+static void QC_itoe(qcvm_t *vm)
 {
-	const int32_t number = vm.ArgvInt32(0);
-	vm.ReturnEntity(itoe(number));
+	const int32_t number = qcvm_argv_int32(vm, 0);
+	qcvm_return_entity(vm, itoe(number));
 }
 
-static void QC_etoi(QCVM &vm)
+static void QC_etoi(qcvm_t *vm)
 {
-	const size_t address = vm.ArgvInt32(0);
-	vm.ReturnInt(((uint8_t *)address - (uint8_t *)globals.edicts) / globals.edict_size);
+	const size_t address = qcvm_argv_int32(vm, 0);
+	qcvm_return_int32(vm, ((uint8_t *)address - (uint8_t *)globals.edicts) / globals.edict_size);
 }
 
-void InitGameBuiltins(QCVM &vm)
+void InitGameBuiltins(qcvm_t *vm)
 {
 	RegisterBuiltin(SetNumEdicts);
 	RegisterBuiltin(ClearEntity);

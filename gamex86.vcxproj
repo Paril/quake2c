@@ -105,6 +105,7 @@
     <ClCompile Include="src\vm_gi.cpp" />
     <ClCompile Include="src\vm_math.cpp" />
     <ClCompile Include="src\vm_mem.cpp" />
+    <ClCompile Include="src\vm_opcodes.cpp" />
     <ClCompile Include="src\vm_string.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -116,6 +117,7 @@
     <ClInclude Include="src\shared\platform.h" />
     <ClInclude Include="src\shared\shared.h" />
     <ClInclude Include="src\vm_game.h" />
+    <ClInclude Include="src\vm_opcodes.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

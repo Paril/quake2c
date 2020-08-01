@@ -227,12 +227,12 @@ struct pmove_state_t
 {
 	pmtype_t	pm_type;
 
-	std::array<short, 3>	origin;		// 12.3
-	std::array<short, 3>	velocity;	// 12.3
-	pmflags_t				pm_flags;		// ducked, jump_held, etc
-	uint8_t					pm_time;		// each unit = 8 ms
-	short					gravity;
-	std::array<short, 3>	delta_angles;	// add to command angles to get view direction
+	short		origin[3];		// 12.3
+	short		velocity[3];	// 12.3
+	pmflags_t	pm_flags;		// ducked, jump_held, etc
+	uint8_t		pm_time;		// each unit = 8 ms
+	short		gravity;
+	short		delta_angles[3];	// add to command angles to get view direction
 												// changed by spawns, rotating objects, and teleporters
 };
 
@@ -248,8 +248,8 @@ struct pmove_t
 	qboolean	snapinitial;    // if s has been changed outside pmove
 
 	// results (out)
-	int								numtouch;
-	std::array<edict_t*, MAX_TOUCH>	touchents;
+	int		numtouch;
+	edict_t	*touchents[MAX_TOUCH];
 
 	vec3_t	viewangles;         // clamped
 	float	viewheight;
@@ -261,8 +261,8 @@ struct pmove_t
 	int		waterlevel;
 
 	// callbacks to test the world
-	trace_t			(* q_gameabi trace)(const vec3_t &start, const vec3_t &mins, const vec3_t &maxs, const vec3_t &end);
-	content_flags_t	(*pointcontents)(const vec3_t &point);
+	trace_t			(* q_gameabi trace)(const vec3_t *start, const vec3_t *mins, const vec3_t *maxs, const vec3_t *end);
+	content_flags_t	(*pointcontents)(const vec3_t *point);
 };
 
 //===============================================================
@@ -278,7 +278,7 @@ extern "C" struct game_import_t
 	void (* q_printf(3, 4) cprintf)(edict_t *ent, print_level_t printlevel, const char *fmt, ...);
 	void (* q_printf(2, 3) centerprintf)(edict_t *ent, const char *fmt, ...);
 	void (*sound)(edict_t *ent, sound_channel_t channel, int soundindex, vec_t volume, sound_attn_t attenuation, vec_t timeofs);
-	void (*positioned_sound)(const vec3_t &origin, edict_t *ent, sound_channel_t channel, int soundindex, vec_t volume, sound_attn_t attenuation, vec_t timeofs);
+	void (*positioned_sound)(const vec3_t *origin, edict_t *ent, sound_channel_t channel, int soundindex, vec_t volume, sound_attn_t attenuation, vec_t timeofs);
 
 	// config strings hold all the index strings, the lightstyles,
 	// and misc data like the sky definition and cdtrack.
@@ -296,10 +296,10 @@ extern "C" struct game_import_t
 	void (*setmodel)(edict_t *ent, const char *name);
 
 	// collision detection
-	trace_t (* q_gameabi trace)(const vec3_t &start, const vec3_t &mins, const vec3_t &maxs, const vec3_t &end, edict_t *passent, content_flags_t contentmask);
-	content_flags_t (*pointcontents)(const vec3_t &point);
-	qboolean (*inPVS)(const vec3_t &p1, const vec3_t &p2);
-	qboolean (*inPHS)(const vec3_t &p1, const vec3_t &p2);
+	trace_t (* q_gameabi trace)(const vec3_t *start, const vec3_t *mins, const vec3_t *maxs, const vec3_t *end, edict_t *passent, content_flags_t contentmask);
+	content_flags_t (*pointcontents)(const vec3_t *point);
+	qboolean (*inPVS)(const vec3_t *p1, const vec3_t *p2);
+	qboolean (*inPHS)(const vec3_t *p1, const vec3_t *p2);
 	void (*SetAreaPortalState)(int portalnum, qboolean open);
 	qboolean (*AreasConnected)(int area1, int area2);
 
@@ -308,11 +308,11 @@ extern "C" struct game_import_t
 	// solidity changes, it must be relinked.
 	void (*linkentity)(edict_t *ent);
 	void (*unlinkentity)(edict_t *ent);     // call before removing an interactive edict
-	int (*BoxEdicts)(const vec3_t &mins, const vec3_t &maxs, edict_t **list, int maxcount, box_edicts_area_t areatype);
+	int (*BoxEdicts)(const vec3_t *mins, const vec3_t *maxs, edict_t **list, int maxcount, box_edicts_area_t areatype);
 	void (*Pmove)(pmove_t *pmove);          // player movement code common with client prediction
 
 	// network messaging
-	void (*multicast)(const vec3_t &origin, multicast_t to);
+	void (*multicast)(const vec3_t *origin, multicast_t to);
 	void (*unicast)(edict_t *ent, qboolean reliable);
 	void (*WriteChar)(int c);
 	void (*WriteByte)(int c);
@@ -320,8 +320,8 @@ extern "C" struct game_import_t
 	void (*WriteLong)(int c);
 	void (*WriteFloat)(vec_t f);
 	void (*WriteString)(const char *s);
-	void (*WritePosition)(const vec3_t &pos);    // some fractional bits
-	void (*WriteDir)(const vec3_t &pos);         // single byte encoded, very coarse
+	void (*WritePosition)(const vec3_t *pos);    // some fractional bits
+	void (*WriteDir)(const vec3_t *pos);         // single byte encoded, very coarse
 	void (*WriteAngle)(vec_t f);
 
 	// managed memory allocation

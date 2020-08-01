@@ -2,22 +2,22 @@
 #include "game.h"
 #include "g_vm.h"
 
-static void QC_ModInt(QCVM &vm)
+static void QC_ModInt(qcvm_t *vm)
 {
-	const int a = vm.ArgvInt32(0);
-	const int b = vm.ArgvInt32(1);
+	const int a = qcvm_argv_int32(vm, 0);
+	const int b = qcvm_argv_int32(vm, 1);
 
-	vm.ReturnInt(a % b);
+	qcvm_return_int32(vm, a % b);
 }
 
-static void QC_func_get(QCVM &vm)
+static void QC_func_get(qcvm_t *vm)
 {
-	const char *s = vm.ArgvString(0);
-	func_t func = vm.FindFunctionID(s);
-	vm.ReturnFunc(func);
+	const char *s = qcvm_argv_string(vm, 0);
+	func_t func = qcvm_find_function_id(vm, s);
+	qcvm_return_func(vm, func);
 }
 
-void InitExtBuiltins(QCVM &vm)
+void InitExtBuiltins(qcvm_t *vm)
 {
 	RegisterBuiltin(ModInt);
 	RegisterBuiltin(func_get);

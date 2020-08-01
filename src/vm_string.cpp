@@ -2,106 +2,106 @@
 #include "game.h"
 #include "g_vm.h"
 
-static void QC_va(QCVM &vm)
+static void QC_va(qcvm_t *vm)
 {
-	const string_t fmtid = vm.ArgvStringID(0);
-	vm.ReturnString(ParseFormat(fmtid, vm, 1));
+	const string_t fmtid = qcvm_argv_string_id(vm, 0);
+	qcvm_return_string(vm, ParseFormat(fmtid, vm, 1).data());
 }
 
-static void QC_stoi(QCVM &vm)
+static void QC_stoi(qcvm_t *vm)
 {
-	const char *a = vm.ArgvString(0);
-	vm.ReturnInt(strtol(a, nullptr, 10));
+	const char *a = qcvm_argv_string(vm, 0);
+	qcvm_return_int32(vm, strtol(a, nullptr, 10));
 }
 
-static void QC_stof(QCVM &vm)
+static void QC_stof(qcvm_t *vm)
 {
-	const char *a = vm.ArgvString(0);
-	vm.ReturnFloat(strtof(a, nullptr));
+	const char *a = qcvm_argv_string(vm, 0);
+	qcvm_return_float(vm, strtof(a, nullptr));
 }
 
-static void QC_stricmp(QCVM &vm)
+static void QC_stricmp(qcvm_t *vm)
 {
-	const char *a = vm.ArgvString(0);
-	const char *b = vm.ArgvString(1);
-	vm.ReturnInt(stricmp(a, b));
+	const char *a = qcvm_argv_string(vm, 0);
+	const char *b = qcvm_argv_string(vm, 1);
+	qcvm_return_int32(vm, stricmp(a, b));
 }
 
-static void QC_strncmp(QCVM &vm)
+static void QC_strncmp(qcvm_t *vm)
 {
-	const char *a = vm.ArgvString(0);
-	const char *b = vm.ArgvString(1);
-	const int32_t c = vm.ArgvInt32(2);
+	const char *a = qcvm_argv_string(vm, 0);
+	const char *b = qcvm_argv_string(vm, 1);
+	const int32_t c = qcvm_argv_int32(vm, 2);
 
-	vm.ReturnInt(strncmp(a, b, c));
+	qcvm_return_int32(vm, strncmp(a, b, c));
 }
 
-static void QC_strlen(QCVM &vm)
+static void QC_strlen(qcvm_t *vm)
 {
-	const string_t a = vm.ArgvStringID(0);
-	vm.ReturnInt(vm.StringLength(a));
+	const string_t a = qcvm_argv_string_id(vm, 0);
+	qcvm_return_int32(vm, qcvm_get_string_length(vm, a));
 }
 
-static void QC_substr(QCVM &vm)
+static void QC_substr(qcvm_t *vm)
 {
-	const string_t strid = vm.ArgvStringID(0);
-	const int32_t start = vm.ArgvInt32(1);
-	const size_t str_len = vm.StringLength(strid);
+	const string_t strid = qcvm_argv_string_id(vm, 0);
+	const int32_t start = qcvm_argv_int32(vm, 1);
+	const size_t str_len = qcvm_get_string_length(vm, strid);
 	size_t length = SIZE_MAX;
 
 	if (start < 0 || start >= str_len)
-		vm.Error("invalid start to substr");
+		qcvm_error(vm, "invalid start to substr");
 
-	if (vm.state.argc >= 3)
-		length = vm.ArgvInt32(2);
+	if (vm->state.argc >= 3)
+		length = qcvm_argv_int32(vm, 2);
 
 	length = min(str_len - start, length);
 
-	vm.ReturnString(std::string(vm.GetString(strid) + start, length));
+	qcvm_return_string(vm, std::string(qcvm_get_string(vm, strid) + start, length).data());
 }
 
-static void QC_strconcat(QCVM &vm)
+static void QC_strconcat(qcvm_t *vm)
 {
-	if (vm.state.argc == 0)
+	if (vm->state.argc == 0)
 	{
-		vm.ReturnString(STRING_EMPTY);
+		qcvm_return_string_id(vm, STRING_EMPTY);
 		return;
 	}
-	else if (vm.state.argc == 1)
+	else if (vm->state.argc == 1)
 	{
-		vm.ReturnString(vm.ArgvStringID(0));
+		qcvm_return_string_id(vm, qcvm_argv_string_id(vm, 0));
 		return;
 	}
 
 	std::string str;
 
-	for (int32_t i = 0; i < vm.state.argc; i++)
-		str += vm.ArgvString(i);
+	for (int32_t i = 0; i < vm->state.argc; i++)
+		str += qcvm_argv_string(vm, i);
 
-	vm.ReturnString(std::move(str));
+	qcvm_return_string(vm, str.data());
 }
 
-static void QC_strstr(QCVM &vm)
+static void QC_strstr(qcvm_t *vm)
 {
-	const char *a = vm.ArgvString(0);
-	const char *b = vm.ArgvString(1);
+	const char *a = qcvm_argv_string(vm, 0);
+	const char *b = qcvm_argv_string(vm, 1);
 	const char *c = strstr(a, b);
 
-	vm.ReturnInt(c == nullptr ? -1 : (c - a));
+	qcvm_return_int32(vm, c == nullptr ? -1 : (c - a));
 }
 
-static void QC_strchr(QCVM &vm)
+static void QC_strchr(qcvm_t *vm)
 {
-	const char *a = vm.ArgvString(0);
-	const int32_t b = vm.ArgvInt32(1);
+	const char *a = qcvm_argv_string(vm, 0);
+	const int32_t b = qcvm_argv_int32(vm, 1);
 	const char *c = strchr(a, b);
 	
-	vm.ReturnInt(c == nullptr ? -1 : (c - a));
+	qcvm_return_int32(vm, c == nullptr ? -1 : (c - a));
 }
 
 #include <ctime>
 
-static void QC_localtime(QCVM &vm)
+static void QC_localtime(qcvm_t *vm)
 {
 	static tm empty_ltime;
 	time_t gmtime = time(NULL);
@@ -110,10 +110,10 @@ static void QC_localtime(QCVM &vm)
 	if (!ltime)
 		ltime = &empty_ltime;
 
-	vm.SetGlobal(GLOBAL_PARM0, *ltime);
+	qcvm_set_global_typed_ptr(tm, vm, GLOBAL_PARM0, ltime);
 }
 
-void InitStringBuiltins(QCVM &vm)
+void InitStringBuiltins(qcvm_t *vm)
 {
 	RegisterBuiltin(va);
 	

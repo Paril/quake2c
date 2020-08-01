@@ -45,6 +45,9 @@
     <ClCompile Include="src\vm_math.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="src\vm_opcodes.cpp">
+      <Filter>inc</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\shared\client.h">
@@ -69,6 +72,9 @@
       <Filter>inc</Filter>
     </ClInclude>
     <ClInclude Include="src\vm_game.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vm_opcodes.h">
       <Filter>inc</Filter>
     </ClInclude>
   </ItemGroup>
