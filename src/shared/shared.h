@@ -26,17 +26,14 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "config.h"
 #endif
 
-#include <cmath>
-#include <cctype>
-#include <cstdio>
-#include <cstdarg>
-#include <cstring>
-#include <cstdlib>
-#include <cstdint>
-#include <cinttypes>
-
-#include <array>
-#include <string>
+#include <math.h>
+#include <ctype.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <inttypes.h>
 
 #include "shared/platform.h"
 
@@ -66,11 +63,11 @@ MATHLIB
 ==============================================================
 */
 
-using vec_t = float;
+typedef float vec_t;
 
 typedef struct
 {
-	float	x, y, z;
+	vec_t	x, y, z;
 } vec3_t;
 
 inline vec_t DotProduct(const vec3_t l, const vec3_t r)
@@ -150,28 +147,19 @@ MATH
 ==============================================================
 */
 
-constexpr float coord2short = 8.f;
-constexpr float angle2short = (65536.f / 360.f);
-constexpr float short2coord = (1.0f / 8);
-constexpr float short2angle = (360.0f / 65536);
+static const vec_t coord2short = 8.f;
+static const vec_t angle2short = (65536.f / 360.f);
+static const vec_t short2coord = (1.0f / 8);
+static const vec_t short2angle = (360.0f / 65536);
 
-template<typename T>
-constexpr T bit(const T &shift)
-{
-	return 1 << shift;
-}
+inline vec_t maxf(const vec_t a, const vec_t b) { return a > b ? a : b; }
+inline vec_t minf(const vec_t a, const vec_t b) { return a < b ? a : b; }
 
-template<typename T>
-constexpr T max(const T &a, const T &b)
-{
-	return a > b ? a : b;
-}
+inline int32_t maxi(const int32_t a, const int32_t b) { return a > b ? a : b; }
+inline int32_t mini(const int32_t a, const int32_t b) { return a < b ? a : b; }
 
-template<typename T>
-constexpr T min(const T &a, const T &b)
-{
-	return a < b ? a : b;
-}
+inline size_t maxsz(const size_t a, const size_t b) { return a > b ? a : b; }
+inline size_t minsz(const size_t a, const size_t b) { return a < b ? a : b; }
 
 /*
 ==============================================================
@@ -181,32 +169,14 @@ STRING
 ==============================================================
 */
 
-constexpr size_t MAX_QPATH	= 64;	// max length of a quake game pathname
+static const size_t MAX_QPATH	= 64;	// max length of a quake game pathname
 
 // buffer safe operations
 size_t Q_strlcpy(char *dst, const char *src, size_t size);
 
-char *va(const char *format, ...) q_printf(1, 2);
+static const size_t MAX_INFO_STRING	= 512;
 
-template<typename ...T>
-inline std::string vas(const char *format, T ...args)
-{
-	static char ts;
-	const size_t len = 1 + snprintf(&ts, 1, format, args...);
-	std::string s;
-	s.resize(len);
-	snprintf(s.data(), len, format, args...);
-	s.pop_back();
-	return s;
-}
-
-template<>
-inline std::string vas(const char *data)
-{
-	return data;
-}
-
-constexpr size_t MAX_INFO_STRING	= 512;
+uint32_t Q_hash_string (const char *string, const size_t hash_size);
 
 /*
 ==========================================================

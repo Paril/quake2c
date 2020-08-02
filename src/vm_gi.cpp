@@ -113,7 +113,7 @@ static void QC_configstring(qcvm_t *vm)
 static void QC_error(qcvm_t *vm)
 {
 	const string_t fmtid = qcvm_argv_string_id(vm, 0);
-	qcvm_error(vm, ParseFormat(fmtid, vm, 1).data());
+	qcvm_error(vm, qcvm_parse_format(fmtid, vm, 1));
 }
 
 static void QC_modelindex(qcvm_t *vm)
@@ -423,7 +423,7 @@ static void QC_BoxEdicts(qcvm_t *vm)
 	const box_edicts_area_t areatype = qcvm_argv_int32(vm, 4);
 	static edict_t *raw_entities[MAX_EDICTS]; // FIXME: too big :(
 
-	const int32_t count = gi.BoxEdicts(&mins, &maxs, raw_entities, min(32, maxcount), areatype);
+	const int32_t count = gi.BoxEdicts(&mins, &maxs, raw_entities, mini(32, maxcount), areatype);
 
 	entity_set_clear(set);
 
@@ -477,7 +477,7 @@ static qcvm_t *pmove_vm;
 
 static content_flags_t QC_pm_pointcontents(const vec3_t *position)
 {
-	QCFunction *func = qcvm_get_function(pmove_vm, QC_pm_pointcontents_func);
+	qcvm_function_t *func = qcvm_get_function(pmove_vm, QC_pm_pointcontents_func);
 	qcvm_set_global_typed_ptr(vec3_t, pmove_vm, GLOBAL_PARM0, position);
 	qcvm_execute(pmove_vm, func);
 	return *qcvm_get_global_typed(content_flags_t, pmove_vm, GLOBAL_RETURN);
@@ -489,7 +489,7 @@ static trace_t QC_pm_trace(const vec3_t *start, const vec3_t *mins, const vec3_t
 {
 	QC_trace_t qc_tr;
 
-	QCFunction *func = qcvm_get_function(pmove_vm, QC_pm_trace_func);
+	qcvm_function_t *func = qcvm_get_function(pmove_vm, QC_pm_trace_func);
 	qcvm_set_allowed_stack(pmove_vm, &qc_tr, sizeof(qc_tr));
 	const int32_t address = (int32_t)&qc_tr;
 	qcvm_set_global_typed_value(int32_t, pmove_vm, GLOBAL_PARM0, address);
@@ -697,13 +697,13 @@ static void QC_bprintf(qcvm_t *vm)
 {
 	const print_level_t level = qcvm_argv_int32(vm, 0);
 	const string_t fmtid = qcvm_argv_string_id(vm, 1);
-	gi.bprintf(level, "%s", ParseFormat(fmtid, vm, 2).data());
+	gi.bprintf(level, "%s", qcvm_parse_format(fmtid, vm, 2));
 }
 
 static void QC_dprintf(qcvm_t *vm)
 {
 	const string_t fmtid = qcvm_argv_string_id(vm, 0);
-	gi.dprintf("%s", ParseFormat(fmtid, vm, 1).data());
+	gi.dprintf("%s", qcvm_parse_format(fmtid, vm, 1));
 }
 
 static void QC_cprintf(qcvm_t *vm)
@@ -711,14 +711,14 @@ static void QC_cprintf(qcvm_t *vm)
 	edict_t *ent = qcvm_argv_entity(vm, 0);
 	const print_level_t level = qcvm_argv_int32(vm, 1);
 	const string_t fmtid = qcvm_argv_string_id(vm, 2);
-	gi.cprintf(ent, level, "%s", ParseFormat(fmtid, vm, 3).data());
+	gi.cprintf(ent, level, "%s", qcvm_parse_format(fmtid, vm, 3));
 }
 
 static void QC_centerprintf(qcvm_t *vm)
 {
 	edict_t *ent = qcvm_argv_entity(vm, 0);
 	const string_t fmtid = qcvm_argv_string_id(vm, 1);
-	gi.centerprintf(ent, "%s", ParseFormat(fmtid, vm, 2).data());
+	gi.centerprintf(ent, "%s", qcvm_parse_format(fmtid, vm, 2));
 }
 
 static void QC_DebugGraph(qcvm_t *vm)

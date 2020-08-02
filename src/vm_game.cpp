@@ -1,6 +1,7 @@
 #include "shared/shared.h"
 #include "game.h"
 #include "g_vm.h"
+#include "vm_game.h"
 
 static void QC_SetNumEdicts(qcvm_t *vm)
 {
@@ -82,7 +83,7 @@ const char *ParseSlashes(const char *value)
 	return slashless_string;
 }
 
-static inline void QC_parse_value_into_ptr(qcvm_t *vm, const deftype_t &type, const char *value, void *ptr)
+static inline void QC_parse_value_into_ptr(qcvm_t *vm, const deftype_t type, const char *value, void *ptr)
 {
 	size_t data_span = 1;
 
@@ -119,12 +120,12 @@ static void QC_entity_key_parse(qcvm_t *vm)
 
 	void *ptr = qcvm_get_entity_field_pointer(ent, field);
 
-	auto f = vm->field_map.find((global_t)field);
+	qcvm_definition_t *f = vm->field_map_by_id[(global_t)field];
 
-	if (f == vm->field_map.end())
+	if (!f)
 		qcvm_error(vm, "Couldn't match field %i", field);
 
-	QC_parse_value_into_ptr(vm, (*f).second->id, value, ptr);
+	QC_parse_value_into_ptr(vm, f->id, value, ptr);
 }
 
 static void QC_struct_key_parse(qcvm_t *vm)
@@ -133,16 +134,20 @@ static void QC_struct_key_parse(qcvm_t *vm)
 	const char *key_name = qcvm_argv_string(vm, 1);
 	const char *value = qcvm_argv_string(vm, 2);
 	
-	std::string full_name = vas("%s.%s", struct_name, key_name);
-	auto hashed = vm->definition_map_by_name.find(full_name);
+	const char *full_name = qcvm_temp_format(vm, "%s.%s", struct_name, key_name);
+	definition_hash_t *hashed = vm->definition_hashes[Q_hash_string(full_name, vm->definitions_size)];
 
-	if (hashed == vm->definition_map_by_name.end())
+	for (; hashed; hashed = hashed->hash_next)
+		if (!strcmp(qcvm_get_string(vm, hashed->def->name_index), full_name))
+			break;
+
+	if (!hashed)
 	{
 		qcvm_return_int32(vm, 0);
 		return;
 	}
 
-	QCDefinition *g = (*hashed).second;
+	qcvm_definition_t *g = hashed->def;
 	void *global = qcvm_get_global(vm, g->global_index);
 	QC_parse_value_into_ptr(vm, g->id & ~TYPE_GLOBAL, value, global);
 	qcvm_return_int32(vm, 1);

@@ -5,6 +5,8 @@
 #include "vm_game.h"
 #include "vm_opcodes.h"
 
+#include <time.h>
+
 struct QCOffset
 {
 	uint32_t	offset;
@@ -50,7 +52,7 @@ struct QCHeader
 void qcvm_stack_needs_resize(qcvm_stack_t *stack)
 {
 	qcvm_string_backup_t *old_ref_strings = stack->ref_strings;
-	stack->ref_strings_allocated += REF_STRINGS_RESERVE;
+	stack->ref_strings_allocated += STACK_STRINGS_RESERVE;
 	stack->ref_strings = (decltype(stack->ref_strings)) qcvm_alloc(stack->vm, sizeof(decltype(*stack->ref_strings)) * stack->ref_strings_allocated);
 
 	if (old_ref_strings)
@@ -60,8 +62,8 @@ void qcvm_stack_needs_resize(qcvm_stack_t *stack)
 	}
 
 #ifdef _DEBUG
-	if (stack->ref_strings_allocated != REF_STRINGS_RESERVE)
-		gi.dprintf("Stack string count extended to %i\n", stack->ref_strings_allocated);
+	if (stack->ref_strings_allocated != STACK_STRINGS_RESERVE)
+		qcvm_debug(stack->vm, "Stack string count extended to %i\n", stack->ref_strings_allocated);
 #endif
 }
 
@@ -70,8 +72,7 @@ void qcvm_stack_push_ref_string(qcvm_stack_t *stack, const qcvm_string_backup_t 
 	if (stack->ref_strings_size == stack->ref_strings_allocated)
 		qcvm_stack_needs_resize(stack);
 
-	stack->ref_strings[stack->ref_strings_size] = ref_string;
-	stack->ref_strings_size++;
+	stack->ref_strings[stack->ref_strings_size++] = ref_string;
 }
 
 static void qcvm_string_list_init(qcvm_string_list_t *list, qcvm_t *vm)
@@ -79,76 +80,105 @@ static void qcvm_string_list_init(qcvm_string_list_t *list, qcvm_t *vm)
 	list->vm = vm;
 }
 
-string_t qcvm_string_list_allocate_string(qcvm_string_list_t *list)
-{
-	if (list->free_indices.size())
-	{
-		string_t top = list->free_indices.top();
-		list->free_indices.pop();
-		return top;
-	}
-
-	return (string_t)(-(int32_t)(list->strings.size() + 1));
-}
-
 string_t qcvm_string_list_store(qcvm_string_list_t *list, const char *str, const size_t len)
 {
-	string_t id = qcvm_string_list_allocate_string(list);
+	int32_t index;
 
-	list->strings.emplace(id, (qcvm_ref_counted_string_t) {
+	if (list->free_indices_size)
+		index = (-list->free_indices[--list->free_indices_size]) - 1;
+	else
+	{
+		if (list->strings_size == list->strings_allocated)
+		{
+			list->strings_allocated += REF_STRING_RESERVE;
+			qcvm_ref_counted_string_t *old_strings = list->strings;
+			list->strings = (qcvm_ref_counted_string_t *)qcvm_alloc(list->vm, sizeof(qcvm_ref_counted_string_t) * list->strings_allocated);
+			if (old_strings)
+			{
+				memcpy(list->strings, old_strings, sizeof(qcvm_ref_counted_string_t) * list->strings_size);
+				qcvm_mem_free(list->vm, old_strings);
+			}
+			qcvm_debug(list->vm, "Increased ref string storage to %u\n", list->strings_allocated);
+		}
+
+		index = list->strings_size++;
+	}
+
+	list->strings[index] = (qcvm_ref_counted_string_t) {
 		str,
 		len,
 		0
-	});
+	};
 
-	return id;
+	return (string_t)(-(index + 1));
 }
 
 void qcvm_string_list_unstore(qcvm_string_list_t *list, const string_t id)
 {
-	assert(list->strings.contains(id));
+	const int32_t index = (int32_t)(-id) - 1;
 
-	const auto &str = list->strings.at(id);
+	assert(index >= 0 && index < list->strings_size);
 
-	assert(!str.ref_count);
+	qcvm_ref_counted_string_t *str = &list->strings[index];
 
-	qcvm_mem_free(list->vm, (void *)str.str);
+	assert(!str->ref_count);
 
-	list->strings.erase(id);
+	qcvm_mem_free(list->vm, (void *)str->str);
 
-	list->free_indices.push(id);
+	*str = {};
+
+	if (list->free_indices_size == list->free_indices_allocated)
+	{
+		list->free_indices_allocated += FREE_STRING_RESERVE;
+		string_t *old_free_indices = list->free_indices;
+		list->free_indices = (string_t *)qcvm_alloc(list->vm, sizeof(string_t) * list->free_indices_allocated);
+		if (old_free_indices)
+		{
+			memcpy(list->free_indices, old_free_indices, sizeof(string_t) * list->free_indices_size);
+			qcvm_mem_free(list->vm, old_free_indices);
+		}
+		qcvm_debug(list->vm, "Increased free string storage to %u\n", list->free_indices_allocated);
+	}
+
+	list->free_indices[list->free_indices_size++] = id;
 }
 
 size_t qcvm_string_list_get_length(const qcvm_string_list_t *list, const string_t id)
 {
-	assert(list->strings.contains(id));
-	return list->strings.at(id).length;
+	const int32_t index = (int32_t)(-id) - 1;
+	assert(index >= 0 && index < list->strings_size);
+	return list->strings[index].length;
 }
 
 const char *qcvm_string_list_get(const qcvm_string_list_t *list, const string_t id)
 {
-	assert(list->strings.contains(id));
-	return list->strings.at(id).str;
+	const int32_t index = (int32_t)(-id) - 1;
+	assert(index >= 0 && index < list->strings_size);
+	return list->strings[index].str;
 }
 
 void qcvm_string_list_acquire(qcvm_string_list_t *list, const string_t id)
 {
 	START_TIMER(list->vm, StringAcquire);
+	
+	const int32_t index = (int32_t)(-id) - 1;
 
-	assert(list->strings.contains(id));
+	assert(index >= 0 && index < list->strings_size);
 
-	list->strings.at(id).ref_count++;
+	list->strings[index].ref_count++;
 
-	END_TIMER();
+	END_TIMER(list->vm, PROFILE_TIMERS);
 }
 
 void qcvm_string_list_release(qcvm_string_list_t *list, const string_t id)
 {
 	START_TIMER(list->vm, StringRelease);
+	
+	const int32_t index = (int32_t)(-id) - 1;
 
-	assert(list->strings.contains(id));
+	assert(index >= 0 && index < list->strings_size);
 
-	qcvm_ref_counted_string_t *str = &list->strings.at(id);
+	qcvm_ref_counted_string_t *str = &list->strings[index];
 
 	assert(str->ref_count);
 		
@@ -157,7 +187,7 @@ void qcvm_string_list_release(qcvm_string_list_t *list, const string_t id)
 	if (!str->ref_count)
 		qcvm_string_list_unstore(list, id);
 
-	END_TIMER();
+	END_TIMER(list->vm, PROFILE_TIMERS);
 }
 
 void qcvm_string_list_mark_ref_copy(qcvm_string_list_t *list, const string_t id, const void *ptr)
@@ -178,7 +208,7 @@ void qcvm_string_list_mark_ref_copy(qcvm_string_list_t *list, const string_t id,
 
 		if ((current_id = qcvm_string_list_has_ref(list, ptr)) && id == *current_id)
 		{
-			END_TIMER();
+			END_TIMER(list->vm, PROFILE_TIMERS);
 			return;
 		}
 	}
@@ -189,7 +219,7 @@ void qcvm_string_list_mark_ref_copy(qcvm_string_list_t *list, const string_t id,
 	// mark
 	list->ref_storage.emplace(ptr, id);
 
-	END_TIMER();
+	END_TIMER(list->vm, PROFILE_TIMERS);
 }
 
 void qcvm_string_list_check_ref_unset(qcvm_string_list_t *list, const void *ptr, const size_t span, const bool assume_changed)
@@ -207,7 +237,7 @@ void qcvm_string_list_check_ref_unset(qcvm_string_list_t *list, const void *ptr,
 
 		if (!assume_changed)
 		{
-			auto newstr = *(const string_t *)gptr;
+			const string_t newstr = *(const string_t *)gptr;
 
 			// still here, so we probably just copied to ourselves or something
 			if (newstr == old)
@@ -220,7 +250,7 @@ void qcvm_string_list_check_ref_unset(qcvm_string_list_t *list, const void *ptr,
 		list->ref_storage.erase(gptr);
 	}
 
-	END_TIMER();
+	END_TIMER(list->vm, PROFILE_TIMERS);
 }
 
 string_t *qcvm_string_list_has_ref(qcvm_string_list_t *list, const void *ptr)
@@ -230,11 +260,11 @@ string_t *qcvm_string_list_has_ref(qcvm_string_list_t *list, const void *ptr)
 	if (list->ref_storage.contains(ptr))
 	{
 		string_t *rv = &list->ref_storage.at(ptr);
-		END_TIMER();
+		END_TIMER(list->vm, PROFILE_TIMERS);
 		return rv;
 	}
 	
-	END_TIMER();
+	END_TIMER(list->vm, PROFILE_TIMERS);
 	return nullptr;
 }
 
@@ -259,7 +289,7 @@ void qcvm_string_list_mark_refs_copied(qcvm_string_list_t *list, const void *src
 		qcvm_string_list_mark_ref_copy(list, *str, dptr);
 	}
 
-	END_TIMER();
+	END_TIMER(list->vm, PROFILE_TIMERS);
 }
 
 void qcvm_string_list_mark_if_has_ref(qcvm_string_list_t *list, const void *src_ptr, const void *dst_ptr, const size_t span)
@@ -275,12 +305,13 @@ void qcvm_string_list_mark_if_has_ref(qcvm_string_list_t *list, const void *src_
 			qcvm_string_list_mark_ref_copy(list, list->ref_storage.at(src_gptr), dst_gptr);
 	}
 
-	END_TIMER();
+	END_TIMER(list->vm, PROFILE_TIMERS);
 }
 
 bool qcvm_string_list_is_ref_counted(qcvm_string_list_t *list, const string_t id)
 {
-	return list->strings.contains(id);
+	const int32_t index = (int32_t)(-id) - 1;
+	return index < list->strings_size && list->strings[index].str;
 }
 
 qcvm_string_backup_t qcvm_string_list_pop_ref(qcvm_string_list_t *list, const void *ptr)
@@ -293,7 +324,7 @@ qcvm_string_backup_t qcvm_string_list_pop_ref(qcvm_string_list_t *list, const vo
 
 	list->ref_storage.erase(ptr);
 
-	END_TIMER();
+	END_TIMER(list->vm, PROFILE_TIMERS);
 
 	return popped_ref;
 }
@@ -309,11 +340,13 @@ void qcvm_string_list_push_ref(qcvm_string_list_t *list, const qcvm_string_backu
 		list->ref_storage.erase(backup->ptr);
 	}
 
+	const int32_t index = (int32_t)(-backup->id) - 1;
+
 	// simple restore
-	if (list->strings.contains(backup->id))
+	if ((index >= 0 && index < list->strings_size) && list->strings[index].str)
 	{
 		list->ref_storage.emplace(backup->ptr, backup->id);
-		END_TIMER();
+		END_TIMER(list->vm, PROFILE_TIMERS);
 		return;
 	}
 
@@ -322,23 +355,21 @@ void qcvm_string_list_push_ref(qcvm_string_list_t *list, const qcvm_string_backu
 
 static void qcvm_string_list_write_state(qcvm_string_list_t *list, FILE *fp)
 {
-	size_t len;
-
-	for (const auto &s : list->strings)
+	for (qcvm_ref_counted_string_t *s = list->strings; s < list->strings + list->strings_size; s++)
 	{
-		len = s.second.length;
-		fwrite(&len, sizeof(len), 1, fp);
-		fwrite(s.second.str, sizeof(char), len, fp);
+		if (!s->str)
+			continue;
+
+		fwrite(&s->length, sizeof(s->length), 1, fp);
+		fwrite(s->str, sizeof(char), s->length, fp);
 	}
 
-	len = 0;
+	const size_t len = 0;
 	fwrite(&len, sizeof(len), 1, fp);
 }
 
 static void qcvm_string_list_read_state(qcvm_string_list_t *list, FILE *fp)
 {
-	std::string s;
-
 	while (true)
 	{
 		size_t len;
@@ -348,12 +379,12 @@ static void qcvm_string_list_read_state(qcvm_string_list_t *list, FILE *fp)
 		if (!len)
 			break;
 
-		s.resize(len);
-
-		fread(s.data(), sizeof(char), len, fp);
+		char *s = qcvm_temp_buffer(list->vm, len, nullptr);
+		fread(s, sizeof(char), len, fp);
+		s[len] = 0;
 
 		// does not acquire, since entity/game state does that itself
-		qcvm_store_or_find_string(list->vm, s.data());
+		qcvm_store_or_find_string(list->vm, s);
 	}
 }
 
@@ -376,7 +407,7 @@ void qcvm_builtin_list_register(qcvm_builtin_list_t *list, const char *name, qcv
 	list->next_id--;
 	list->builtins.emplace(id, builtin);
 
-	for (QCFunction *func = list->vm->functions; func < list->vm->functions + list->vm->functions_size; func++)
+	for (qcvm_function_t *func = list->vm->functions; func < list->vm->functions + list->vm->functions_size; func++)
 	{
 		if (func->id || func->name_index == STRING_EMPTY)
 			continue;
@@ -389,9 +420,7 @@ void qcvm_builtin_list_register(qcvm_builtin_list_t *list, const char *name, qcv
 	}
 }
 
-#include <sstream>
-
-std::string ParseFormat(const string_t formatid, const qcvm_t *vm, const uint8_t start)
+const char *qcvm_parse_format(const string_t formatid, const qcvm_t *vm, const uint8_t start)
 {
 	enum ParseToken
 	{
@@ -400,12 +429,14 @@ std::string ParseFormat(const string_t formatid, const qcvm_t *vm, const uint8_t
 		PT_SKIP
 	};
 
-	std::stringstream buf;
+	static char buffer[0x800];
 	size_t i = 0;
 	const size_t len = qcvm_get_string_length(vm, formatid);
 	static char format_buffer[17];
 	uint8_t param_index = start;
 	const char *format = qcvm_get_string(vm, formatid);
+	char *p = buffer;
+	size_t len_left = sizeof(buffer) - 1;
 
 	while (true)
 	{
@@ -413,11 +444,22 @@ std::string ParseFormat(const string_t formatid, const qcvm_t *vm, const uint8_t
 
 		if (!next)
 		{
-			buf.write(format + i, (format + len) - (format + i));
+			const size_t write_len = (format + len) - (format + i);
+			if (len_left < write_len)
+				qcvm_error(vm, "qcvm_parse_format overflow");
+
+			strncpy(p, format + i, write_len);
+			p += write_len;
+			len_left -= write_len;
 			break;
 		}
 
-		buf.write(format + i, (next - format) - i);
+		size_t write_len = (next - format) - i;
+		if (len_left < write_len)
+			qcvm_error(vm, "qcvm_parse_format overflow");
+		strncpy(p, format + i, write_len);
+		p += write_len;
+		len_left -= write_len;
 		i = next - format;
 
 		const char *specifier_start = next;
@@ -450,7 +492,12 @@ std::string ParseFormat(const string_t formatid, const qcvm_t *vm, const uint8_t
 				state = ParseToken::PT_SPECIFIER;
 				continue;
 			case '%':
-				buf.put('%');
+				if (len_left < 1)
+					qcvm_error(vm, "qcvm_parse_format overflow");
+		
+				*p = '%';
+				p++;
+				len_left--;
 				state = ParseToken::PT_SKIP;
 				continue;
 			}
@@ -458,7 +505,9 @@ std::string ParseFormat(const string_t formatid, const qcvm_t *vm, const uint8_t
 
 		if (state == ParseToken::PT_SPECIFIER)
 		{
-			Q_strlcpy(format_buffer, specifier_start, min(sizeof(format_buffer), (size_t)((next - specifier_start) + 1 + 1)));
+			Q_strlcpy(format_buffer, specifier_start, minsz(sizeof(format_buffer), (size_t)((next - specifier_start) + 1 + 1)));
+
+			const char *formatted;
 
 			switch (*next)
 			{
@@ -469,7 +518,7 @@ std::string ParseFormat(const string_t formatid, const qcvm_t *vm, const uint8_t
 			case 'X':
 			case 'c':
 			case 'p':
-				buf << vas(format_buffer, qcvm_argv_int32(vm, param_index++));
+				formatted = qcvm_temp_format(vm, format_buffer, qcvm_argv_int32(vm, param_index++));
 				break;
 			case 'f':
 			case 'F':
@@ -479,18 +528,28 @@ std::string ParseFormat(const string_t formatid, const qcvm_t *vm, const uint8_t
 			case 'G':
 			case 'a':
 			case 'A':
-				buf << vas(format_buffer, qcvm_argv_float(vm, param_index++));
+				formatted = qcvm_temp_format(vm, format_buffer, qcvm_argv_float(vm, param_index++));
 				break;
 			case 's':
-				buf << vas(format_buffer, qcvm_argv_string(vm, param_index++));
+				formatted = qcvm_temp_format(vm, format_buffer, qcvm_argv_string(vm, param_index++));
 				break;
+			default:
+				qcvm_error(vm, "invalid specifier");
 			}
+			
+			write_len = strlen(formatted);
+			if (len_left < write_len)
+				qcvm_error(vm, "qcvm_parse_format overflow");
+			strncpy(p, formatted, write_len);
+			p += write_len;
+			len_left -= write_len;
 		}
 
 		i++;
 	}
 
-	return buf.str();
+	*p = 0;
+	return buffer;
 }
 
 static void qcvm_field_wrap_list_init(qcvm_field_wrap_list_t *list, qcvm_t *vm)
@@ -500,7 +559,7 @@ static void qcvm_field_wrap_list_init(qcvm_field_wrap_list_t *list, qcvm_t *vm)
 
 void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *field_name, const size_t field_offset, const size_t client_offset, qcvm_field_setter_t setter)
 {
-	for (QCDefinition *f = list->vm->fields; f < list->vm->fields + list->vm->fields_size; f++)
+	for (qcvm_definition_t *f = list->vm->fields; f < list->vm->fields + list->vm->fields_size; f++)
 	{
 		if (f->name_index == STRING_EMPTY)
 			continue;
@@ -571,10 +630,8 @@ void qcvm_state_needs_resize(qcvm_state_t *state)
 		qcvm_stack_needs_resize(new_stack);
 	}
 
-#ifdef _DEBUG
 	if (state->stack_allocated != STACK_RESERVE)
 		qcvm_debug(state->vm, "Stack size increased to %i\n", state->stack_allocated);
-#endif
 }
 
 qcvm_stack_t *qcvm_state_stack_push(qcvm_state_t *state)
@@ -602,10 +659,13 @@ static void qcvm_init(qcvm_t *vm)
 	qcvm_builtin_list_init(&vm->builtins, vm);
 	qcvm_field_wrap_list_init(&vm->field_wraps, vm);
 	qcvm_state_init(&vm->state, vm);
+	Q_srand((uint32_t)time(NULL));
 }
 
 static void qcvm_free(qcvm_t *vm)
 {
+	qcvm_mem_free(vm, vm->string_hashes);
+	qcvm_mem_free(vm, vm->string_hashes_data);
 	qcvm_state_free(&vm->state);
 	vm->~qcvm_t();
 }
@@ -639,7 +699,7 @@ void qcvm_debug(const qcvm_t *vm, const char *format, ...)
 	vsnprintf(buffer, sizeof(buffer), format, argptr);
 	va_end(argptr);
 
-	gi.dprintf("%s", buffer);
+	gi.dprintf("QCVM DEBUG: %s", buffer);
 }
 #endif
 
@@ -662,7 +722,7 @@ void qcvm_set_allowed_stack(qcvm_t *vm, const void *ptr, const size_t length)
 global_t *qcvm_get_global(qcvm_t *vm, const global_t g)
 {
 #ifdef ALLOW_PROFILING
-	if (vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
+	if ((vm->profile_flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
 		vm->state.stack[vm->state.current].profile->fields[NumGlobalsFetched]++;
 #endif
 
@@ -672,7 +732,7 @@ global_t *qcvm_get_global(qcvm_t *vm, const global_t g)
 const global_t *qcvm_get_const_global(const qcvm_t *vm, const global_t g)
 {
 #ifdef ALLOW_PROFILING
-	if (vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
+	if ((vm->profile_flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
 		vm->state.stack[vm->state.current].profile->fields[NumGlobalsFetched]++;
 #endif
 
@@ -692,7 +752,7 @@ void *qcvm_get_global_ptr(qcvm_t *vm, const global_t global, const size_t value_
 void qcvm_set_global(qcvm_t *vm, const global_t global, const void *value, const size_t value_size)
 {
 #ifdef ALLOW_PROFILING
-	if (vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
+	if ((vm->profile_flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
 		vm->state.stack[vm->state.current].profile->fields[NumGlobalsSet]++;
 #endif
 
@@ -748,33 +808,30 @@ void qcvm_copy_globals(qcvm_t *vm, const global_t dst, const global_t src, const
 	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, src_ptr, dst_ptr, count);
 }
 
-std::string qcvm_stack_entry(const qcvm_t *vm, const qcvm_stack_t *stack)
+const char *qcvm_stack_trace(const qcvm_t *vm)
 {
-	if (!vm->linenumbers)
-		return "dunno:dunno";
-
-	if (!stack->function)
-		return "C code";
-
-	const char *func = qcvm_get_string(vm, stack->function->name_index);
-
-	if (!*func)
-		func = "dunno";
-
-	const char *file = qcvm_get_string(vm, stack->function->file_index);
-
-	if (!*file)
-		file = "dunno.qc";
-
-	return vas("%s (%s:%i @ stmt %u)", func, file, qcvm_line_number_for(vm, stack->statement), stack->statement - vm->statements);
-}
-
-std::string qcvm_stack_trace(const qcvm_t *vm)
-{
-	std::string str = "> ";
+	const char *str = "> ";
 
 	for (qcvm_stack_t *s = &vm->state.stack[vm->state.current]; s >= vm->state.stack && s->function; s--)
-		str += qcvm_stack_entry(vm, s) + '\n';
+	{
+		if (!vm->linenumbers)
+			return "dunno:dunno";
+
+		if (!s->function)
+			return "C code";
+
+		const char *func = qcvm_get_string(vm, s->function->name_index);
+
+		if (!*func)
+			func = "dunno";
+
+		const char *file = qcvm_get_string(vm, s->function->file_index);
+
+		if (!*file)
+			file = "dunno.qc";
+
+		str = qcvm_temp_format(vm, "%s%s (%s:%i @ stmt %u)\n", str, func, file, qcvm_line_number_for(vm, s->statement), s->statement - vm->statements);
+	}
 
 	return str;
 }
@@ -879,33 +936,47 @@ void qcvm_return_string(qcvm_t *vm, const char *str)
 
 bool qcvm_find_string(qcvm_t *vm, const char *value, string_t *rstr)
 {
+	START_TIMER(vm, StringFind);
+
 	*rstr = STRING_EMPTY;
 
 	if (!value || !*value)
-		return true;
-
-	// check built-ins
-	auto builtin = vm->string_hashes.find(value);
-
-	if (builtin != vm->string_hashes.end())
 	{
-		*rstr = (string_t)((*builtin).data() - vm->string_data);
+		END_TIMER(vm, PROFILE_TIMERS);
 		return true;
 	}
 
-	// check temp strings
-	// TODO: hash these too
-	for (auto &s : vm->dynamic_strings.strings)
-	{
-		const char *str = qcvm_string_list_get(&vm->dynamic_strings, s.first);
+	// check built-ins
+	const uint32_t hash = Q_hash_string(value, vm->string_size);
 
-		if (str && strcmp(value, str) == 0)
+	for (string_hash_t *hashed = vm->string_hashes[hash]; hashed; hashed = hashed->hash_next)
+	{
+		if (!strcmp(hashed->str, value))
 		{
-			*rstr = s.first;
+			*rstr = (string_t)(hashed->str - vm->string_data);
+			END_TIMER(vm, PROFILE_TIMERS);
 			return true;
 		}
 	}
 
+	// check temp strings
+	// TODO: hash these too
+	for (qcvm_ref_counted_string_t *s = vm->dynamic_strings.strings; s < vm->dynamic_strings.strings + vm->dynamic_strings.strings_size; s++)
+	{
+		if (!s->str)
+			continue;
+
+		const char *str = s->str;
+
+		if (str && strcmp(value, str) == 0)
+		{
+			*rstr = -((s - vm->dynamic_strings.strings) + 1);
+			END_TIMER(vm, PROFILE_TIMERS);
+			return true;
+		}
+	}
+	
+	END_TIMER(vm, PROFILE_TIMERS);
 	return false;
 }
 
@@ -928,7 +999,7 @@ string_t qcvm_store_or_find_string(qcvm_t *vm, const char *value)
 }
 
 #ifdef ALLOW_DEBUGGING
-static evaluate_result_t qcvm_value_from_ptr(const QCDefinition *def, const void *ptr)
+static evaluate_result_t qcvm_value_from_ptr(const qcvm_definition_t *def, const void *ptr)
 {
 	switch (def->id & ~TYPE_GLOBAL)
 	{
@@ -953,12 +1024,12 @@ static evaluate_result_t qcvm_value_from_ptr(const QCDefinition *def, const void
 	}
 }
 
-static evaluate_result_t qcvm_value_from_global(qcvm_t *vm, const QCDefinition *def)
+static evaluate_result_t qcvm_value_from_global(qcvm_t *vm, const qcvm_definition_t *def)
 {
 	return qcvm_value_from_ptr(def, qcvm_get_global(vm, def->global_index));
 }
 
-static evaluate_result_t qcvm_evaluate_from_local_or_global(qcvm_t *vm, const std::string_view &variable)
+static evaluate_result_t qcvm_evaluate_from_local_or_global(qcvm_t *vm, const char *variable)
 {
 	// we don't have a . so we're just checking for a base object.
 	// check locals
@@ -970,9 +1041,9 @@ static evaluate_result_t qcvm_evaluate_from_local_or_global(qcvm_t *vm, const st
 
 		for (i = 0, g = current->function->first_arg; i < current->function->num_args_and_locals; i++, g++)
 		{
-			QCDefinition *def = vm->definition_map_by_id[g];
+			qcvm_definition_t *def = vm->definition_map_by_id[g];
 
-			if (!def || def->name_index == STRING_EMPTY || variable != qcvm_get_string(vm, def->name_index))
+			if (!def || def->name_index == STRING_EMPTY || strcmp(variable, qcvm_get_string(vm, def->name_index)))
 				continue;
 
 			return qcvm_value_from_global(vm, def);
@@ -980,9 +1051,9 @@ static evaluate_result_t qcvm_evaluate_from_local_or_global(qcvm_t *vm, const st
 	}
 
 	// no locals, so we can check all the globals
-	for (QCDefinition *def = vm->definitions; def < vm->definitions + vm->definitions_size; def++)
+	for (qcvm_definition_t *def = vm->definitions; def < vm->definitions + vm->definitions_size; def++)
 	{
-		if (def->name_index == STRING_EMPTY || variable != qcvm_get_string(vm, def->name_index))
+		if (def->name_index == STRING_EMPTY || strcmp(variable, qcvm_get_string(vm, def->name_index)))
 			continue;
 
 		return qcvm_value_from_global(vm, def);
@@ -991,27 +1062,32 @@ static evaluate_result_t qcvm_evaluate_from_local_or_global(qcvm_t *vm, const st
 	return { };
 }
 
-evaluate_result_t qcvm_evaluate(qcvm_t *vm, const std::string &variable)
+evaluate_result_t qcvm_evaluate(qcvm_t *vm, const char *variable)
 {
-	if (variable.find_first_of('.') != std::string::npos)
+	const char *dot = strchr(variable, '.');
+	if (dot)
 	{
+		char evaluate_left[MAX_INFO_STRING];
+
+		strncpy(evaluate_left, variable, dot - variable);
+		evaluate_left[dot - variable] = 0;
+
 		// we have a . so we're either a entity, pointer or struct...
-		std::string_view context = std::string_view(variable).substr(0, variable.find_first_of('.'));
-		evaluate_result_t left_hand = qcvm_evaluate_from_local_or_global(vm, context);
+		evaluate_result_t left_hand = qcvm_evaluate_from_local_or_global(vm, evaluate_left);
 
 		if (left_hand.type == TYPE_ENTITY)
 		{
-			std::string_view right_context = std::string_view(variable).substr(context.length() + 1);
+			const char *right_context = dot + 1;
 			const ent_t &ent = left_hand.entid;
 
 			if (ent == ENT_INVALID)
 				return left_hand;
 
-			const QCDefinition *field = nullptr;
+			const qcvm_definition_t *field = nullptr;
 				
-			for (QCDefinition *f = vm->fields; f < vm->fields + vm->fields_size; f++)
+			for (qcvm_definition_t *f = vm->fields; f < vm->fields + vm->fields_size; f++)
 			{
-				if (f->name_index == STRING_EMPTY || strcmp(qcvm_get_string(vm, f->name_index), right_context.data()))
+				if (f->name_index == STRING_EMPTY || strcmp(qcvm_get_string(vm, f->name_index), right_context))
 					continue;
 
 				field = f;
@@ -1038,12 +1114,12 @@ void qcvm_set_breakpoint(qcvm_t *vm, const bool is_set, const char *file, const 
 		return;
 	}
 
-	for (QCFunction *function = vm->functions; function < vm->functions + vm->functions_size; function++)
+	for (qcvm_function_t *function = vm->functions; function < vm->functions + vm->functions_size; function++)
 	{
 		if (function->id <= 0 || function->file_index != id)
 			continue;
 
-		for (QCStatement *statement = &vm->statements[function->id]; statement->opcode != OP_DONE; statement++)
+		for (qcvm_statement_t *statement = &vm->statements[function->id]; statement->opcode != OP_DONE; statement++)
 		{
 			if (qcvm_line_number_for(vm, statement) != line)
 				continue;
@@ -1068,7 +1144,7 @@ void qcvm_break_on_current_statement(qcvm_t *vm)
 		return;
 
 	qcvm_stack_t *current = &vm->state.stack[vm->state.current];
-	qcvm_send_debugger_command(vm, vas("qcstep \"%s\":%i\n", qcvm_get_string(vm, current->function->file_index), qcvm_line_number_for(vm, current->statement)).data());
+	qcvm_send_debugger_command(vm, qcvm_temp_format(vm, "qcstep \"%s\":%i\n", qcvm_get_string(vm, current->function->file_index), qcvm_line_number_for(vm, current->statement)));
 	vm->debug.state = DEBUG_BROKE;
 	vm->debug.step_function = current->function;
 	vm->debug.step_statement = current->statement;
@@ -1077,7 +1153,7 @@ void qcvm_break_on_current_statement(qcvm_t *vm)
 }
 #endif
 
-int qcvm_line_number_for(const qcvm_t *vm, const QCStatement *statement)
+int qcvm_line_number_for(const qcvm_t *vm, const qcvm_statement_t *statement)
 {
 	if (vm->linenumbers)
 		return vm->linenumbers[statement - vm->statements];
@@ -1085,13 +1161,13 @@ int qcvm_line_number_for(const qcvm_t *vm, const QCStatement *statement)
 	return 0;
 }
 
-void qcvm_enter(qcvm_t *vm, QCFunction *function)
+void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 {
-	// save current stack space that will be overwritten by the new function
-	if (vm->state.current >= 0 && function->num_args_and_locals)
-	{
-		qcvm_stack_t *cur_stack = &vm->state.stack[vm->state.current];
+	qcvm_stack_t *cur_stack = (vm->state.current >= 0) ? &vm->state.stack[vm->state.current] : nullptr;
 
+	// save current stack space that will be overwritten by the new function
+	if (cur_stack && function->num_args_and_locals)
+	{
 		for (size_t i = 0, arg = function->first_arg; i < function->num_args_and_locals; i++, arg++)
 		{
 			cur_stack->locals[i] = { (global_t)arg, *qcvm_get_global_typed(int32_t, vm, (global_t)arg) };
@@ -1101,6 +1177,16 @@ void qcvm_enter(qcvm_t *vm, QCFunction *function)
 			if (qcvm_string_list_has_ref(&vm->dynamic_strings, ptr))
 				qcvm_stack_push_ref_string(cur_stack, qcvm_string_list_pop_ref(&vm->dynamic_strings, ptr));
 		}
+
+#ifdef ALLOW_PROFILING
+		// entering a function call;
+		// add time we spent up till now into self
+		if (vm->profile_flags & PROFILE_FUNCTIONS)
+		{
+			cur_stack->profile->self += Q_time() - cur_stack->caller_start;
+			cur_stack->callee_start = Q_time();
+		}
+#endif
 	}
 
 	qcvm_stack_t *new_stack = qcvm_state_stack_push(&vm->state);
@@ -1115,20 +1201,23 @@ void qcvm_enter(qcvm_t *vm, QCFunction *function)
 			qcvm_copy_globals_typed(global_t, vm, arg_id, qcvm_global_offset(GLOBAL_PARM0, (i * 3) + s));
 
 #ifdef ALLOW_PROFILING
-	new_stack->profile = &vm->profile_data[function - vm->functions];
-	new_stack->profile->fields[NumSelfCalls]++;
-	new_stack->start = Q_time();
+	if (vm->profile_flags & (PROFILE_FUNCTIONS | PROFILE_FIELDS))
+	{
+		new_stack->profile = &vm->profile_data[function - vm->functions];
+
+		if (vm->profile_flags & PROFILE_FIELDS)
+			new_stack->profile->fields[NumSelfCalls]++;
+		if (vm->profile_flags & PROFILE_FUNCTIONS)
+			new_stack->caller_start = Q_time();
+	}
 #endif
 }
 
 void qcvm_leave(qcvm_t *vm)
 {
 	// restore stack
-#ifdef ALLOW_PROFILING
 	qcvm_stack_t *current_stack = &vm->state.stack[vm->state.current];
-#endif
 	qcvm_state_stack_pop(&vm->state);
-
 	qcvm_stack_t *prev_stack = (vm->state.current == -1) ? nullptr : &vm->state.stack[vm->state.current];
 
 	if (prev_stack && current_stack->function->num_args_and_locals)
@@ -1140,15 +1229,21 @@ void qcvm_leave(qcvm_t *vm)
 			qcvm_string_list_push_ref(&vm->dynamic_strings, str);
 
 		prev_stack->ref_strings_size = 0;
+
+#ifdef ALLOW_PROFILING
+		if (vm->profile_flags & PROFILE_FUNCTIONS)
+		{
+			// we're coming back into prev_stack, so set up its caller_start
+			prev_stack->caller_start = Q_time();
+			// and add up the time we spent in the previous stack
+			prev_stack->profile->ext += Q_time() - prev_stack->callee_start;
+		}
+#endif
 	}
 		
 #ifdef ALLOW_PROFILING
-	const uint64_t time_spent = Q_time() - current_stack->start;
-	current_stack->profile->total += time_spent;
-
-	// add time we spent in this function into the parent's call_into time
-	if (prev_stack && prev_stack->profile)
-		prev_stack->profile->call_into += time_spent;
+	if (vm->profile_flags & PROFILE_FUNCTIONS)
+		current_stack->profile->self += Q_time() - current_stack->caller_start;
 #endif
 
 	vm->allowed_stack = 0;
@@ -1159,19 +1254,19 @@ func_t qcvm_find_function_id(const qcvm_t *vm, const char *name)
 {
 	size_t i = 0;
 
-	for (QCFunction *func = vm->functions; func < vm->functions + vm->functions_size; func++, i++)
+	for (qcvm_function_t *func = vm->functions; func < vm->functions + vm->functions_size; func++, i++)
 		if (!strcmp(qcvm_get_string(vm, func->name_index), name))
 			return (func_t)i;
 
 	return FUNC_VOID;
 }
 
-QCFunction *qcvm_get_function(const qcvm_t *vm, const func_t id)
+qcvm_function_t *qcvm_get_function(const qcvm_t *vm, const func_t id)
 {
 	return &vm->functions[id];
 }
 
-QCFunction *qcvm_find_function(const qcvm_t *vm, const char *name)
+qcvm_function_t *qcvm_find_function(const qcvm_t *vm, const char *name)
 {
 	func_t id = qcvm_find_function_id(vm, name);
 
@@ -1234,7 +1329,7 @@ bool qcvm_pointer_valid(const qcvm_t *vm, const size_t address, const bool allow
 		(vm->allowed_stack && address >= (ptrdiff_t)vm->allowed_stack && address < ((ptrdiff_t)vm->allowed_stack + vm->allowed_stack_size));
 }
 
-void qcvm_call_builtin(qcvm_t *vm, QCFunction *function)
+void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
 {
 	qcvm_builtin_t func;
 
@@ -1242,24 +1337,45 @@ void qcvm_call_builtin(qcvm_t *vm, QCFunction *function)
 		qcvm_error(vm, "Bad builtin call number");
 
 #ifdef ALLOW_PROFILING
-	QCProfile *profile = &vm->profile_data[function - vm->functions];
-	profile->fields[NumSelfCalls]++;
-	const uint64_t start = Q_time();
+	qcvm_profile_t *profile = &vm->profile_data[function - vm->functions];
+
+	if (vm->profile_flags & PROFILE_FIELDS)
+		profile->fields[NumSelfCalls]++;
+	
+	uint64_t start = 0;
+	qcvm_stack_t *prev_stack = nullptr;
+	
+	if (vm->profile_flags & PROFILE_FUNCTIONS)
+	{
+		start = Q_time();
+		prev_stack = (vm->state.current >= 0 && vm->state.stack[vm->state.current].profile) ? &vm->state.stack[vm->state.current] : nullptr;
+
+		// moving into builtin; add up what we have so far into prev stack
+		if (prev_stack)
+		{
+			prev_stack->profile->self += Q_time() - prev_stack->caller_start;
+			prev_stack->callee_start = Q_time();
+		}
+	}
 #endif
 
 	func(vm);
 
 #ifdef ALLOW_PROFILING
-	const uint64_t time_spent = Q_time() - start;
-	profile->total += time_spent;
+	if (vm->profile_flags & PROFILE_FUNCTIONS)
+	{
+		// builtins don't have external call time, just internal self time
+		const uint64_t time_spent = Q_time() - start;
+		profile->self += time_spent;
 
-	// add time we spent in this function into the parent's call_into time
-	if (vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
-		vm->state.stack[vm->state.current].profile->call_into += time_spent;
+		// add time we spent in this function into the parent's call_into time
+		if (prev_stack)
+			prev_stack->profile->ext += Q_time() - prev_stack->callee_start;
+	}
 #endif
 }
 
-void qcvm_execute(qcvm_t *vm, QCFunction *function)
+void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 {
 	if (function->id < 0)
 	{
@@ -1275,11 +1391,12 @@ void qcvm_execute(qcvm_t *vm, QCFunction *function)
 	{
 		// get next statement
 		qcvm_stack_t *current = &vm->state.stack[vm->state.current];
-		const QCStatement *statement = ++current->statement;
+		const qcvm_statement_t *statement = ++current->statement;
 		START_OPCODE_TIMER(vm, (statement->opcode & ~OP_BREAKPOINT));
 
 #ifdef ALLOW_PROFILING
-		current->profile->fields[NumInstructions]++;
+		if (vm->profile_flags & PROFILE_FIELDS)
+			current->profile->fields[NumInstructions]++;
 #endif
 
 #ifdef ALLOW_DEBUGGING
@@ -1318,7 +1435,7 @@ void qcvm_execute(qcvm_t *vm, QCFunction *function)
 
 		func(vm, statement->args, &enter_depth);
 
-		END_TIMER();
+		END_TIMER(vm, PROFILE_OPCODES);
 
 		if (!enter_depth)
 			return;		// all done
@@ -1348,12 +1465,12 @@ void qcvm_read_state(qcvm_t *vm, FILE *fp)
 	qcvm_string_list_read_state(&vm->dynamic_strings, fp);
 }
 
-static void VMLoadStatements(qcvm_t *vm, FILE *fp, QCStatement *dst, const QCHeader *header)
+static void VMLoadStatements(qcvm_t *vm, FILE *fp, qcvm_statement_t *dst, const QCHeader *header)
 {
 	// simple, rustic
 	if (header->version == PROGS_FTE && header->secondary_version == PROG_SECONDARYVERSION32)
 	{
-		fread(dst, sizeof(QCStatement), header->sections.statement.size, fp);
+		fread(dst, sizeof(qcvm_statement_t), header->sections.statement.size, fp);
 		return;
 	}
 
@@ -1381,12 +1498,12 @@ static void VMLoadStatements(qcvm_t *vm, FILE *fp, QCStatement *dst, const QCHea
 	qcvm_mem_free(vm, statements);
 }
 
-static void VMLoadDefinitions(qcvm_t *vm, FILE *fp, QCDefinition *dst, const QCHeader *header, const size_t &size)
+static void VMLoadDefinitions(qcvm_t *vm, FILE *fp, qcvm_definition_t *dst, const QCHeader *header, const size_t &size)
 {
 	// simple, rustic
 	if (header->version == PROGS_FTE && header->secondary_version == PROG_SECONDARYVERSION32)
 	{
-		fread(dst, sizeof(QCDefinition), size, fp);
+		fread(dst, sizeof(qcvm_definition_t), size, fp);
 		return;
 	}
 
@@ -1443,11 +1560,18 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 		qcvm_error(vm, "bad version (only version 6 & 7 progs are supported)");
 
 	vm->string_size = header.sections.string.size;
-	vm->string_data = (char *)qcvm_alloc(vm, sizeof(*vm->string_data) * header.sections.string.size);
-	vm->string_lengths = (size_t *)qcvm_alloc(vm, sizeof(*vm->string_lengths) * header.sections.string.size);
+	vm->string_data = (char *)qcvm_alloc(vm, sizeof(char) * vm->string_size);
+	vm->string_lengths = (size_t *)qcvm_alloc(vm, sizeof(size_t) * vm->string_size);
 
 	fseek(fp, header.sections.string.offset, SEEK_SET);
 	fread(vm->string_data, sizeof(char), header.sections.string.size, fp);
+	
+	vm->string_hashes = (string_hash_t **)qcvm_alloc(vm, sizeof(string_hash_t *) * vm->string_size);
+	vm->string_hashes_data = (string_hash_t *)qcvm_alloc(vm, sizeof(string_hash_t) * vm->string_size);
+
+#ifdef _DEBUG
+	size_t added_hash_values = 0, unique_hash_values = 0, max_hash_depth = 0;
+#endif
 	
 	// create immutable string map, for fast hash action
 	for (size_t i = 0; i < vm->string_size; i++)
@@ -1457,98 +1581,145 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 		if (!*s)
 			continue;
 
-		std::string_view view(s);
+		const size_t s_len = strlen(s);
 
-		for (size_t x = 0; x < view.length(); x++)
+		for (size_t x = 0; x < s_len; x++)
 		{
-			size_t len = view.length() - x;
+			size_t len = s_len - x;
 			vm->string_lengths[i + x] = len;
-			vm->string_hashes.emplace(std::string_view(s + x, len));
+			string_hash_t *hashed = &vm->string_hashes_data[i + x];
+			hashed->str = s + x;
+			hashed->hash_value = Q_hash_string(s + x, vm->string_size);
+
+			// if we already have this string hashed, don't hash us again
+			for (string_hash_t *existing_hashed = vm->string_hashes[hashed->hash_value]; ; existing_hashed = existing_hashed->hash_next)
+			{
+				if (!existing_hashed)
+				{
+#ifdef _DEBUG
+					if (!vm->string_hashes[hashed->hash_value])
+						unique_hash_values++;
+#endif
+
+					hashed->hash_next = vm->string_hashes[hashed->hash_value];
+					vm->string_hashes[hashed->hash_value] = hashed;
+#ifdef _DEBUG
+					added_hash_values++;
+#endif
+					break;
+				}
+				else if (!strcmp(existing_hashed->str, hashed->str))
+					break;
+			}
+
+#ifdef _DEBUG
+			size_t depth = 1;
+
+			for (string_hash_t *existing_hashed = vm->string_hashes[hashed->hash_value]; existing_hashed; existing_hashed = existing_hashed->hash_next, depth++) ;
+
+			max_hash_depth = maxsz(max_hash_depth, depth);
+#endif
 		}
 
-		i += view.length();
+		i += s_len;
 	}
 
+	qcvm_debug(vm, "String hash table: %u added, %u unique, %u max depth, %u strings total\n", added_hash_values, unique_hash_values, max_hash_depth, vm->string_size);
+
 	vm->statements_size = header.sections.statement.size;
-	vm->statements = (QCStatement *)qcvm_alloc(vm, sizeof(*vm->statements) * vm->statements_size);
+	vm->statements = (qcvm_statement_t *)qcvm_alloc(vm, sizeof(qcvm_statement_t) * vm->statements_size);
 
 	fseek(fp, header.sections.statement.offset, SEEK_SET);
 	VMLoadStatements(vm, fp, vm->statements, &header);
 
-	for (QCStatement *s = vm->statements; s < vm->statements + vm->statements_size; s++)
+	for (qcvm_statement_t *s = vm->statements; s < vm->statements + vm->statements_size; s++)
 		if (s->opcode >= OP_NUMOPS || !codeFuncs[s->opcode])
 			qcvm_error(vm, "opcode invalid or not implemented: %i\n", s->opcode);
 	
 	vm->definitions_size = header.sections.definition.size;
-	vm->definitions = (QCDefinition *)qcvm_alloc(vm, sizeof(*vm->definitions) * vm->definitions_size);
+	vm->definitions = (qcvm_definition_t *)qcvm_alloc(vm, sizeof(qcvm_definition_t) * vm->definitions_size);
 
 	fseek(fp, header.sections.definition.offset, SEEK_SET);
-	VMLoadDefinitions(vm, fp, vm->definitions, &header, header.sections.definition.size);
+	VMLoadDefinitions(vm, fp, vm->definitions, &header, vm->definitions_size);
+
+	vm->definition_map_by_id = (qcvm_definition_t **)qcvm_alloc(vm, sizeof(qcvm_definition_t) * vm->definitions_size);
+	vm->definition_hashes = (definition_hash_t **)qcvm_alloc(vm, sizeof(definition_hash_t *) * vm->definitions_size);
+	vm->definition_hashes_data = (definition_hash_t *)qcvm_alloc(vm, sizeof(definition_hash_t) * vm->definitions_size);
 	
-	for (QCDefinition *definition = vm->definitions; definition < vm->definitions + vm->definitions_size; definition++)
+	for (qcvm_definition_t *definition = vm->definitions; definition < vm->definitions + vm->definitions_size; definition++)
 	{
 		if (definition->name_index != STRING_EMPTY)
-			vm->definition_map_by_name.emplace(vm->string_data + definition->name_index, definition);
+		{
+			definition_hash_t *hashed = &vm->definition_hashes_data[definition - vm->definitions];
+			hashed->def = definition;
+			hashed->hash_value = Q_hash_string(qcvm_get_string(vm, definition->name_index), vm->definitions_size);
+			hashed->hash_next = vm->definition_hashes[hashed->hash_value];
+			vm->definition_hashes[hashed->hash_value] = hashed;
+		}
 
-		vm->definition_map_by_id.emplace(definition->global_index, definition);
-		vm->string_hashes.emplace(vm->string_data + definition->name_index);
+		vm->definition_map_by_id[definition->global_index] = definition;
 	}
 
 	vm->fields_size = header.sections.field.size;
-	vm->fields = (QCDefinition *)qcvm_alloc(vm, sizeof(*vm->fields) * vm->fields_size);
+	vm->fields = (qcvm_definition_t *)qcvm_alloc(vm, sizeof(qcvm_definition_t) * vm->fields_size);
 
 	fseek(fp, header.sections.field.offset, SEEK_SET);
-	VMLoadDefinitions(vm, fp, vm->fields, &header, header.sections.field.size);
+	VMLoadDefinitions(vm, fp, vm->fields, &header, vm->fields_size);
 
-	for (QCDefinition *field = vm->fields; field < vm->fields + vm->fields_size; field++)
+	vm->field_map_by_id = (qcvm_definition_t **)qcvm_alloc(vm, sizeof(qcvm_definition_t) * vm->fields_size);
+	vm->field_hashes = (definition_hash_t **)qcvm_alloc(vm, sizeof(definition_hash_t *) * vm->fields_size);
+	vm->field_hashes_data = (definition_hash_t *)qcvm_alloc(vm, sizeof(definition_hash_t) * vm->fields_size);
+
+	for (qcvm_definition_t *field = vm->fields; field < vm->fields + vm->fields_size; field++)
 	{
-		vm->field_map.emplace(field->global_index, field);
-		vm->field_map_by_name.emplace(vm->string_data + field->name_index, field);
+		vm->field_map_by_id[field->global_index] = field;
 
-		vm->string_hashes.emplace(vm->string_data + field->name_index);
+		definition_hash_t *hashed = &vm->field_hashes_data[field - vm->fields];
+		hashed->def = field;
+		hashed->hash_value = Q_hash_string(qcvm_get_string(vm, field->name_index), vm->fields_size);
+		hashed->hash_next = vm->field_hashes[hashed->hash_value];
+		vm->field_hashes[hashed->hash_value] = hashed;
 	}
 
 	vm->functions_size = header.sections.function.size;
-	vm->functions = (QCFunction *)qcvm_alloc(vm, sizeof(*vm->functions) * vm->functions_size);
+	vm->functions = (qcvm_function_t *)qcvm_alloc(vm, sizeof(qcvm_function_t) * vm->functions_size);
 
 #ifdef ALLOW_PROFILING
-	vm->profile_data = (QCProfile *)qcvm_alloc(vm, sizeof(*vm->profile_data) * vm->functions_size);
+	vm->profile_data = (qcvm_profile_t *)qcvm_alloc(vm, sizeof(qcvm_profile_t) * vm->functions_size);
 #endif
 
 	fseek(fp, header.sections.function.offset, SEEK_SET);
-	fread(vm->functions, sizeof(QCFunction), header.sections.function.size, fp);
-
-	vm->global_data = (global_t *)qcvm_alloc(vm, header.sections.globals.size * sizeof(global_t));
+	fread(vm->functions, sizeof(qcvm_function_t), vm->functions_size, fp);
+	
 	vm->global_size = header.sections.globals.size;
+	vm->global_data = (global_t *)qcvm_alloc(vm, sizeof(global_t) * vm->global_size);
 
 	fseek(fp, header.sections.globals.offset, SEEK_SET);
 	fread(vm->global_data, sizeof(global_t), vm->global_size, fp);
 
 	int32_t lowest_func = 0;
 
-	for (QCFunction *func = vm->functions; func < vm->functions + vm->functions_size; func++)
+	for (qcvm_function_t *func = vm->functions; func < vm->functions + vm->functions_size; func++)
 	{
 		if (func->id < 0)
-			lowest_func = min(func->id, lowest_func);
+			lowest_func = mini(func->id, lowest_func);
 
-		vm->highest_stack = max(vm->highest_stack, func->num_args_and_locals);
+		vm->highest_stack = maxsz(vm->highest_stack, func->num_args_and_locals);
 	}
 
-#ifdef _DEBUG
-	gi.dprintf("QCVM Stack Locals Size: %i bytes\n", vm->highest_stack * 4);
-#endif
+	qcvm_debug(vm, "QCVM Stack Locals Size: %i bytes\n", vm->highest_stack * 4);
 
 	vm->builtins.next_id = lowest_func - 1;
 
 	fclose(fp);
 
 	// Check for debugging info
-	fp = fopen(vas("%sprogs.lno", vm->path).data(), "rb");
+	fp = fopen(qcvm_temp_format(vm, "%sprogs.lno", vm->path), "rb");
 
 	if (fp)
 	{
-		constexpr int lnotype = 1179602508;
-		constexpr int version = 1;
+		const int lnotype = 1179602508;
+		const int version = 1;
 
 		struct {
 			int magic, ver, numglobaldefs, numglobals, numfielddefs, numstatements;
@@ -1573,38 +1744,79 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 
 void qcvm_check(const qcvm_t *vm)
 {
-	for (QCFunction *func = vm->functions; func < vm->functions + vm->functions_size; func++)
+	for (qcvm_function_t *func = vm->functions; func < vm->functions + vm->functions_size; func++)
 		if (func->id == 0 && func->name_index != STRING_EMPTY)
 			gi.dprintf("Missing builtin function: %s\n", qcvm_get_string(vm, func->name_index));
 }
 
+#ifdef ALLOW_PROFILING
+static const char *profile_type_names[TotalProfileFields] =
+{
+	"# Calls",
+	"# Instructions",
+	"# Unconditional Jumps",
+	"# Conditional Jumps",
+	"# Globals Fetched",
+	"# Globals Set",
+	"# Func Calls"
+};
+
+static const char *timer_type_names[TotalTimerFields] =
+{
+	"String Acquire",
+	"String Release",
+	"String Mark",
+	"String Check Unset",
+	"String HasRef",
+	"String MarkIfHasRef",
+	"String StringMarkRefsCopied",
+	"String PopRef",
+	"String PushRef",
+	"String Find"
+};
+#endif
+
 void qcvm_shutdown(qcvm_t *vm)
 {
 #ifdef ALLOW_PROFILING
+	if (vm->profile_flags & (PROFILE_FUNCTIONS | PROFILE_FIELDS))
 	{
-		FILE *fp = fopen(vas("%sprofile.csv", vm->path).data(), "wb");
+		FILE *fp = fopen(qcvm_temp_format(vm, "%sprofile.csv", vm->path), "wb");
+		double all_total = 0;
+		
+		for (size_t i = 0; i < vm->functions_size; i++)
+		{
+			const qcvm_profile_t *profile = vm->profile_data + i;
 
-		fprintf(fp, "ID,Name,Total (ms),Self(ms),Funcs(ms)");
+			if (!profile->fields[NumSelfCalls] && !profile->self && !profile->ext)
+				continue;
+
+			const double total = profile->self / 1000000.0;
+			all_total += total;
+		}
+
+		fprintf(fp, "ID,Name,Total (ms),Self(ms),Funcs(ms),Total (%%),Self (%%)");
 	
-		for (auto pf : profile_type_names)
-			fprintf(fp, ",%s", pf);
+		for (size_t i = 0; i < TotalProfileFields; i++)
+			fprintf(fp, ",%s", profile_type_names[i]);
 	
 		fprintf(fp, "\n");
 
 		for (size_t i = 0; i < vm->functions_size; i++)
 		{
-			const QCProfile *profile = vm->profile_data + i;
-			const QCFunction *ff = vm->functions + i;
+			const qcvm_profile_t *profile = vm->profile_data + i;
+
+			if (!profile->fields[NumSelfCalls] && !profile->self && !profile->ext)
+				continue;
+
+			const qcvm_function_t *ff = vm->functions + i;
 			const char *name = qcvm_get_string(vm, ff->name_index);
 		
-			const double total = profile->total / 1000000.0;
-			double self = total;
-			const double func_call_time = profile->call_into / 1000000.0;
-		
-			if (func_call_time)
-				self -= func_call_time;
+			const double self = profile->self / 1000000.0;
+			const double ext = profile->ext / 1000000.0;
+			const double total = self + ext;
 
-			fprintf(fp, "%i,%s,%f,%f,%f", i, name, total, self, func_call_time);
+			fprintf(fp, "%i,%s,%f,%f,%f,%f,%f", i, name, total, self, ext, (total / all_total) * 100, (self / all_total) * 100);
 		
 			for (profile_type_t f = 0; f < TotalProfileFields; f++)
 				fprintf(fp, ",%i", profile->fields[f]);
@@ -1614,34 +1826,60 @@ void qcvm_shutdown(qcvm_t *vm)
 
 		fclose(fp);
 	}
-
+	
+	if (vm->profile_flags & PROFILE_TIMERS)
 	{
-		FILE *fp = fopen(vas("%stimers.csv", vm->path).data(), "wb");
+		FILE *fp = fopen(qcvm_temp_format(vm, "%stimers.csv", vm->path), "wb");
+		double all_total = 0;
 
-		fprintf(fp, "Name,Count,Total (ms)\n");
+		for (size_t i = 0; i < TotalTimerFields; i++)
+		{
+			const profile_timer_t *timer = vm->timers + i;
+			const double total = timer->time / 1000000.0;
+			all_total += total;
+		}
 
-		for (size_t i = 0; i < std::extent_v<decltype(vm->timers)>; i++)
+		fprintf(fp, "Name,Count,Total (ms),Avg (ns),%%\n");
+
+		for (size_t i = 0; i < TotalTimerFields; i++)
 		{
 			const profile_timer_t *timer = vm->timers + i;
 			const double total = timer->time / 1000000.0;
 
-			fprintf(fp, "%s,%i,%f\n", timer_type_names[i], timer->count, total);
+			fprintf(fp, "%s,%i,%f,%f,%f\n", timer_type_names[i], timer->count, total, (total / timer->count) * 1000, (total / all_total) * 100);
 		}
 
 		fclose(fp);
 	}
-
+	
+	if (vm->profile_flags & PROFILE_OPCODES)
 	{
-		FILE *fp = fopen(vas("%sopcodes.csv", vm->path).data(), "wb");
+		FILE *fp = fopen(qcvm_temp_format(vm, "%sopcodes.csv", vm->path), "wb");
+		double all_total = 0;
 
-		fprintf(fp, "ID,Count,Total (ms)\n");
-
-		for (size_t i = 0; i < std::extent_v<decltype(vm->opcode_timers)>; i++)
+		for (size_t i = 0; i < OP_NUMOPS; i++)
 		{
 			const profile_timer_t *timer = vm->opcode_timers + i;
+
+			if (!timer->count)
+				continue;
+
+			const double total = timer->time / 1000000.0;
+			all_total += total;
+		}
+
+		fprintf(fp, "ID,Count,Total (ms),Avg (ns),%%\n");
+
+		for (size_t i = 0; i < OP_NUMOPS; i++)
+		{
+			const profile_timer_t *timer = vm->opcode_timers + i;
+
+			if (!timer->count)
+				continue;
+
 			const double total = timer->time / 1000000.0;
 
-			fprintf(fp, "%i,%i,%f\n", i, timer->count, total);
+			fprintf(fp, "%i,%i,%f,%f,%f\n", i, timer->count, total, (total / timer->count) * 1000, (total / all_total) * 100);
 		}
 
 		fclose(fp);

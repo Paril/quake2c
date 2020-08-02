@@ -83,34 +83,91 @@ static void QC_tanf(qcvm_t *vm)
 =====================================================================
 */
 
-#include <random>
-#include <ctime>
+static const size_t STATE_VECTOR_LENGTH = 624;
+static const size_t STATE_VECTOR_M      = 397; /* changes to STATE_VECTOR_LENGTH also require changes to this */
 
-static std::mt19937 mt((size_t)time(NULL));
-
-inline uint32_t Q_rand(void)
+struct
 {
-	return mt();
+	uint32_t mt[STATE_VECTOR_LENGTH];
+	int32_t index;
+} qcvm_mt;
+
+static const int32_t UPPER_MASK		= 0x80000000;
+static const int32_t LOWER_MASK		= 0x7fffffff;
+static const int32_t TEMPERING_MASK_B	= 0x9d2c5680;
+static const int32_t TEMPERING_MASK_C	= 0xefc60000;
+
+void Q_srand(const uint32_t seed)
+{
+	qcvm_mt.mt[0] = seed & 0xffffffff;
+
+	for (qcvm_mt.index = 1; qcvm_mt.index < STATE_VECTOR_LENGTH; qcvm_mt.index++)
+		qcvm_mt.mt[qcvm_mt.index] = (6069 * qcvm_mt.mt[qcvm_mt.index - 1]) & 0xffffffff;
 }
 
-inline uint32_t Q_rand_uniform(uint32_t n)
+static uint32_t Q_rand()
 {
-	return std::uniform_int_distribution<uint32_t>(0, n - 1)(mt);
+	unsigned long y;
+	static unsigned long mag[2] = { 0x0, 0x9908b0df };
+
+	if (qcvm_mt.index >= STATE_VECTOR_LENGTH || qcvm_mt.index < 0)
+	{
+		int kk;
+
+		if (qcvm_mt.index >= STATE_VECTOR_LENGTH+1 || qcvm_mt.index < 0)
+			Q_srand(4357);
+
+		for (kk = 0; kk < STATE_VECTOR_LENGTH - STATE_VECTOR_M; kk++)
+		{
+			y = (qcvm_mt.mt[kk] & UPPER_MASK) | (qcvm_mt.mt[kk+1] & LOWER_MASK);
+			qcvm_mt.mt[kk] = qcvm_mt.mt[kk+STATE_VECTOR_M] ^ (y >> 1) ^ mag[y & 0x1];
+		}
+
+		for (; kk < STATE_VECTOR_LENGTH - 1; kk++)
+		{
+			y = (qcvm_mt.mt[kk] & UPPER_MASK) | (qcvm_mt.mt[kk+1] & LOWER_MASK);
+			qcvm_mt.mt[kk] = qcvm_mt.mt[kk+(STATE_VECTOR_M-STATE_VECTOR_LENGTH)] ^ (y >> 1) ^ mag[y & 0x1];
+		}
+
+		y = (qcvm_mt.mt[STATE_VECTOR_LENGTH-1] & UPPER_MASK) | (qcvm_mt.mt[0] & LOWER_MASK);
+			 qcvm_mt.mt[STATE_VECTOR_LENGTH-1] = qcvm_mt.mt[STATE_VECTOR_M-1] ^ (y >> 1) ^ mag[y & 0x1];
+			 qcvm_mt.index = 0;
+	}
+
+	y = qcvm_mt.mt[qcvm_mt.index++];
+	y ^= (y >> 11);
+	y ^= (y << 7) & TEMPERING_MASK_B;
+	y ^= (y << 15) & TEMPERING_MASK_C;
+	y ^= (y >> 18);
+	return y;
+}
+
+static uint32_t Q_rand_uniform(uint32_t n)
+{
+    uint32_t x, r;
+
+    do
+	{
+        x = Q_rand();
+        r = x % n;
+    } while (x - r > (-n));
+
+    return r;
 }
 
 vec_t frand()
 {
-	return std::uniform_real<vec_t>()(mt);
-}
-
-vec_t frand(const vec_t max)
-{
-	return std::uniform_real<vec_t>(0.f, max)(mt);
+	return Q_rand() / 0xffffffffu;
 }
 
 vec_t frand(const vec_t min, const vec_t max)
 {
-	return std::uniform_real<vec_t>(min, max)(mt);
+	return frand() * (max - min) + min;
+}
+
+vec_t frand(const vec_t max)
+{
+	return frand() * max;
 }
 
 static void QC_Q_rand(qcvm_t *vm)

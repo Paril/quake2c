@@ -2,8 +2,8 @@
 
 typedef struct qcvm_s qcvm_t;
 
-#define ALLOW_DEBUGGING
-#define ALLOW_PROFILING
+//#define ALLOW_DEBUGGING
+//#define ALLOW_PROFILING
 
 #ifdef ALLOW_DEBUGGING
 enum debug_state_t
@@ -15,6 +15,10 @@ enum debug_state_t
 
 	DEBUG_BROKE
 };
+
+typedef void *qcvm_mutex_t;
+typedef void *qcvm_thread_t;
+typedef void (*qcvm_thread_func_t) ();
 #endif
 
 #include <cassert>
@@ -85,25 +89,25 @@ enum : uint32_t
 	TYPE_INTEGER,
 	// EXT
 
-	TYPE_GLOBAL		= bit(15)
+	TYPE_GLOBAL		= 1 << 15
 };
 
 typedef uint32_t deftype_t;
 
-struct QCStatement
+typedef struct
 {
 	opcode_t	opcode;
 	operands_t	args;
-};
+} qcvm_statement_t;
 
-struct QCDefinition
+typedef struct
 {
 	deftype_t	id;
 	global_t	global_index;
 	string_t	name_index;
-};
+} qcvm_definition_t;
 
-struct QCFunction
+typedef struct
 {
 	func_t		id;
 	global_t	first_arg;
@@ -113,9 +117,19 @@ struct QCFunction
 	string_t	file_index;
 	uint32_t	num_args;
 	uint8_t		arg_sizes[8];
-};
+} qcvm_function_t;
 
 #ifdef ALLOW_PROFILING
+enum
+{
+	PROFILE_FUNCTIONS	= 1,
+	PROFILE_FIELDS		= 2,
+	PROFILE_TIMERS		= 4,
+	PROFILE_OPCODES		= 8
+};
+
+typedef int32_t profile_flags_t;
+
 enum
 {
 	NumSelfCalls,
@@ -131,17 +145,6 @@ enum
 
 typedef size_t profile_type_t;
 
-constexpr const char *profile_type_names[TotalProfileFields] =
-{
-	"# Calls",
-	"# Instructions",
-	"# Unconditional Jumps",
-	"# Conditional Jumps",
-	"# Globals Fetched",
-	"# Globals Set",
-	"# Func Calls"
-};
-
 enum
 {
 	StringAcquire,
@@ -153,57 +156,56 @@ enum
 	StringMarkRefsCopied,
 	StringPopRef,
 	StringPushRef,
+	StringFind,
 
 	TotalTimerFields
 };
 
 typedef size_t profile_timer_type_t;
 
-constexpr const char *timer_type_names[TotalTimerFields] =
-{
-	"String Acquire",
-	"String Release",
-	"String Mark",
-	"String Check Unset",
-	"String HasRef",
-	"String MarkIfHasRef",
-	"String StringMarkRefsCopied",
-	"String PopRef",
-	"String PushRef",
-};
-
-struct profile_timer_t
+typedef struct
 {
 	size_t		count;
 	uint64_t	time;
-};
+} profile_timer_t;
 
-struct active_timer_t
+typedef struct
 {
 	profile_timer_t	*timer;
 	uint64_t		start;
-};
+} active_timer_t;
 
 #define START_TIMER(vm, id) \
-	active_timer_t __timer = { &vm->timers[id], Q_time() }
-#define END_TIMER() \
-	__timer.timer->time += Q_time() - __timer.start
+	active_timer_t __timer; \
+	if (vm->profile_flags & PROFILE_TIMERS) \
+	{ \
+		__timer = { &vm->timers[id], Q_time() }; __timer.timer->count++; \
+	}
+#define END_TIMER(vm, flag) \
+	{ if (vm->profile_flags & flag) \
+		__timer.timer->time += Q_time() - __timer.start; }
 
-#define RESUME_TIMER() \
-	__timer.start = Q_time();
+#define RESUME_TIMER(vm, flag) \
+	{ if (vm->profile_flags & flag) \
+		__timer.start = Q_time(); }
 
 #define START_OPCODE_TIMER(vm, id) \
-	active_timer_t __timer = { &vm->opcode_timers[id], Q_time() }
+	active_timer_t __timer; \
+	if (vm->profile_flags & PROFILE_OPCODES) \
+	{ \
+		__timer = { &vm->opcode_timers[id], Q_time() }; __timer.timer->count++; \
+	}
 
-struct QCProfile
+typedef struct
 {
-	uint64_t	total, call_into;
+	uint64_t	ext, self;
 	size_t		fields[TotalProfileFields];
-};
+} qcvm_profile_t;
 #else
-#define StartTimer()
-#define EndTimer()
-#define StartOpcodeTimer()
+#define START_TIMER(...)
+#define END_TIMER(...)
+#define RESUME_TIMER(...)
+#define START_OPCODE_TIMER(...)
 #endif
 
 #include <optional>
@@ -220,21 +222,20 @@ typedef struct
 	int32_t			value;
 } qcvm_stack_local_t;
 
-const size_t REF_STRINGS_RESERVE = 64;
+const size_t STACK_STRINGS_RESERVE = 64;
 
 typedef struct
 {
 	qcvm_t					*vm;
-	QCFunction				*function;
-	const QCStatement		*statement;
+	qcvm_function_t				*function;
+	const qcvm_statement_t		*statement;
 	qcvm_stack_local_t		*locals;
 	qcvm_string_backup_t	*ref_strings;
 	size_t					ref_strings_size, ref_strings_allocated;
 
 #ifdef ALLOW_PROFILING
-	QCProfile	*profile;
-	uint64_t	start;
-	uint64_t	time_callees;
+	qcvm_profile_t	*profile;
+	uint64_t	callee_start, caller_start;
 #endif
 } qcvm_stack_t;
 
@@ -250,21 +251,25 @@ typedef struct
 	size_t			ref_count;
 } qcvm_ref_counted_string_t;
 
+static const size_t REF_STRING_RESERVE = 256;
+static const size_t FREE_STRING_RESERVE = 64;
+
 typedef struct
 {
 	qcvm_t	*vm;
 
 	// Mapped list to dynamic strings
-	std::unordered_map<string_t, qcvm_ref_counted_string_t>	strings;
+	qcvm_ref_counted_string_t	*strings;
+	size_t						strings_size, strings_allocated;
 
 	// stores a list of free indices that were explicitly freed
-	std::stack<string_t>	free_indices;
+	string_t	*free_indices;
+	size_t		free_indices_size, free_indices_allocated;
 
 	// mapped list of addresses that contain(ed) strings
 	std::unordered_map<const void *, string_t> ref_storage;
 } qcvm_string_list_t;
 
-string_t qcvm_string_list_allocate_string(qcvm_string_list_t *list);
 // Note: ownership of the pointer is transferred to the string list here.
 string_t qcvm_string_list_store(qcvm_string_list_t *list, const char *str, const size_t len);
 void qcvm_string_list_unstore(qcvm_string_list_t *list, const string_t id);
@@ -297,7 +302,7 @@ typedef void(*qcvm_field_setter_t)(void *out, const void *in);
 
 typedef struct
 {
-	const QCDefinition		*field;
+	const qcvm_definition_t		*field;
 	const size_t			client_offset;
 	qcvm_field_setter_t		setter;
 } qcvm_field_wrapper_t;
@@ -349,35 +354,52 @@ inline global_t qcvm_global_offset(const global_t &base, const int32_t &offset)
 	return (global_t)((int32_t)base + offset);
 }
 
+typedef struct string_hash_s
+{
+	const char		*str;
+
+	uint32_t				hash_value;
+	struct string_hash_s	*hash_next;
+} string_hash_t;
+
+typedef struct definition_hash_s
+{
+	qcvm_definition_t	*def;
+
+	uint32_t					hash_value;
+	struct definition_hash_s	*hash_next;
+} definition_hash_t;
+
 typedef struct qcvm_s
 {
 	// loaded from progs.dat
 	const char									*engine_name;
 	char										path[MAX_QPATH];
-	QCDefinition								*definitions;
+	qcvm_definition_t							*definitions;
 	size_t										definitions_size;
-	std::unordered_map<global_t, QCDefinition*> definition_map_by_id;
-	std::unordered_map<std::string_view, QCDefinition*> definition_map_by_name;
-	QCDefinition								*fields;
+	qcvm_definition_t							**definition_map_by_id;
+	definition_hash_t							**definition_hashes, *definition_hashes_data;
+	qcvm_definition_t							*fields;
 	size_t										fields_size;
-	std::unordered_map<global_t, QCDefinition*>	field_map;
-	std::unordered_map<std::string_view, QCDefinition*> field_map_by_name;
-	QCStatement									*statements;
+	qcvm_definition_t							**field_map_by_id;
+	definition_hash_t							**field_hashes, *field_hashes_data;
+	qcvm_statement_t							*statements;
 	size_t										statements_size;
-	QCFunction									*functions;
+	qcvm_function_t								*functions;
 	size_t										functions_size;
 	size_t										highest_stack = 0;
 #ifdef ALLOW_PROFILING
-	QCProfile									*profile_data;
+	qcvm_profile_t								*profile_data;
 	profile_timer_t								timers[TotalTimerFields];
 	profile_timer_t								opcode_timers[OP_NUMOPS];
+	profile_flags_t								profile_flags;
 #endif
 	global_t									*global_data = nullptr;
 	size_t										global_size;
 	char										*string_data;
 	size_t										*string_lengths;
 	size_t										string_size;
-	std::unordered_set<std::string_view>		string_hashes;
+	string_hash_t								**string_hashes, *string_hashes_data;
 	qcvm_string_list_t							dynamic_strings;
 	qcvm_builtin_list_t							builtins;
 	qcvm_field_wrap_list_t						field_wraps;
@@ -391,9 +413,16 @@ typedef struct qcvm_s
 	{
 		bool attached;
 		debug_state_t state;
-		QCFunction *step_function;
-		const QCStatement *step_statement;
+		qcvm_function_t *step_function;
+		const qcvm_statement_t *step_statement;
 		size_t step_depth;
+
+		qcvm_mutex_t (*create_mutex)();
+		void (*free_mutex)(qcvm_mutex_t);
+		void (*lock_mutex)(qcvm_mutex_t);
+		void (*unlock_mutex)(qcvm_mutex_t);
+		qcvm_thread_t (*create_thread)(qcvm_thread_func_t);
+		void (*thread_sleep)(const uint32_t);
 	} debug;
 #endif
 } qcvm_t;
@@ -403,7 +432,7 @@ void qcvm_error(const qcvm_t *vm, const char *format, ...);
 #ifdef _DEBUG
 void qcvm_debug(const qcvm_t *vm, const char *format, ...);
 #else
-#define qcvm_debug()
+#define qcvm_debug(...) { }
 #endif
 
 void *qcvm_alloc(const qcvm_t *vm, size_t size);
@@ -500,20 +529,20 @@ bool qcvm_find_string(qcvm_t *vm, const char *value, string_t *rstr);
 string_t qcvm_store_or_find_string(qcvm_t *vm, const char *value);
 
 #ifdef ALLOW_DEBUGGING
-evaluate_result_t qcvm_evaluate(qcvm_t *vm, const std::string &variable);
+evaluate_result_t qcvm_evaluate(qcvm_t *vm, const char *variable);
 
 void qcvm_break_on_current_statement(qcvm_t *vm);
 
 void qcvm_set_breakpoint(qcvm_t *vm, const bool is_set, const char *file, const int line);
 #endif
 
-int qcvm_line_number_for(const qcvm_t *vm, const QCStatement *statement);
+int qcvm_line_number_for(const qcvm_t *vm, const qcvm_statement_t *statement);
 
 func_t qcvm_find_function_id(const qcvm_t *vm, const char *name);
 
-QCFunction *qcvm_get_function(const qcvm_t *vm, const func_t id);
+qcvm_function_t *qcvm_get_function(const qcvm_t *vm, const func_t id);
 
-QCFunction *qcvm_find_function(const qcvm_t *vm, const char *name);
+qcvm_function_t *qcvm_find_function(const qcvm_t *vm, const char *name);
 	
 const char *qcvm_get_string(const qcvm_t *vm, const string_t str);
 
@@ -534,17 +563,16 @@ edict_t *qcvm_address_to_entity(const int32_t address);
 
 bool qcvm_pointer_valid(const qcvm_t *vm, const size_t address, const bool allow_null, const size_t len);
 
-std::string qcvm_stack_entry(const qcvm_t *vm, const qcvm_stack_t *stack);
-std::string qcvm_stack_trace(const qcvm_t *vm);
+const char *qcvm_stack_trace(const qcvm_t *vm);
 
-void qcvm_call_builtin(qcvm_t *vm, QCFunction *function);
+void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function);
 
-void qcvm_execute(qcvm_t *vm, QCFunction *function);
+void qcvm_execute(qcvm_t *vm, qcvm_function_t *function);
 	
 void qcvm_write_state(qcvm_t *vm, FILE *fp);
 void qcvm_read_state(qcvm_t *vm, FILE *fp);
 
-std::string ParseFormat(const string_t format, const qcvm_t *vm, const uint8_t start);
+const char *qcvm_parse_format(const string_t formatid, const qcvm_t *vm, const uint8_t start);
 
 void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename);
 
@@ -557,6 +585,6 @@ void qcvm_shutdown(qcvm_t *vm);
 	qcvm_builtin_list_register(&vm->builtins, #name, QC_ ## name)
 
 #ifdef QCVM_INTERNAL
-void qcvm_enter(qcvm_t *vm, QCFunction *function);
+void qcvm_enter(qcvm_t *vm, qcvm_function_t *function);
 void qcvm_leave(qcvm_t *vm);
 #endif

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <vector>
-
 // memory tags to allow dynamic memory to be cleaned up
 #define	TAG_GAME	765		// clear when unloading the dll
 #define	TAG_LEVEL	766		// clear when loading a new level

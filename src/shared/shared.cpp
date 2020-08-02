@@ -68,34 +68,10 @@ uint64_t Q_time() {
 		QueryPerformanceFrequency(&win_frequency);
 		is_init = true;
 	}
-	LARGE_INTEGER now;
+	static LARGE_INTEGER now;
 	QueryPerformanceCounter(&now);
-	return (uint64_t) ((1e9 * now.QuadPart)  / win_frequency.QuadPart);
+	return (uint64_t) ((1e9 * now.QuadPart) / win_frequency.QuadPart);
 #endif
-}
-
-/*
-============
-va
-
-does a varargs printf into a temp buffer, so I don't need to have
-varargs versions of all text functions.
-FIXME: make this buffer size safe someday
-============
-*/
-char *va(const char *format, ...)
-{
-	va_list         argptr;
-	static std::array<char[0x2800], 8>     buffers;
-	static int      index;
-
-	index = (index + 1) % buffers.size();
-
-	va_start(argptr, format);
-	vsnprintf(buffers[index], sizeof(buffers[0]), format, argptr);
-	va_end(argptr);
-
-	return buffers[index];
 }
 
 /*
@@ -116,4 +92,22 @@ size_t Q_strlcpy(char *dst, const char *src, size_t size)
 	}
 
 	return ret;
+}
+
+/*
+================
+Q_hash_string
+================
+*/
+uint32_t Q_hash_string (const char *string, const size_t hash_size)
+{
+	uint32_t	hashValue = 0;
+
+	for (size_t i = 0; *string; i++)
+	{
+		const char ch = *(string++);
+		hashValue = hashValue * 33 + ch;
+	}
+
+	return (hashValue + (hashValue >> 5)) % hash_size;
 }

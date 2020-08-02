@@ -45,8 +45,11 @@
     <ClCompile Include="src\vm_math.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="src\g_thread.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
     <ClCompile Include="src\vm_opcodes.cpp">
-      <Filter>inc</Filter>
+      <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -75,6 +78,9 @@
       <Filter>inc</Filter>
     </ClInclude>
     <ClInclude Include="src\vm_opcodes.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\g_thread.h">
       <Filter>inc</Filter>
     </ClInclude>
   </ItemGroup>

@@ -24,15 +24,15 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 typedef struct edict_s edict_t;
 typedef struct gclient_s gclient_t;
 
-constexpr int GAME_API_VERSION	= 3;
+static const int GAME_API_VERSION	= 3;
 
 //===============================================================
 
 //
 // per-level limits
 //
-constexpr size_t MAX_CLIENTS		= 256;	// absolute limit
-constexpr size_t MAX_EDICTS			= 1024;	// must change protocol to increase more
+static const size_t MAX_CLIENTS		= 256;	// absolute limit
+static const size_t MAX_EDICTS		= 1024;	// must change protocol to increase more
 
 // game print flags
 enum
@@ -180,12 +180,12 @@ typedef uint8_t button_bits_t;
 // usercmd_t is sent to the server each client frame
 struct usercmd_t
 {
-	uint8_t					msec;
-	button_bits_t			buttons;
-	std::array<short, 3>	angles;
-	short					forwardmove, sidemove, upmove;
-	uint8_t					impulse;	// remove?
-	uint8_t					lightlevel;	// light level the player is standing on
+	uint8_t			msec;
+	button_bits_t	buttons;
+	short			angles[3];
+	short			forwardmove, sidemove, upmove;
+	uint8_t			impulse;	// remove?
+	uint8_t			lightlevel;	// light level the player is standing on
 };
 
 // pmove_state_t is the information necessary for client side movement

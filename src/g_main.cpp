@@ -22,6 +22,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "g_vm.h"
 #include "vm_game.h"
 
+#ifdef ALLOW_DEBUGGING
+#include "g_thread.h"
+#endif
+
 static qcvm_t *qvm;
 
 static void InitBuiltins()
@@ -97,7 +101,7 @@ static void InitFieldWraps()
 	RegisterSingle(ps.rdflags);
 
 	for (int32_t i = 0; i < MAX_STATS; i++)
-		qcvm_field_wrap_list_register(&qvm->field_wraps, va("client.ps.stats[%i]", i), 0, offsetof(gclient_t, ps.stats) + (sizeof(gclient_t::ps.stats[0]) * i), FieldWrapToT<short>);
+		qcvm_field_wrap_list_register(&qvm->field_wraps, qcvm_temp_format(qvm, "client.ps.stats[%i]", i), 0, offsetof(gclient_t, ps.stats) + (sizeof(gclient_t::ps.stats[0]) * i), FieldWrapToT<short>);
 	
 	// gclient_t::ps::pmove
 	RegisterSingle(ps.pmove.pm_type);
@@ -164,7 +168,11 @@ static void InitGame ()
 
 	cvar_t *game_var = gi.cvar("game", "", 0);
 
-	qcvm_load(qvm, "Quake II DLL Wrapper", vas("%s/progs.dat", game_var->string).data());
+	qcvm_load(qvm, "Quake II DLL Wrapper", qcvm_temp_format(qvm, "%s/progs.dat", game_var->string));
+
+#ifdef ALLOW_PROFILING
+	qvm->profile_flags = (int32_t)gi.cvar("qc_profile_flags", "0", CVAR_LATCH)->value;
+#endif
 
 	InitBuiltins();
 	InitFieldWraps();
@@ -172,23 +180,30 @@ static void InitGame ()
 	qcvm_check(qvm);
 
 #ifdef ALLOW_DEBUGGING
+	qvm->debug.create_mutex = qcvm_cpp_create_mutex;
+	qvm->debug.free_mutex = qcvm_cpp_free_mutex;
+	qvm->debug.lock_mutex = qcvm_cpp_lock_mutex;
+	qvm->debug.unlock_mutex = qcvm_cpp_unlock_mutex;
+	qvm->debug.create_thread = qcvm_cpp_create_thread;
+	qvm->debug.thread_sleep = qcvm_cpp_thread_sleep;
+
 	qcvm_check_debugger_commands(qvm);
 #endif
 
 	// Call GetGameAPI
-	QCFunction *func = qcvm_find_function(qvm, "GetGameAPI");
+	qcvm_function_t *func = qcvm_find_function(qvm, "GetGameAPI");
 	qcvm_execute(qvm, func);
 	qce = *qcvm_get_global_typed(qc_export_t, qvm, GLOBAL_PARM0);
 
 	// initialize all clients for this game
 	const cvar_t *maxclients = gi.cvar ("maxclients", "4", CVAR_SERVERINFO | CVAR_LATCH);
-	game.num_clients = min(MAX_CLIENTS, (size_t)maxclients->value);
+	game.num_clients = minsz(MAX_CLIENTS, (size_t)maxclients->value);
 	game.clients = (gclient_t *)gi.TagMalloc(sizeof(gclient_t) * game.num_clients, TAG_GAME);
 
 	size_t entity_data_size = 0;
 
-	for (QCDefinition *field = qvm->fields; field < qvm->fields + qvm->fields_size; field++)
-		entity_data_size = max(entity_data_size, field->global_index * sizeof(int32_t));
+	for (qcvm_definition_t *field = qvm->fields; field < qvm->fields + qvm->fields_size; field++)
+		entity_data_size = maxsz(entity_data_size, field->global_index * sizeof(int32_t));
 
 	// initialize all entities for this game
 	globals.max_edicts = MAX_EDICTS;
@@ -206,7 +221,7 @@ static void ShutdownGame()
 	qcvm_check_debugger_commands(qvm);
 #endif
 
-	QCFunction *func = qcvm_get_function(qvm, qce.ShutdownGame);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.ShutdownGame);
 	qcvm_execute(qvm, func);
 
 	qcvm_shutdown(qvm);
@@ -243,7 +258,7 @@ static void RestoreClientData()
 #pragma GCC diagnostic pop
 
 		// restore client structs
-		for (QCDefinition *def = qvm->fields; def < qvm->fields + qvm->fields_size; def++)
+		for (qcvm_definition_t *def = qvm->fields; def < qvm->fields + qvm->fields_size; def++)
 		{
 			const char *name = qcvm_get_string(qvm, def->name_index);
 
@@ -285,7 +300,7 @@ static void SpawnEntities(const char *mapname, const char *entities, const char 
 
 	gi.FreeTags(TAG_LEVEL);
 
-	QCFunction *func = qcvm_get_function(qvm, qce.PreSpawnEntities);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.PreSpawnEntities);
 	qcvm_execute(qvm, func);
 
 	BackupClientData();
@@ -310,7 +325,7 @@ static qboolean ClientConnect(edict_t *e, char *userinfo)
 	qcvm_check_debugger_commands(qvm);
 #endif
 
-	QCFunction *func = qcvm_get_function(qvm, qce.ClientConnect);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientConnect);
 	const ent_t ent = qcvm_entity_to_ent(e);
 	qcvm_set_global_typed_value(ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_set_global_str(qvm, GLOBAL_PARM1, userinfo);
@@ -327,7 +342,7 @@ static void ClientBegin(edict_t *e)
 	qcvm_check_debugger_commands(qvm);
 #endif
 
-	QCFunction *func = qcvm_get_function(qvm, qce.ClientBegin);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientBegin);
 	const ent_t ent = qcvm_entity_to_ent(e);
 	qcvm_set_global_typed_value(ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_execute(qvm, func);
@@ -340,7 +355,7 @@ static void ClientUserinfoChanged(edict_t *e, char *userinfo)
 	qcvm_check_debugger_commands(qvm);
 #endif
 
-	QCFunction *func = qcvm_get_function(qvm, qce.ClientUserinfoChanged);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientUserinfoChanged);
 	const ent_t ent = qcvm_entity_to_ent(e);
 	qcvm_set_global_typed_value(ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_set_global_str(qvm, GLOBAL_PARM1, userinfo);
@@ -354,7 +369,7 @@ static void ClientDisconnect(edict_t *e)
 	qcvm_check_debugger_commands(qvm);
 #endif
 
-	QCFunction *func = qcvm_get_function(qvm, qce.ClientDisconnect);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientDisconnect);
 	const ent_t ent = qcvm_entity_to_ent(e);
 	qcvm_set_global_typed_value(ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_execute(qvm, func);
@@ -367,7 +382,7 @@ static void ClientCommand(edict_t *e)
 	qcvm_check_debugger_commands(qvm);
 #endif
 
-	QCFunction *func = qcvm_get_function(qvm, qce.ClientCommand);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientCommand);
 	const ent_t ent = qcvm_entity_to_ent(e);
 	qcvm_set_global_typed_value(ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_execute(qvm, func);
@@ -380,7 +395,7 @@ static void ClientThink(edict_t *e, usercmd_t *ucmd)
 	qcvm_check_debugger_commands(qvm);
 #endif
 
-	QCFunction *func = qcvm_get_function(qvm, qce.ClientThink);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientThink);
 	const ent_t ent = qcvm_entity_to_ent(e);
 	qcvm_set_global_typed_value(ent_t, qvm, GLOBAL_PARM0, ent);
 
@@ -407,7 +422,7 @@ static void RunFrame()
 	qcvm_check_debugger_commands(qvm);
 #endif
 
-	QCFunction *func = qcvm_get_function(qvm, qce.RunFrame);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.RunFrame);
 	qcvm_execute(qvm, func);
 
 	for (size_t i = 0; i < game.num_clients; i++)
@@ -420,7 +435,7 @@ static void ServerCommand()
 	qcvm_check_debugger_commands(qvm);
 #endif
 
-	QCFunction *func = qcvm_get_function(qvm, qce.ServerCommand);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.ServerCommand);
 	qcvm_execute(qvm, func);
 }
 
@@ -437,14 +452,14 @@ enum pointer_class_type_t : uint8_t
 	POINTER_ENT
 };
 
-static void WriteDefinitionData(FILE *fp, const QCDefinition *def, const global_t *value)
+static void WriteDefinitionData(FILE *fp, const qcvm_definition_t *def, const global_t *value)
 {
 	const deftype_t type = def->id & ~TYPE_GLOBAL;
 
 	if (type == TYPE_STRING)
 	{
-		string_t strid = (string_t)*value;
-		size_t strlength = qcvm_get_string_length(qvm, strid);
+		const string_t strid = (string_t)*value;
+		const size_t strlength = qcvm_get_string_length(qvm, strid);
 		const char *str = qcvm_get_string(qvm, strid);
 		fwrite(&strlength, sizeof(strlength), 1, fp);
 		fwrite(str, sizeof(char), strlength, fp);
@@ -452,10 +467,10 @@ static void WriteDefinitionData(FILE *fp, const QCDefinition *def, const global_
 	}
 	else if (type == TYPE_FUNCTION)
 	{
-		func_t func = (func_t)*value;
-		QCFunction *func_ptr = &qvm->functions[(size_t)func];
+		const func_t func = (func_t)*value;
+		const qcvm_function_t *func_ptr = &qvm->functions[(size_t)func];
 		const char *str = qcvm_get_string(qvm, func_ptr->name_index);
-		auto strlength = qcvm_get_string_length(qvm, func_ptr->name_index);
+		const size_t strlength = qcvm_get_string_length(qvm, func_ptr->name_index);
 		
 		fwrite(&strlength, sizeof(strlength), 1, fp);
 		fwrite(str, sizeof(char), strlength, fp);
@@ -471,7 +486,7 @@ static void WriteDefinitionData(FILE *fp, const QCDefinition *def, const global_
 			return;
 		}
 
-		ptrdiff_t ptr_val = (ptrdiff_t)*value;
+		const ptrdiff_t ptr_val = (ptrdiff_t)*value;
 		
 		if (ptr_val >= (ptrdiff_t)qvm->global_data && ptr_val < (ptrdiff_t)(qvm->global_data + qvm->global_size))
 		{
@@ -484,7 +499,7 @@ static void WriteDefinitionData(FILE *fp, const QCDefinition *def, const global_
 
 			while (def_id >= GLOBAL_QC)
 			{
-				if (qvm->definition_map_by_id.contains(def_id))
+				if (qvm->definition_map_by_id[def_id])
 					break;
 
 				def_id = (global_t)((int32_t)(def_id) - 1);
@@ -494,7 +509,7 @@ static void WriteDefinitionData(FILE *fp, const QCDefinition *def, const global_
 			if (def_id < GLOBAL_QC)
 				qcvm_error(qvm, "couldn't find ptr reference");
 
-			QCDefinition *closest_def = qvm->definition_map_by_id.at(def_id);
+			qcvm_definition_t *closest_def = qvm->definition_map_by_id[def_id];
 			const char *str = qcvm_get_string(qvm, closest_def->name_index);
 			const size_t len = qcvm_get_string_length(qvm, closest_def->name_index);
 
@@ -515,7 +530,7 @@ static void WriteDefinitionData(FILE *fp, const QCDefinition *def, const global_
 	}
 	else if (type == TYPE_ENTITY)
 	{
-		edict_t *ent = qcvm_ent_to_entity((ent_t)*value, false);
+		const edict_t *ent = qcvm_ent_to_entity((ent_t)*value, false);
 
 		if (ent == nullptr)
 			fwrite(&globals.max_edicts, sizeof(globals.max_edicts), 1, fp);
@@ -529,29 +544,28 @@ static void WriteDefinitionData(FILE *fp, const QCDefinition *def, const global_
 	fwrite(value, sizeof(global_t), len, fp);
 }
 
-static void WriteEntityFieldData(FILE *fp, edict_t *ent, const QCDefinition *def)
+static void WriteEntityFieldData(FILE *fp, edict_t *ent, const qcvm_definition_t *def)
 {
-	int32_t *field = qcvm_get_entity_field_pointer(ent, (int32_t)def->global_index);
-	WriteDefinitionData(fp, def, (global_t *)field);
+	const int32_t *field = qcvm_get_entity_field_pointer(ent, (int32_t)def->global_index);
+	WriteDefinitionData(fp, def, (const global_t *)field);
 }
 
-static void ReadDefinitionData(FILE *fp, const QCDefinition *def, global_t *value)
+static void ReadDefinitionData(qcvm_t *vm, FILE *fp, const qcvm_definition_t *def, global_t *value)
 {
 	const deftype_t type = def->id & ~TYPE_GLOBAL;
 
 	if (type == TYPE_STRING)
 	{
-		std::string def_value;
 		size_t def_len;
 		fread(&def_len, sizeof(def_len), 1, fp);
-		def_value.resize(def_len);
-		fread(def_value.data(), sizeof(char), def_len, fp);
-		qcvm_set_string_ptr(qvm, value, def_value.data());
+		char *def_value = qcvm_temp_buffer(vm, def_len, nullptr);
+		fread(def_value, sizeof(char), def_len, fp);
+		def_value[def_len] = 0;
+		qcvm_set_string_ptr(qvm, value, def_value);
 		return;
 	}
 	else if (type == TYPE_FUNCTION)
 	{
-		std::string func_name;
 		size_t func_len;
 		fread(&func_len, sizeof(func_len), 1, fp);
 
@@ -559,13 +573,14 @@ static void ReadDefinitionData(FILE *fp, const QCDefinition *def, global_t *valu
 			*value = GLOBAL_NULL;
 		else
 		{
-			func_name.resize(func_len);
-			fread(func_name.data(), sizeof(char), func_len, fp);
+			char *func_name = qcvm_temp_buffer(vm, func_len, nullptr);
+			fread(func_name, sizeof(char), func_len, fp);
+			func_name[func_len] = 0;
 
-			*value = (global_t)qcvm_find_function_id(qvm, func_name.data());
+			*value = (global_t)qcvm_find_function_id(qvm, func_name);
 
 			if (*value == GLOBAL_NULL)
-				qcvm_error(qvm, "can't find func %s", func_name.data());
+				qcvm_error(qvm, "can't find func %s", func_name);
 		}
 		return;
 	}
@@ -581,20 +596,26 @@ static void ReadDefinitionData(FILE *fp, const QCDefinition *def, global_t *valu
 		}
 		else if (ptrclass == POINTER_GLOBAL)
 		{
-			std::string global_name;
 			size_t global_len;
 			fread(&global_len, sizeof(global_len), 1, fp);
-			global_name.resize(global_len);
-			fread(global_name.data(), sizeof(char), global_len, fp);
+			char *global_name = qcvm_temp_buffer(vm, global_len, nullptr);
+			fread(global_name, sizeof(char), global_len, fp);
+			global_name[global_len] = 0;
 
-			if (!qvm->definition_map_by_name.contains(global_name))
-				qcvm_error(qvm, "bad pointer; can't map %s", global_name.data());
+			definition_hash_t *hashed = qvm->definition_hashes[Q_hash_string(global_name, qvm->definitions_size)];
 
-			auto global_def = qvm->definition_map_by_name.at(global_name);
+			for (; hashed; hashed = hashed->hash_next)
+				if (!strcmp(qcvm_get_string(vm, hashed->def->name_index), global_name))
+					break;
+
+			if (!hashed)
+				qcvm_error(qvm, "bad pointer; can't map %s", global_name);
+
+			qcvm_definition_t *global_def = hashed->def;
 			size_t global_offset;
 			fread(&global_offset, sizeof(global_offset), 1, fp);
 
-			auto ptr = qcvm_get_global(qvm, (global_t)((uint32_t)global_def->global_index + global_offset));
+			global_t *ptr = qcvm_get_global(qvm, (global_t)((uint32_t)global_def->global_index + global_offset));
 			*value = (global_t)(ptrdiff_t)ptr;
 			return;
 		}
@@ -622,10 +643,10 @@ static void ReadDefinitionData(FILE *fp, const QCDefinition *def, global_t *valu
 	fread(value, sizeof(global_t), len, fp);
 }
 
-static void ReadEntityFieldData(FILE *fp, edict_t *ent, const QCDefinition *def)
+static void ReadEntityFieldData(qcvm_t *vm, FILE *fp, edict_t *ent, const qcvm_definition_t *def)
 {
 	int32_t *field = qcvm_get_entity_field_pointer(ent, (int32_t)def->global_index);
-	ReadDefinitionData(fp, def, (global_t *)field);
+	ReadDefinitionData(vm, fp, def, (global_t *)field);
 }
 
 /*
@@ -646,7 +667,7 @@ static void WriteGame(const char *filename, qboolean autosave)
 {
 	FILE *fp = fopen(filename, "wb");
 
-	auto func = qcvm_get_function(qvm, qce.PreWriteGame);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.PreWriteGame);
 	qcvm_set_global_typed_value(qboolean, qvm, GLOBAL_PARM0, autosave);
 	qcvm_execute(qvm, func);
 	
@@ -658,7 +679,7 @@ static void WriteGame(const char *filename, qboolean autosave)
 	// save "game." values
 	size_t name_len;
 
-	for (QCDefinition *def = qvm->definitions; def < qvm->definitions + qvm->definitions_size; def++)
+	for (qcvm_definition_t *def = qvm->definitions; def < qvm->definitions + qvm->definitions_size; def++)
 	{
 		if (!(def->id & TYPE_GLOBAL))
 			continue;
@@ -679,7 +700,7 @@ static void WriteGame(const char *filename, qboolean autosave)
 	fwrite(&name_len, sizeof(name_len), 1, fp);
 
 	// save client fields
-	for (QCDefinition *def = qvm->fields; def < qvm->fields + qvm->fields_size; def++)
+	for (qcvm_definition_t *def = qvm->fields; def < qvm->fields + qvm->fields_size; def++)
 	{
 		const char *name = qcvm_get_string(qvm, def->name_index);
 
@@ -708,7 +729,7 @@ static void ReadGame(const char *filename)
 {
 	FILE *fp = fopen(filename, "rb");
 
-	auto func = qcvm_get_function(qvm, qce.PreReadGame);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.PreReadGame);
 	qcvm_execute(qvm, func);
 
 	uint32_t magic, version, edict_size, maxclients;
@@ -741,9 +762,6 @@ static void ReadGame(const char *filename)
 	qcvm_string_list_check_ref_unset(&qvm->dynamic_strings, globals.edicts, (globals.edict_size * globals.max_edicts) / sizeof(global_t), false);
 
 	// load game globals
-	std::string def_name;
-	std::string def_value;
-
 	size_t len;
 
 	while (true)
@@ -753,15 +771,21 @@ static void ReadGame(const char *filename)
 		if (!len)
 			break;
 
-		def_name.resize(len);
+		char *def_name = qcvm_temp_buffer(qvm, len, nullptr);
+		fread(def_name, sizeof(char), len, fp);
+		def_name[len] = 0;
 
-		fread(def_name.data(), sizeof(char), len, fp);
+		definition_hash_t *hashed = qvm->definition_hashes[Q_hash_string(def_name, qvm->definitions_size)];
 
-		if (!qvm->definition_map_by_name.contains(def_name))
-			qcvm_error(qvm, "Bad definition %s", def_name.data());
+		for (; hashed; hashed = hashed->hash_next)
+			if (!strcmp(qcvm_get_string(qvm, hashed->def->name_index), def_name))
+				break;
 
-		QCDefinition *def = qvm->definition_map_by_name.at(def_name);
-		ReadDefinitionData(fp, def, qcvm_get_global(qvm, def->global_index));
+		if (!hashed)
+			qcvm_error(qvm, "Bad definition %s", def_name);
+
+		qcvm_definition_t *def = hashed->def;
+		ReadDefinitionData(qvm, fp, def, qcvm_get_global(qvm, def->global_index));
 	}
 
 	// load client fields
@@ -771,23 +795,29 @@ static void ReadGame(const char *filename)
 
 		if (!len)
 			break;
-
-		def_name.resize(len);
-
-		fread(def_name.data(), sizeof(char), len, fp);
+		
+		char *def_name = qcvm_temp_buffer(qvm, len, nullptr);
+		fread(def_name, sizeof(char), len, fp);
+		def_name[len] = 0;
 
 		string_t str;
 		
-		if (!qcvm_find_string(qvm, def_name.data(), &str) || qcvm_string_list_is_ref_counted(&qvm->dynamic_strings, str))
+		if (!qcvm_find_string(qvm, def_name, &str) || qcvm_string_list_is_ref_counted(&qvm->dynamic_strings, str))
 			qcvm_error(qvm, "Bad string in save file");
 
-		if (!qvm->field_map_by_name.contains(def_name))
-			qcvm_error(qvm, "Bad field %s", def_name.data());
+		definition_hash_t *hashed = qvm->field_hashes[Q_hash_string(def_name, qvm->fields_size)];
+
+		for (; hashed; hashed = hashed->hash_next)
+			if (!strcmp(qcvm_get_string(qvm, hashed->def->name_index), def_name))
+				break;
+
+		if (!hashed)
+			qcvm_error(qvm, "Bad field %s", def_name);
 		
-		QCDefinition *field = qvm->field_map_by_name.at(def_name);
+		qcvm_definition_t *field = hashed->def;
 		
 		for (size_t i = 0; i < game.num_clients; i++)
-			ReadEntityFieldData(fp, itoe(i + 1), field);
+			ReadEntityFieldData(qvm, fp, itoe(i + 1), field);
 	}
 
 	func = qcvm_get_function(qvm, qce.PostReadGame);
@@ -812,7 +842,7 @@ static void WriteLevel(const char *filename)
 {
 	FILE *fp = fopen(filename, "wb");
 
-	auto func = qcvm_get_function(qvm, qce.PreWriteLevel);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.PreWriteLevel);
 	qcvm_execute(qvm, func);
 	
 	fwrite(&SAVE_MAGIC2, sizeof(SAVE_MAGIC2), 1, fp);
@@ -823,7 +853,7 @@ static void WriteLevel(const char *filename)
 	// save "level." values
 	size_t name_len;
 	
-	for (QCDefinition *def = qvm->definitions; def < qvm->definitions + qvm->definitions_size; def++)
+	for (qcvm_definition_t *def = qvm->definitions; def < qvm->definitions + qvm->definitions_size; def++)
 	{
 		if (!(def->id & TYPE_GLOBAL))
 			continue;
@@ -844,7 +874,7 @@ static void WriteLevel(const char *filename)
 	fwrite(&name_len, sizeof(name_len), 1, fp);
 
 	// save non-client structs
-	for (QCDefinition *def = qvm->fields; def < qvm->fields + qvm->fields_size; def++)
+	for (qcvm_definition_t *def = qvm->fields; def < qvm->fields + qvm->fields_size; def++)
 	{
 		const char *name = qcvm_get_string(qvm, def->name_index);
 
@@ -857,7 +887,7 @@ static void WriteLevel(const char *filename)
 
 		for (size_t i = 0; i < globals.num_edicts; i++)
 		{
-			auto ent = itoe(i);
+			edict_t *ent = itoe(i);
 
 			if (!ent->inuse)
 				continue;
@@ -900,7 +930,7 @@ static void ReadLevel(const char *filename)
 {
 	FILE *fp = fopen(filename, "rb");
 
-	auto func = qcvm_get_function(qvm, qce.PreReadLevel);
+	qcvm_function_t *func = qcvm_get_function(qvm, qce.PreReadLevel);
 	qcvm_execute(qvm, func);
 
 	uint32_t magic, version, edict_size, maxclients;
@@ -937,9 +967,6 @@ static void ReadLevel(const char *filename)
 	qcvm_string_list_check_ref_unset(&qvm->dynamic_strings, globals.edicts, (globals.edict_size * globals.max_edicts) / sizeof(global_t), false);
 
 	// load level globals
-	std::string def_name;
-	std::string def_value;
-
 	while (true)
 	{
 		size_t len;
@@ -947,16 +974,22 @@ static void ReadLevel(const char *filename)
 
 		if (!len)
 			break;
+		
+		char *def_name = qcvm_temp_buffer(qvm, len, nullptr);
+		fread(def_name, sizeof(char), len, fp);
+		def_name[len] = 0;
 
-		def_name.resize(len);
+		definition_hash_t *hashed = qvm->definition_hashes[Q_hash_string(def_name, qvm->definitions_size)];
 
-		fread(def_name.data(), sizeof(char), len, fp);
+		for (; hashed; hashed = hashed->hash_next)
+			if (!strcmp(qcvm_get_string(qvm, hashed->def->name_index), def_name))
+				break;
 
-		if (!qvm->definition_map_by_name.contains(def_name))
-			qcvm_error(qvm, "Bad definition %s", def_name.data());
+		if (!hashed)
+			qcvm_error(qvm, "Bad definition %s", def_name);
 
-		QCDefinition *def = qvm->definition_map_by_name.at(def_name);
-		ReadDefinitionData(fp, def, qcvm_get_global(qvm, def->global_index));
+		qcvm_definition_t *def = hashed->def;
+		ReadDefinitionData(qvm, fp, def, qcvm_get_global(qvm, def->global_index));
 	}
 
 	// load entity fields
@@ -967,20 +1000,26 @@ static void ReadLevel(const char *filename)
 
 		if (!len)
 			break;
-
-		def_name.resize(len);
-
-		fread(def_name.data(), sizeof(char), len, fp);
+		
+		char *def_name = qcvm_temp_buffer(qvm, len, nullptr);
+		fread(def_name, sizeof(char), len, fp);
+		def_name[len] = 0;
 
 		string_t str;
 		
-		if (!qcvm_find_string(qvm, def_name.data(), &str) || qcvm_string_list_is_ref_counted(&qvm->dynamic_strings, str))
+		if (!qcvm_find_string(qvm, def_name, &str) || qcvm_string_list_is_ref_counted(&qvm->dynamic_strings, str))
 			qcvm_error(qvm, "Bad string in save file");
 
-		if (!qvm->field_map_by_name.contains(def_name))
-			qcvm_error(qvm, "Bad field %s", def_name.data());
+		definition_hash_t *hashed = qvm->field_hashes[Q_hash_string(def_name, qvm->fields_size)];
+
+		for (; hashed; hashed = hashed->hash_next)
+			if (!strcmp(qcvm_get_string(qvm, hashed->def->name_index), def_name))
+				break;
+
+		if (!hashed)
+			qcvm_error(qvm, "Bad field %s", def_name);
 		
-		QCDefinition *field = qvm->field_map_by_name.at(def_name);
+		qcvm_definition_t *field = hashed->def;
 
 		while (true)
 		{
@@ -997,7 +1036,7 @@ static void ReadLevel(const char *filename)
 				globals.num_edicts = ent_id + 1;
 
 			edict_t *ent = itoe(ent_id);
-			ReadEntityFieldData(fp, ent, field);
+			ReadEntityFieldData(qvm, fp, ent, field);
 		}
 	}
 
@@ -1022,7 +1061,7 @@ static void ReadLevel(const char *filename)
 }
 
 game_export_t globals = {
-	.apiversion = 3,
+	.apiversion = GAME_API_VERSION,
 
 	.Init = InitGame,
 	.Shutdown = ShutdownGame,

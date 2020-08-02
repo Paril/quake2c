@@ -396,6 +396,14 @@ static void F_OP_NOT_S(qcvm_t *vm, const operands_t operands, int *depth)
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
 }
 
+#ifdef ALLOW_PROFILING
+#define PROFILE_COND_JUMP \
+	if (vm->profile_flags & PROFILE_FIELDS) \
+		current->profile->fields[NumConditionalJumps]++
+#else
+#define PROFILE_COND_JUMP
+#endif
+
 #define F_OP_IF(F_OP, TType) \
 static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 { \
@@ -403,6 +411,7 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	{ \
 		qcvm_stack_t *current = &vm->state.stack[vm->state.current]; \
 		current->statement += (int16_t)current->statement->args.b - 1; \
+		PROFILE_COND_JUMP; \
 	} \
 }
 
@@ -418,6 +427,7 @@ static void F_OP_IF_S(qcvm_t *vm, const operands_t operands, int *depth)
 	{
 		qcvm_stack_t *current = &vm->state.stack[vm->state.current];
 		current->statement += (int16_t)current->statement->args.b - 1;
+		PROFILE_COND_JUMP;
 	}
 }
 
@@ -428,6 +438,7 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	{ \
 		qcvm_stack_t *current = &vm->state.stack[vm->state.current]; \
 		current->statement += (int16_t)current->statement->args.b - 1; \
+		PROFILE_COND_JUMP; \
 	} \
 }
 
@@ -443,13 +454,17 @@ static void F_OP_IFNOT_S(qcvm_t *vm, const operands_t operands, int *depth)
 	{
 		qcvm_stack_t *current = &vm->state.stack[vm->state.current];
 		current->statement += (int16_t)current->statement->args.b - 1;
+		PROFILE_COND_JUMP;
 	}
 }
 
 #ifdef ALLOW_PROFILING
 #define PROFILE_FUNCTION_CALL \
-	qcvm_stack_t *current = &vm->state.stack[vm->state.current]; \
-	current->profile->fields[NumFuncCalls]++
+	if (vm->profile_flags & PROFILE_FIELDS) \
+	{ \
+		qcvm_stack_t *current = &vm->state.stack[vm->state.current]; \
+		current->profile->fields[NumFuncCalls]++; \
+	}
 #else
 #define PROFILE_FUNCTION_CALL
 #endif
@@ -471,7 +486,7 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 \
 	PROFILE_FUNCTION_CALL; \
 \
-	QCFunction *call = &vm->functions[enter_func]; \
+	qcvm_function_t *call = &vm->functions[enter_func]; \
 \
 	if (!call->id) \
 		qcvm_error(vm, "Tried to call missing function %s", qcvm_get_string(vm, call->name_index)); \
@@ -510,6 +525,11 @@ static void F_OP_GOTO(qcvm_t *vm, const operands_t operands, int *depth)
 {
 	qcvm_stack_t *current = &vm->state.stack[vm->state.current];
 	current->statement += (int16_t)current->statement->args.a - 1;
+
+#ifdef ALLOW_PROFILING
+	if (vm->profile_flags & PROFILE_FIELDS)
+		current->profile->fields[NumUnconditionalJumps]++;
+#endif
 }
 
 #define F_OP_AND(F_OP, TLeft, TRight, TResult) \
@@ -530,8 +550,8 @@ F_OP_AND(F_OP_AND_FI, vec_t, int32_t, int32_t);
 #define F_OP_OR(F_OP, TLeft, TRight, TResult) \
 static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 { \
-	const auto a = *qcvm_get_global_typed(TLeft, vm, operands.a); \
-	const auto b = *qcvm_get_global_typed(TRight, vm, operands.b); \
+	const TLeft a = *qcvm_get_global_typed(TLeft, vm, operands.a); \
+	const TRight b = *qcvm_get_global_typed(TRight, vm, operands.b); \
 	const TResult result = a || b; \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
@@ -661,7 +681,7 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	TType *field_value = (TType *)(vm->global_data + address); \
 	qcvm_set_global_typed_ptr(TType, vm, operands.c, field_value); \
 \
-	constexpr size_t span = sizeof(TType) / sizeof(global_t); \
+	const size_t span = sizeof(TType) / sizeof(global_t); \
 	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), span); \
 }
 

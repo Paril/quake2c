@@ -134,7 +134,7 @@ enum solid_t
 	SOLID_BSP           // bsp clip, touch on edge
 };
 
-constexpr size_t MAX_ENT_CLUSTERS	= 16;
+static const size_t MAX_ENT_CLUSTERS	= 16;
 
 typedef struct edict_s edict_t;
 
