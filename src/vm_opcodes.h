@@ -290,13 +290,13 @@ enum
 	OP_BREAKPOINT = 0x10000000
 };
 
-typedef uint32_t opcode_t;
+typedef uint32_t qcvm_opcode_t;
 
 typedef struct
 {
-	global_t	a, b, c;
-} operands_t;
+	qcvm_global_t	a, b, c;
+} qcvm_operands_t;
 
-typedef void(*qcvm_opcode_func_t) (qcvm_t *vm, const operands_t operands, int *depth);
+typedef void(*qcvm_opcode_func_t) (qcvm_t *vm, const qcvm_operands_t operands, int *depth);
 
-extern qcvm_opcode_func_t codeFuncs[];
+extern qcvm_opcode_func_t qcvm_code_funcs[];

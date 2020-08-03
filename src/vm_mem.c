@@ -13,7 +13,7 @@ static void QC_memcpy(qcvm_t *vm)
 
 	memcpy(dst_ptr, src_ptr, sz);
 
-	const size_t span = sz / sizeof(global_t);
+	const size_t span = sz / sizeof(qcvm_global_t);
 
 	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, src_ptr, dst_ptr, span);
 }
@@ -27,7 +27,7 @@ static void QC_memclear(qcvm_t *vm)
 
 	memset(dst_ptr, 0, sz);
 
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, dst_ptr, sz / sizeof(global_t), false);
+	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, dst_ptr, sz / sizeof(qcvm_global_t), false);
 }
 
 static void QC_memcmp(qcvm_t *vm)
@@ -42,9 +42,9 @@ static void QC_memcmp(qcvm_t *vm)
 	qcvm_return_int32(vm, memcmp(dst_ptr, src_ptr, sz));
 }
 
-void InitMemBuiltins(qcvm_t *vm)
+void qcvm_init_mem_builtins(qcvm_t *vm)
 {
-	RegisterBuiltin(memcpy);
-	RegisterBuiltin(memclear);
-	RegisterBuiltin(memcmp);
+	qcvm_register_builtin(memcpy);
+	qcvm_register_builtin(memclear);
+	qcvm_register_builtin(memcmp);
 }

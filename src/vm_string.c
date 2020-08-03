@@ -60,7 +60,7 @@ char *qcvm_temp_format(const qcvm_t *vm, const char *format, ...)
 
 static void QC_va(qcvm_t *vm)
 {
-	const string_t fmtid = qcvm_argv_string_id(vm, 0);
+	const qcvm_string_t fmtid = qcvm_argv_string_id(vm, 0);
 	qcvm_return_string(vm, qcvm_parse_format(fmtid, vm, 1));
 }
 
@@ -94,13 +94,13 @@ static void QC_strncmp(qcvm_t *vm)
 
 static void QC_strlen(qcvm_t *vm)
 {
-	const string_t a = qcvm_argv_string_id(vm, 0);
+	const qcvm_string_t a = qcvm_argv_string_id(vm, 0);
 	qcvm_return_int32(vm, qcvm_get_string_length(vm, a));
 }
 
 static void QC_substr(qcvm_t *vm)
 {
-	const string_t strid = qcvm_argv_string_id(vm, 0);
+	const qcvm_string_t strid = qcvm_argv_string_id(vm, 0);
 	const int32_t start = qcvm_argv_int32(vm, 1);
 	const size_t str_len = qcvm_get_string_length(vm, strid);
 	size_t length = SIZE_MAX;
@@ -172,20 +172,20 @@ static void QC_localtime(qcvm_t *vm)
 	qcvm_set_global_typed_ptr(struct tm, vm, GLOBAL_PARM0, ltime);
 }
 
-void InitStringBuiltins(qcvm_t *vm)
+void qcvm_init_string_builtins(qcvm_t *vm)
 {
-	RegisterBuiltin(va);
+	qcvm_register_builtin(va);
 	
-	RegisterBuiltin(stoi);
-	RegisterBuiltin(stof);
+	qcvm_register_builtin(stoi);
+	qcvm_register_builtin(stof);
 
-	RegisterBuiltin(stricmp);
-	RegisterBuiltin(strlen);
-	RegisterBuiltin(substr);
-	RegisterBuiltin(strncmp);
-	RegisterBuiltin(strconcat);
-	RegisterBuiltin(strstr);
-	RegisterBuiltin(strchr);
+	qcvm_register_builtin(stricmp);
+	qcvm_register_builtin(strlen);
+	qcvm_register_builtin(substr);
+	qcvm_register_builtin(strncmp);
+	qcvm_register_builtin(strconcat);
+	qcvm_register_builtin(strstr);
+	qcvm_register_builtin(strchr);
 
-	RegisterBuiltin(localtime);
+	qcvm_register_builtin(localtime);
 }

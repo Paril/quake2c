@@ -20,7 +20,7 @@ static void QC_ClearEntity(qcvm_t *vm)
 	if (number > 0 && number <= game.num_clients)
 		entity->client = &game.clients[number - 1];
 
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, entity, globals.edict_size / sizeof(global_t), false);
+	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, entity, globals.edict_size / sizeof(qcvm_global_t), false);
 }
 
 void SyncPlayerState(qcvm_t *vm, edict_t *ent)
@@ -88,14 +88,14 @@ const char *ParseSlashes(const char *value)
 	return slashless_string;
 }
 
-static inline void QC_parse_value_into_ptr(qcvm_t *vm, const deftype_t type, const char *value, void *ptr)
+static inline void QC_parse_value_into_ptr(qcvm_t *vm, const qcvm_deftype_t type, const char *value, void *ptr)
 {
 	size_t data_span = 1;
 
 	switch (type)
 	{
 	case TYPE_STRING:
-		*(string_t *)ptr = qcvm_store_or_find_string(vm, ParseSlashes(value));
+		*(qcvm_string_t *)ptr = qcvm_store_or_find_string(vm, ParseSlashes(value));
 		break;
 	case TYPE_FLOAT:
 		*(vec_t *)ptr = strtof(value, NULL);
@@ -113,8 +113,8 @@ static inline void QC_parse_value_into_ptr(qcvm_t *vm, const deftype_t type, con
 	
 	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, ptr, data_span, false);
 
-	if (type == TYPE_STRING && qcvm_string_list_is_ref_counted(&vm->dynamic_strings, *(string_t *)ptr))
-		qcvm_string_list_mark_ref_copy(&vm->dynamic_strings, *(string_t *)ptr, ptr);
+	if (type == TYPE_STRING && qcvm_string_list_is_ref_counted(&vm->dynamic_strings, *(qcvm_string_t *)ptr))
+		qcvm_string_list_mark_ref_copy(&vm->dynamic_strings, *(qcvm_string_t *)ptr, ptr);
 }
 
 static void QC_entity_key_parse(qcvm_t *vm)
@@ -125,7 +125,7 @@ static void QC_entity_key_parse(qcvm_t *vm)
 
 	void *ptr = qcvm_get_entity_field_pointer(ent, field);
 
-	qcvm_definition_t *f = vm->field_map_by_id[(global_t)field];
+	qcvm_definition_t *f = vm->field_map_by_id[(qcvm_global_t)field];
 
 	if (!f)
 		qcvm_error(vm, "Couldn't match field %i", field);
@@ -140,7 +140,7 @@ static void QC_struct_key_parse(qcvm_t *vm)
 	const char *value = qcvm_argv_string(vm, 2);
 	
 	const char *full_name = qcvm_temp_format(vm, "%s.%s", struct_name, key_name);
-	definition_hash_t *hashed = vm->definition_hashes[Q_hash_string(full_name, vm->definitions_size)];
+	qcvm_definition_hash_t *hashed = vm->definition_hashes[Q_hash_string(full_name, vm->definitions_size)];
 
 	for (; hashed; hashed = hashed->hash_next)
 		if (!strcmp(qcvm_get_string(vm, hashed->def->name_index), full_name))
@@ -170,15 +170,15 @@ static void QC_etoi(qcvm_t *vm)
 	qcvm_return_int32(vm, ((uint8_t *)address - (uint8_t *)globals.edicts) / globals.edict_size);
 }
 
-void InitGameBuiltins(qcvm_t *vm)
+void qcvm_init_game_builtins(qcvm_t *vm)
 {
-	RegisterBuiltin(SetNumEdicts);
-	RegisterBuiltin(ClearEntity);
-	RegisterBuiltin(SyncPlayerState);
+	qcvm_register_builtin(SetNumEdicts);
+	qcvm_register_builtin(ClearEntity);
+	qcvm_register_builtin(SyncPlayerState);
 	
-	RegisterBuiltin(entity_key_parse);
-	RegisterBuiltin(struct_key_parse);
+	qcvm_register_builtin(entity_key_parse);
+	qcvm_register_builtin(struct_key_parse);
 
-	RegisterBuiltin(itoe);
-	RegisterBuiltin(etoi);
+	qcvm_register_builtin(itoe);
+	qcvm_register_builtin(etoi);
 }

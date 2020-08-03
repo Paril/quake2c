@@ -13,12 +13,12 @@ static void QC_ModInt(qcvm_t *vm)
 static void QC_func_get(qcvm_t *vm)
 {
 	const char *s = qcvm_argv_string(vm, 0);
-	func_t func = qcvm_find_function_id(vm, s);
+	qcvm_func_t func = qcvm_find_function_id(vm, s);
 	qcvm_return_func(vm, func);
 }
 
-void InitExtBuiltins(qcvm_t *vm)
+void qcvm_init_ext_builtins(qcvm_t *vm)
 {
-	RegisterBuiltin(ModInt);
-	RegisterBuiltin(func_get);
+	qcvm_register_builtin(ModInt);
+	qcvm_register_builtin(func_get);
 }

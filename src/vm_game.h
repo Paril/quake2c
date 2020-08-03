@@ -12,13 +12,13 @@ typedef struct
 } QC_usercmd_t;
 
 // Builtin "modules"
-void InitGIBuiltins(qcvm_t *vm);
-void InitGameBuiltins(qcvm_t *vm);
-void InitExtBuiltins(qcvm_t *vm);
-void InitStringBuiltins(qcvm_t *vm);
-void InitMemBuiltins(qcvm_t *vm);
+void qcvm_init_gi_builtins(qcvm_t *vm);
+void qcvm_init_game_builtins(qcvm_t *vm);
+void qcvm_init_ext_builtins(qcvm_t *vm);
+void qcvm_init_string_builtins(qcvm_t *vm);
+void qcvm_init_mem_builtins(qcvm_t *vm);
 void qcvm_init_debug_builtins(qcvm_t *vm);
-void InitMathBuiltins(qcvm_t *vm);
+void qcvm_init_math_builtins(qcvm_t *vm);
 
 // exports from modules
 void Q_srand(const uint32_t seed);

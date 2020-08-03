@@ -180,21 +180,21 @@ static void QC_Q_rand_uniform(qcvm_t *vm)
 	qcvm_return_int32(vm, Q_rand_uniform(qcvm_argv_int32(vm, 0)));
 }
 
-void InitMathBuiltins(qcvm_t *vm)
+void qcvm_init_math_builtins(qcvm_t *vm)
 {
-	RegisterBuiltin(fabsf);
-	RegisterBuiltin(sqrtf);
-	RegisterBuiltin(sinf);
-	RegisterBuiltin(cosf);
-	RegisterBuiltin(atan2f);
-	RegisterBuiltin(floorf);
-	RegisterBuiltin(ceilf);
-	RegisterBuiltin(roundf);
-	RegisterBuiltin(tanf);
-	RegisterBuiltin(atanf);
-	RegisterBuiltin(asinf);
-	RegisterBuiltin(isnan);
+	qcvm_register_builtin(fabsf);
+	qcvm_register_builtin(sqrtf);
+	qcvm_register_builtin(sinf);
+	qcvm_register_builtin(cosf);
+	qcvm_register_builtin(atan2f);
+	qcvm_register_builtin(floorf);
+	qcvm_register_builtin(ceilf);
+	qcvm_register_builtin(roundf);
+	qcvm_register_builtin(tanf);
+	qcvm_register_builtin(atanf);
+	qcvm_register_builtin(asinf);
+	qcvm_register_builtin(isnan);
 	
-	RegisterBuiltin(Q_rand);
-	RegisterBuiltin(Q_rand_uniform);
+	qcvm_register_builtin(Q_rand);
+	qcvm_register_builtin(Q_rand_uniform);
 }

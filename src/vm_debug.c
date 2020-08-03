@@ -48,9 +48,9 @@ static void QC_dumpentity(qcvm_t *vm)
 
 void qcvm_init_debug_builtins(qcvm_t *vm)
 {
-	RegisterBuiltin(stacktrace);
-	RegisterBuiltin(debugbreak);
-	RegisterBuiltin(dumpentity);
+	qcvm_register_builtin(stacktrace);
+	qcvm_register_builtin(debugbreak);
+	qcvm_register_builtin(dumpentity);
 }
 
 #ifdef ALLOW_DEBUGGING
@@ -149,7 +149,7 @@ static const char *strtok_emulate(qcvm_t *vm, qcvm_function_t *func, const char 
 	qcvm_execute(vm, func);
 
 	*start = *qcvm_get_global_typed(int32_t, vm, GLOBAL_PARM1);
-	return qcvm_get_string(vm, *qcvm_get_global_typed(string_t, vm, GLOBAL_RETURN));
+	return qcvm_get_string(vm, *qcvm_get_global_typed(qcvm_string_t, vm, GLOBAL_RETURN));
 }
 
 void qcvm_check_debugger_commands(qcvm_t *vm)
@@ -213,7 +213,7 @@ void qcvm_check_debugger_commands(qcvm_t *vm)
 		int start = 10;
 		const char *variable = strtok_emulate(vm, qc_strtok, debugger_command, &start);
 
-		evaluate_result_t result = qcvm_evaluate(vm, variable);
+		qcvm_eval_result_t result = qcvm_evaluate(vm, variable);
 		const char *value;
 		char *slashed = NULL;
 		

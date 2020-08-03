@@ -112,7 +112,7 @@ static void QC_configstring(qcvm_t *vm)
 
 static void QC_error(qcvm_t *vm)
 {
-	const string_t fmtid = qcvm_argv_string_id(vm, 0);
+	const qcvm_string_t fmtid = qcvm_argv_string_id(vm, 0);
 	qcvm_error(vm, qcvm_parse_format(fmtid, vm, 1));
 }
 
@@ -183,7 +183,7 @@ typedef struct
 	cplane_t		plane;
 	QC_csurface_t	surface;
 	int				contents;
-	ent_t			ent;
+	qcvm_ent_t			ent;
 } QC_trace_t;
 
 static void QC_trace(qcvm_t *vm)
@@ -205,7 +205,7 @@ static void QC_trace(qcvm_t *vm)
 	trace->surface = (QC_csurface_t)trace_result.surface;
 	trace->contents = trace_result.contents;
 	trace->ent = qcvm_entity_to_ent(trace_result.ent);
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, trace, sizeof(*trace) / sizeof(global_t), false);
+	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, trace, sizeof(*trace) / sizeof(qcvm_global_t), false);
 }
 
 static void QC_pointcontents(qcvm_t *vm)
@@ -461,18 +461,18 @@ typedef struct
 	
 	vec3_t	mins, maxs;
 	
-	ent_t	groundentity;
+	qcvm_ent_t	groundentity;
 	int		watertype;
 	int		waterlevel;
 	
 	// in (callbacks)
-	func_t trace;
-	func_t pointcontents;
+	qcvm_func_t trace;
+	qcvm_func_t pointcontents;
 } QC_pmove_t;
 
 static entity_set_t touchents_memory;
 
-static func_t QC_pm_pointcontents_func;
+static qcvm_func_t QC_pm_pointcontents_func;
 static qcvm_t *pmove_vm;
 
 static content_flags_t QC_pm_pointcontents(const vec3_t *position)
@@ -483,7 +483,7 @@ static content_flags_t QC_pm_pointcontents(const vec3_t *position)
 	return *qcvm_get_global_typed(content_flags_t, pmove_vm, GLOBAL_RETURN);
 }
 
-static func_t QC_pm_trace_func;
+static qcvm_func_t QC_pm_trace_func;
 
 static trace_t QC_pm_trace(const vec3_t *start, const vec3_t *mins, const vec3_t *maxs, const vec3_t *end)
 {
@@ -590,7 +590,7 @@ static void QC_Pmove(qcvm_t *vm)
 		qc_pm->groundentity = qcvm_entity_to_ent(pm.groundentity);
 	qc_pm->watertype = pm.watertype;
 	qc_pm->waterlevel = pm.waterlevel;
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, qc_pm, sizeof(*qc_pm) / sizeof(global_t), false);
+	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, qc_pm, sizeof(*qc_pm) / sizeof(qcvm_global_t), false);
 }
 
 static void QC_multicast(qcvm_t *vm)
@@ -696,13 +696,13 @@ static void QC_AddCommandString(qcvm_t *vm)
 static void QC_bprintf(qcvm_t *vm)
 {
 	const print_level_t level = qcvm_argv_int32(vm, 0);
-	const string_t fmtid = qcvm_argv_string_id(vm, 1);
+	const qcvm_string_t fmtid = qcvm_argv_string_id(vm, 1);
 	gi.bprintf(level, "%s", qcvm_parse_format(fmtid, vm, 2));
 }
 
 static void QC_dprintf(qcvm_t *vm)
 {
-	const string_t fmtid = qcvm_argv_string_id(vm, 0);
+	const qcvm_string_t fmtid = qcvm_argv_string_id(vm, 0);
 	gi.dprintf("%s", qcvm_parse_format(fmtid, vm, 1));
 }
 
@@ -710,14 +710,14 @@ static void QC_cprintf(qcvm_t *vm)
 {
 	edict_t *ent = qcvm_argv_entity(vm, 0);
 	const print_level_t level = qcvm_argv_int32(vm, 1);
-	const string_t fmtid = qcvm_argv_string_id(vm, 2);
+	const qcvm_string_t fmtid = qcvm_argv_string_id(vm, 2);
 	gi.cprintf(ent, level, "%s", qcvm_parse_format(fmtid, vm, 3));
 }
 
 static void QC_centerprintf(qcvm_t *vm)
 {
 	edict_t *ent = qcvm_argv_entity(vm, 0);
-	const string_t fmtid = qcvm_argv_string_id(vm, 1);
+	const qcvm_string_t fmtid = qcvm_argv_string_id(vm, 1);
 	gi.centerprintf(ent, "%s", qcvm_parse_format(fmtid, vm, 2));
 }
 
@@ -728,78 +728,78 @@ static void QC_DebugGraph(qcvm_t *vm)
 	gi.DebugGraph(a, b);
 }
 
-void InitGIBuiltins(qcvm_t *vm)
+void qcvm_init_gi_builtins(qcvm_t *vm)
 {
-	RegisterBuiltin(bprintf);
-	RegisterBuiltin(dprintf);
-	RegisterBuiltin(cprintf);
-	RegisterBuiltin(centerprintf);
-	RegisterBuiltin(sound);
-	RegisterBuiltin(positioned_sound);
-	RegisterBuiltin(cvar);
-	RegisterBuiltin(cvar_set);
-	RegisterBuiltin(cvar_forceset);
+	qcvm_register_builtin(bprintf);
+	qcvm_register_builtin(dprintf);
+	qcvm_register_builtin(cprintf);
+	qcvm_register_builtin(centerprintf);
+	qcvm_register_builtin(sound);
+	qcvm_register_builtin(positioned_sound);
+	qcvm_register_builtin(cvar);
+	qcvm_register_builtin(cvar_set);
+	qcvm_register_builtin(cvar_forceset);
 
-	RegisterBuiltin(configstring);
+	qcvm_register_builtin(configstring);
 	
-	RegisterBuiltin(error);
+	qcvm_register_builtin(error);
 
-	RegisterBuiltin(modelindex);
-	RegisterBuiltin(soundindex);
-	RegisterBuiltin(imageindex);
+	qcvm_register_builtin(modelindex);
+	qcvm_register_builtin(soundindex);
+	qcvm_register_builtin(imageindex);
 
-	RegisterBuiltin(setmodel);
+	qcvm_register_builtin(setmodel);
 	
-	RegisterBuiltin(trace);
-	RegisterBuiltin(pointcontents);
-	RegisterBuiltin(inPVS);
-	RegisterBuiltin(inPHS);
-	RegisterBuiltin(SetAreaPortalState);
-	RegisterBuiltin(AreasConnected);
+	qcvm_register_builtin(trace);
+	qcvm_register_builtin(pointcontents);
+	qcvm_register_builtin(inPVS);
+	qcvm_register_builtin(inPHS);
+	qcvm_register_builtin(SetAreaPortalState);
+	qcvm_register_builtin(AreasConnected);
 	
-	RegisterBuiltin(linkentity);
-	RegisterBuiltin(unlinkentity);
-	RegisterBuiltin(BoxEdicts);
-	RegisterBuiltin(Pmove);
+	qcvm_register_builtin(linkentity);
+	qcvm_register_builtin(unlinkentity);
+	qcvm_register_builtin(BoxEdicts);
+	qcvm_register_builtin(Pmove);
 	
-	RegisterBuiltin(multicast);
-	RegisterBuiltin(unicast);
-	RegisterBuiltin(WriteChar);
-	RegisterBuiltin(WriteByte);
-	RegisterBuiltin(WriteShort);
-	RegisterBuiltin(WriteLong);
-	RegisterBuiltin(WriteFloat);
-	RegisterBuiltin(WriteString);
-	RegisterBuiltin(WritePosition);
-	RegisterBuiltin(WriteDir);
-	RegisterBuiltin(WriteAngle);
+	qcvm_register_builtin(multicast);
+	qcvm_register_builtin(unicast);
+	qcvm_register_builtin(WriteChar);
+	qcvm_register_builtin(WriteByte);
+	qcvm_register_builtin(WriteShort);
+	qcvm_register_builtin(WriteLong);
+	qcvm_register_builtin(WriteFloat);
+	qcvm_register_builtin(WriteString);
+	qcvm_register_builtin(WritePosition);
+	qcvm_register_builtin(WriteDir);
+	qcvm_register_builtin(WriteAngle);
 	
-	RegisterBuiltin(argv);
-	RegisterBuiltin(argc);
-	RegisterBuiltin(args);
+	qcvm_register_builtin(argv);
+	qcvm_register_builtin(argc);
+	qcvm_register_builtin(args);
 
-	RegisterBuiltin(AddCommandString);
+	qcvm_register_builtin(AddCommandString);
 
-	RegisterBuiltin(DebugGraph);
+	qcvm_register_builtin(DebugGraph);
 	
-	RegisterBuiltin(entity_set_alloc);
-	RegisterBuiltin(entity_set_get);
-	RegisterBuiltin(entity_set_add);
-	RegisterBuiltin(entity_set_remove);
-	RegisterBuiltin(entity_set_length);
-	RegisterBuiltin(entity_set_clear);
-	RegisterBuiltin(entity_set_free);
+	qcvm_register_builtin(entity_set_alloc);
+	qcvm_register_builtin(entity_set_get);
+	qcvm_register_builtin(entity_set_add);
+	qcvm_register_builtin(entity_set_remove);
+	qcvm_register_builtin(entity_set_length);
+	qcvm_register_builtin(entity_set_clear);
+	qcvm_register_builtin(entity_set_free);
 	
-	RegisterBuiltin(csurface_get_name);
-	RegisterBuiltin(csurface_get_flags);
-	RegisterBuiltin(csurface_get_value);
+	qcvm_register_builtin(csurface_get_name);
+	qcvm_register_builtin(csurface_get_flags);
+	qcvm_register_builtin(csurface_get_value);
 	
-	RegisterBuiltin(cvar_get_name);
-	RegisterBuiltin(cvar_get_string);
-	RegisterBuiltin(cvar_get_latched_string);
-	RegisterBuiltin(cvar_get_modified);
-	RegisterBuiltin(cvar_set_modified);
-	RegisterBuiltin(cvar_get_flags);
-	RegisterBuiltin(cvar_get_floatVal);
-	RegisterBuiltin(cvar_get_intVal);
+	qcvm_register_builtin(cvar_get_name);
+	qcvm_register_builtin(cvar_get_string);
+	qcvm_register_builtin(cvar_get_latched_string);
+	qcvm_register_builtin(cvar_get_modified);
+	qcvm_register_builtin(cvar_set_modified);
+	qcvm_register_builtin(cvar_get_flags);
+	qcvm_register_builtin(cvar_get_floatVal);
+	qcvm_register_builtin(cvar_get_intVal);
 }
