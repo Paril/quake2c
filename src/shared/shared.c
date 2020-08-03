@@ -35,8 +35,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #  define WIN32_LEAN_AND_MEAN
 #  include <Windows.h>
 #endif
-uint64_t Q_time() {
-  static bool is_init = false;
+uint64_t Q_time(void) {
+	static bool is_init = false;
 #if defined(__APPLE__)
 	static mach_timebase_info_data_t info;
 	if (!is_init)
@@ -101,6 +101,9 @@ Q_hash_string
 */
 uint32_t Q_hash_string (const char *string, const size_t hash_size)
 {
+	if (!hash_size)
+		return 0;
+
 	uint32_t	hashValue = 0;
 
 	for (size_t i = 0; *string; i++)
@@ -110,4 +113,22 @@ uint32_t Q_hash_string (const char *string, const size_t hash_size)
 	}
 
 	return (hashValue + (hashValue >> 5)) % hash_size;
+}
+
+/*
+================
+Q_hash_pointer
+================
+*/
+uint32_t Q_hash_pointer(uint32_t a, const size_t hash_size)
+{
+	if (!hash_size)
+		return 0;
+
+    a = (a ^ 61) ^ (a >> 16);
+    a = a + (a << 3);
+    a = a ^ (a >> 4);
+    a = a * 0x27d4eb2d;
+    a = a ^ (a >> 15);
+    return a % hash_size;
 }

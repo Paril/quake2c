@@ -24,7 +24,7 @@ static void QC_dumpentity(qcvm_t *vm)
 	{
 		fprintf(fp, "%s: ", qcvm_get_string(vm, f->name_index));
 
-		const size_t val = (size_t)qcvm_get_entity_field_pointer(ent, (int32_t)f->global_index);
+		const ptrdiff_t val = (ptrdiff_t)(qcvm_get_entity_field_pointer(ent, (int32_t)f->global_index));
 
 		switch (f->id)
 		{
@@ -215,7 +215,7 @@ void qcvm_check_debugger_commands(qcvm_t *vm)
 
 		evaluate_result_t result = qcvm_evaluate(vm, variable);
 		const char *value;
-		char *slashed = nullptr;
+		char *slashed = NULL;
 		
 		switch (result.type)
 		{

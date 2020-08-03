@@ -2,34 +2,32 @@
 #include "game.h"
 #include "g_vm.h"
 
-static char *qcvm_buffer = nullptr;
-static size_t qcvm_allocated_length = 0;
+enum { NUM_ROTATING_BUFFERS = 4 };
 
-char *qcvm_temp_buffer(const qcvm_t *vm, const size_t len, char **old_buffer)
+typedef struct 
 {
-	if (old_buffer)
-		*old_buffer = nullptr;
+	char	*buffer;
+	size_t	length;
+} qcvm_temp_buffer_t;
 
-	if (len > qcvm_allocated_length)
+static qcvm_temp_buffer_t qcvm_buffers[NUM_ROTATING_BUFFERS];
+static int32_t buffer_index = 0;
+
+char *qcvm_temp_buffer(const qcvm_t *vm, const size_t len)
+{
+	qcvm_temp_buffer_t *buf = &qcvm_buffers[buffer_index];
+	buffer_index = (buffer_index + 1) % NUM_ROTATING_BUFFERS;
+
+	if (len > buf->length)
 	{
-		qcvm_allocated_length = len;
-		if (qcvm_buffer)
-		{
-			if (old_buffer)
-				*old_buffer = qcvm_buffer;
-			else
-				qcvm_mem_free(vm, qcvm_buffer);
-		}
-		qcvm_debug(vm, "Temp buffer expanded to %u\n", qcvm_allocated_length);
-		qcvm_buffer = (char *)qcvm_alloc(vm, qcvm_allocated_length + 1);
+		buf->length = len;
+		if (buf->buffer)
+			qcvm_mem_free(vm, buf->buffer);
+		qcvm_debug(vm, "Temp buffer %i expanded to %u\n", buffer_index, buf->length);
+		buf->buffer = (char *)qcvm_alloc(vm, buf->length + 1);
 	}
 
-	return qcvm_buffer;
-}
-
-size_t qcvm_temp_buffer_size(const qcvm_t *vm)
-{
-	return qcvm_allocated_length;
+	return buf->buffer;
 }
 
 /*
@@ -38,9 +36,6 @@ va
 
 does a varargs printf into a temp buffer, so I don't need to have
 varargs versions of all text functions.
-
-Does not use rotating buffers like other va implementations! It does
-ensure that a temp buffer used as an argument properly renders, though
 ============
 */
 char *qcvm_temp_format(const qcvm_t *vm, const char *format, ...)
@@ -48,19 +43,18 @@ char *qcvm_temp_format(const qcvm_t *vm, const char *format, ...)
 	va_list	argptr;
 
 	va_start(argptr, format);
-	char *buffer = qcvm_temp_buffer(vm, MAX_INFO_STRING, nullptr);
-	const size_t allocated_length = qcvm_temp_buffer_size(vm);
-	const size_t needed_to_write = vsnprintf(buffer, allocated_length, format, argptr) + 1;
+	const int32_t my_index = buffer_index;
+	qcvm_temp_buffer_t *buf = &qcvm_buffers[my_index];
+	char *buffer = qcvm_temp_buffer(vm, MAX_INFO_STRING);
+	const size_t needed_to_write = vsnprintf(buffer, buf->length, format, argptr) + 1;
 
-	if (needed_to_write > allocated_length)
+	if (needed_to_write > buf->length)
 	{
-		char *old_buffer;
-		buffer = qcvm_temp_buffer(vm, allocated_length + 1, &old_buffer);
-		vsnprintf(buffer, allocated_length, format, argptr);
-		qcvm_mem_free(vm, old_buffer);
+		buffer_index = my_index;
+		buffer = qcvm_temp_buffer(vm, needed_to_write - 1);
+		vsnprintf(buffer, needed_to_write, format, argptr);
 	}
 	va_end(argptr);
-
 	return buffer;
 }
 
@@ -73,13 +67,13 @@ static void QC_va(qcvm_t *vm)
 static void QC_stoi(qcvm_t *vm)
 {
 	const char *a = qcvm_argv_string(vm, 0);
-	qcvm_return_int32(vm, strtol(a, nullptr, 10));
+	qcvm_return_int32(vm, strtol(a, NULL, 10));
 }
 
 static void QC_stof(qcvm_t *vm)
 {
 	const char *a = qcvm_argv_string(vm, 0);
-	qcvm_return_float(vm, strtof(a, nullptr));
+	qcvm_return_float(vm, strtof(a, NULL));
 }
 
 static void QC_stricmp(qcvm_t *vm)
@@ -119,7 +113,7 @@ static void QC_substr(qcvm_t *vm)
 
 	length = minsz(str_len - start, length);
 
-	char *buffer = qcvm_temp_buffer(vm, length, nullptr);
+	char *buffer = qcvm_temp_buffer(vm, length);
 	strncpy(buffer, qcvm_get_string(vm, strid) + start, length);
 	buffer[length] = 0;
 	qcvm_return_string(vm, buffer);
@@ -152,7 +146,7 @@ static void QC_strstr(qcvm_t *vm)
 	const char *b = qcvm_argv_string(vm, 1);
 	const char *c = strstr(a, b);
 
-	qcvm_return_int32(vm, c == nullptr ? -1 : (c - a));
+	qcvm_return_int32(vm, c == NULL ? -1 : (c - a));
 }
 
 static void QC_strchr(qcvm_t *vm)
@@ -161,21 +155,21 @@ static void QC_strchr(qcvm_t *vm)
 	const int32_t b = qcvm_argv_int32(vm, 1);
 	const char *c = strchr(a, b);
 	
-	qcvm_return_int32(vm, c == nullptr ? -1 : (c - a));
+	qcvm_return_int32(vm, c == NULL ? -1 : (c - a));
 }
 
 #include <time.h>
 
 static void QC_localtime(qcvm_t *vm)
 {
-	static tm empty_ltime;
+	static struct tm empty_ltime;
 	time_t gmtime = time(NULL);
-	const tm *ltime = localtime(&gmtime);
+	const struct tm *ltime = localtime(&gmtime);
 
 	if (!ltime)
 		ltime = &empty_ltime;
 
-	qcvm_set_global_typed_ptr(tm, vm, GLOBAL_PARM0, ltime);
+	qcvm_set_global_typed_ptr(struct tm, vm, GLOBAL_PARM0, ltime);
 }
 
 void InitStringBuiltins(qcvm_t *vm)

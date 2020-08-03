@@ -31,7 +31,7 @@ typedef enum
 } refdef_flags_t;
 
 // player_state->stats[] indexes
-typedef enum : int16_t
+enum
 {
 	// For engine compatibility, these 18 IDs should remain the same
 	// and keep their described usage
@@ -56,13 +56,15 @@ typedef enum : int16_t
 	// Bits from here to 31 are free for mods
 
 	MAX_STATS	= 32
-} player_stat_t;
+};
+
+typedef int16_t player_stat_t;
 
 // player_state_t is the information needed in addition to pmove_state_t
 // to rendered a view.  There will only be 10 player_state_t sent each second,
 // but the number of pmove_state_t changes will be reletive to client
 // frame rates
-struct player_state_t
+typedef struct
 {
 	pmove_state_t   pmove;      // for prediction
 
@@ -85,7 +87,7 @@ struct player_state_t
 	refdef_flags_t	rdflags;        // refdef flags
 
 	player_stat_t	stats[MAX_STATS];       // fast status bar updates
-};
+} player_state_t;
 
 
 struct gclient_s

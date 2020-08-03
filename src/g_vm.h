@@ -2,11 +2,11 @@
 
 typedef struct qcvm_s qcvm_t;
 
-//#define ALLOW_DEBUGGING
-//#define ALLOW_PROFILING
+#define ALLOW_DEBUGGING
+#define ALLOW_PROFILING
 
 #ifdef ALLOW_DEBUGGING
-enum debug_state_t
+typedef enum
 {
 	DEBUG_NONE,
 	DEBUG_STEP_INTO,
@@ -14,22 +14,16 @@ enum debug_state_t
 	DEBUG_STEP_OVER,
 
 	DEBUG_BROKE
-};
+} debug_state_t;
 
 typedef void *qcvm_mutex_t;
 typedef void *qcvm_thread_t;
-typedef void (*qcvm_thread_func_t) ();
+typedef void (*qcvm_thread_func_t) (void);
 #endif
 
-#include <cassert>
-#include <variant>
-#include <string>
-#include <stack>
-#include <deque>
-#include <unordered_map>
-#include <unordered_set>
+#include <assert.h>
 
-enum : uint32_t
+enum
 {
 	GLOBAL_NULL		= 0,
 	GLOBAL_RETURN	= 1,
@@ -74,7 +68,7 @@ enum
 
 typedef int func_t;
 
-enum : uint32_t
+enum
 {
 	TYPE_VOID,
 	TYPE_STRING,
@@ -179,7 +173,7 @@ typedef struct
 	active_timer_t __timer; \
 	if (vm->profile_flags & PROFILE_TIMERS) \
 	{ \
-		__timer = { &vm->timers[id], Q_time() }; __timer.timer->count++; \
+		__timer = (active_timer_t) { &vm->timers[id], Q_time() }; __timer.timer->count++; \
 	}
 #define END_TIMER(vm, flag) \
 	{ if (vm->profile_flags & flag) \
@@ -193,7 +187,7 @@ typedef struct
 	active_timer_t __timer; \
 	if (vm->profile_flags & PROFILE_OPCODES) \
 	{ \
-		__timer = { &vm->opcode_timers[id], Q_time() }; __timer.timer->count++; \
+		__timer = (active_timer_t) { &vm->opcode_timers[id], Q_time() }; __timer.timer->count++; \
 	}
 
 typedef struct
@@ -208,8 +202,6 @@ typedef struct
 #define START_OPCODE_TIMER(...)
 #endif
 
-#include <optional>
-
 typedef struct
 {
 	const void					*ptr;
@@ -222,7 +214,7 @@ typedef struct
 	int32_t			value;
 } qcvm_stack_local_t;
 
-const size_t STACK_STRINGS_RESERVE = 64;
+enum { STACK_STRINGS_RESERVE = 64 };
 
 typedef struct
 {
@@ -254,6 +246,15 @@ typedef struct
 static const size_t REF_STRING_RESERVE = 256;
 static const size_t FREE_STRING_RESERVE = 64;
 
+typedef struct qcvm_ref_storage_hash_s
+{
+	const void	*ptr;
+	string_t	id;
+
+	uint32_t						hash_value;
+	struct qcvm_ref_storage_hash_s	*hash_next, *hash_prev;
+} qcvm_ref_storage_hash_t;
+
 typedef struct
 {
 	qcvm_t	*vm;
@@ -267,7 +268,8 @@ typedef struct
 	size_t		free_indices_size, free_indices_allocated;
 
 	// mapped list of addresses that contain(ed) strings
-	std::unordered_map<const void *, string_t> ref_storage;
+	qcvm_ref_storage_hash_t		*ref_storage_data, **ref_storage_hashes, *ref_storage_free;
+	size_t						ref_storage_stored, ref_storage_allocated;
 } qcvm_string_list_t;
 
 // Note: ownership of the pointer is transferred to the string list here.
@@ -290,12 +292,11 @@ void qcvm_string_list_push_ref(qcvm_string_list_t *list, const qcvm_string_backu
 
 typedef struct
 {
-	qcvm_t										*vm;
-	std::unordered_map<func_t, qcvm_builtin_t>	builtins;
-	int32_t										next_id;
+	qcvm_t			*vm;
+	qcvm_builtin_t	*list;
+	size_t			count, registered;
 } qcvm_builtin_list_t;
 
-qcvm_builtin_t qcvm_builtin_list_get(qcvm_builtin_list_t *list, const func_t func);
 void qcvm_builtin_list_register(qcvm_builtin_list_t *list, const char *name, qcvm_builtin_t builtin);
 
 typedef void(*qcvm_field_setter_t)(void *out, const void *in);
@@ -303,14 +304,14 @@ typedef void(*qcvm_field_setter_t)(void *out, const void *in);
 typedef struct
 {
 	const qcvm_definition_t		*field;
-	const size_t			client_offset;
-	qcvm_field_setter_t		setter;
+	size_t						client_offset;
+	qcvm_field_setter_t			setter;
 } qcvm_field_wrapper_t;
 
 typedef struct
 {
-	qcvm_t												*vm;
-	std::unordered_map<int32_t, qcvm_field_wrapper_t>	wraps;
+	qcvm_t					*vm;
+	qcvm_field_wrapper_t	*wraps;
 } qcvm_field_wrap_list_t;
 
 void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *field_name, const size_t field_offset, const size_t client_offset, qcvm_field_setter_t setter);
@@ -334,7 +335,7 @@ typedef struct
 } evaluate_result_t;
 #endif
 
-const size_t STACK_RESERVE = 32;
+static const size_t STACK_RESERVE = 32;
 
 typedef struct
 {
@@ -342,14 +343,14 @@ typedef struct
 	qcvm_stack_t *stack;
 	size_t stack_size, stack_allocated;
 	uint8_t	argc;
-	int32_t current = -1;
+	int32_t current;
 } qcvm_state_t;
 
 void qcvm_state_needs_resize(qcvm_state_t *state);
 qcvm_stack_t *qcvm_state_stack_push(qcvm_state_t *state);
 void qcvm_state_stack_pop(qcvm_state_t *state);
 
-inline global_t qcvm_global_offset(const global_t &base, const int32_t &offset)
+inline global_t qcvm_global_offset(const global_t base, const int32_t offset)
 {
 	return (global_t)((int32_t)base + offset);
 }
@@ -373,40 +374,40 @@ typedef struct definition_hash_s
 typedef struct qcvm_s
 {
 	// loaded from progs.dat
-	const char									*engine_name;
-	char										path[MAX_QPATH];
-	qcvm_definition_t							*definitions;
-	size_t										definitions_size;
-	qcvm_definition_t							**definition_map_by_id;
-	definition_hash_t							**definition_hashes, *definition_hashes_data;
-	qcvm_definition_t							*fields;
-	size_t										fields_size;
-	qcvm_definition_t							**field_map_by_id;
-	definition_hash_t							**field_hashes, *field_hashes_data;
-	qcvm_statement_t							*statements;
-	size_t										statements_size;
-	qcvm_function_t								*functions;
-	size_t										functions_size;
-	size_t										highest_stack = 0;
+	const char				*engine_name;
+	char					path[MAX_QPATH];
+	qcvm_definition_t		*definitions;
+	size_t					definitions_size;
+	qcvm_definition_t		**definition_map_by_id;
+	definition_hash_t		**definition_hashes, *definition_hashes_data;
+	qcvm_definition_t		*fields;
+	size_t					fields_size;
+	qcvm_definition_t		**field_map_by_id;
+	definition_hash_t		**field_hashes, *field_hashes_data;
+	qcvm_statement_t		*statements;
+	size_t					statements_size;
+	qcvm_function_t			*functions;
+	size_t					functions_size;
+	size_t					highest_stack;
 #ifdef ALLOW_PROFILING
-	qcvm_profile_t								*profile_data;
-	profile_timer_t								timers[TotalTimerFields];
-	profile_timer_t								opcode_timers[OP_NUMOPS];
-	profile_flags_t								profile_flags;
+	qcvm_profile_t			*profile_data;
+	profile_timer_t			timers[TotalTimerFields];
+	profile_timer_t			opcode_timers[OP_NUMOPS];
+	profile_flags_t			profile_flags;
 #endif
-	global_t									*global_data = nullptr;
-	size_t										global_size;
-	char										*string_data;
-	size_t										*string_lengths;
-	size_t										string_size;
-	string_hash_t								**string_hashes, *string_hashes_data;
-	qcvm_string_list_t							dynamic_strings;
-	qcvm_builtin_list_t							builtins;
-	qcvm_field_wrap_list_t						field_wraps;
-	int											*linenumbers = nullptr;
-	const void									*allowed_stack;
-	size_t										allowed_stack_size;
-	qcvm_state_t								state;
+	global_t				*global_data;
+	size_t					global_size;
+	char					*string_data;
+	size_t					*string_lengths;
+	size_t					string_size;
+	string_hash_t			**string_hashes, *string_hashes_data;
+	qcvm_string_list_t		dynamic_strings;
+	qcvm_builtin_list_t		builtins;
+	qcvm_field_wrap_list_t	field_wraps;
+	int						*linenumbers;
+	const void				*allowed_stack;
+	size_t					allowed_stack_size;
+	qcvm_state_t			state;
 
 #ifdef ALLOW_DEBUGGING
 	struct
@@ -417,7 +418,7 @@ typedef struct qcvm_s
 		const qcvm_statement_t *step_statement;
 		size_t step_depth;
 
-		qcvm_mutex_t (*create_mutex)();
+		qcvm_mutex_t (*create_mutex)(void);
 		void (*free_mutex)(qcvm_mutex_t);
 		void (*lock_mutex)(qcvm_mutex_t);
 		void (*unlock_mutex)(qcvm_mutex_t);
@@ -443,7 +444,7 @@ global_t *qcvm_get_global(qcvm_t *vm, const global_t g);
 const global_t *qcvm_get_const_global(const qcvm_t *vm, const global_t g);
 
 #define qcvm_get_global_typed(type, vm, global) \
-	(type *)qcvm_get_global(vm, global)
+	(type *)(qcvm_get_global(vm, global))
 
 #define qcvm_get_const_global_typed(type, vm, global) \
 	(const type *)qcvm_get_const_global(vm, global)
@@ -451,7 +452,7 @@ const global_t *qcvm_get_const_global(const qcvm_t *vm, const global_t g);
 void *qcvm_get_global_ptr(qcvm_t *vm, const global_t global, const size_t value_size);
 
 #define qcvm_get_global_ptr_typed(type, vm, global) \
-	(type *)qcvm_get_global_ptr(vm, global, sizeof(type))
+	(type *)(qcvm_get_global_ptr(vm, global, sizeof(type)))
 
 void qcvm_set_global(qcvm_t *vm, const global_t global, const void *value, const size_t value_size);
 
@@ -548,18 +549,17 @@ const char *qcvm_get_string(const qcvm_t *vm, const string_t str);
 
 size_t qcvm_get_string_length(const qcvm_t *vm, const string_t str);
 
-int32_t *qcvm_get_entity_field_pointer(edict_t *ent, const int32_t field);
+void *qcvm_get_entity_field_pointer(edict_t *ent, const int32_t field);
 
 int32_t qcvm_entity_field_address(edict_t *ent, const int32_t field);
 
-void *qcvm_address_to_entity_field(const int32_t address);
-
-#define qcvm_address_to_entity_field_typed(type, address) \
-	(type *)qcvm_address_to_entity_field(address)
+uint8_t *qcvm_address_to_entity_field(const int32_t address);
 
 ptrdiff_t qcvm_address_to_field(edict_t *entity, const int32_t address);
 
 edict_t *qcvm_address_to_entity(const int32_t address);
+
+bool qcvm_address_is_entity(const int32_t address);
 
 bool qcvm_pointer_valid(const qcvm_t *vm, const size_t address, const bool allow_null, const size_t len);
 

@@ -39,12 +39,6 @@ static void InitBuiltins()
 	InitMathBuiltins(qvm);
 }
 
-template<typename T>
-static void FieldWrapToT(void *out, const void *in)
-{
-	*(T *)(out) = *(const int32_t *)(in);
-}
-
 static void FieldCoord2Short(void *out, const void *in)
 {
 	*(short *)(out) = (*(const vec_t *)(in) * coord2short);
@@ -55,21 +49,30 @@ static void FieldCoord2Angle(void *out, const void *in)
 	*(short *)(out) = (*(const vec_t *)(in) * angle2short);
 }
 
+#define qcvm_field_wrap_to_type(name, T) \
+static void name(void *out, const void *in) \
+{ \
+	*(T *)(out) = *(const int32_t *)(in); \
+}
+
+qcvm_field_wrap_to_type(qcvm_field_wrap_to_int16, int16_t)
+qcvm_field_wrap_to_type(qcvm_field_wrap_to_uint8, uint8_t)
+
 static void InitFieldWraps()
 {
 #define RegisterSingle(name) \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name, 0, offsetof(gclient_t, name), nullptr)
+	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name, 0, offsetof(gclient_t, name), NULL)
 
 #define RegisterSingleWrapped(name, wrap) \
 	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name, 0, offsetof(gclient_t, name), wrap)
 
 #define RegisterArray(name, fofs, sofs) \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name "[" #fofs "]", 0, offsetof(gclient_t, name) + sofs, nullptr)
+	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name "[" #fofs "]", 0, offsetof(gclient_t, name) + sofs, NULL)
 
 #define RegisterVector(name) \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name, 0, offsetof(gclient_t, name), nullptr); \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name, 1, offsetof(gclient_t, name) + 4, nullptr); \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name, 2, offsetof(gclient_t, name) + 8, nullptr)
+	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name, 0, offsetof(gclient_t, name), NULL); \
+	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name, 1, offsetof(gclient_t, name) + 4, NULL); \
+	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name, 2, offsetof(gclient_t, name) + 8, NULL)
 
 #define RegisterVectorCoord2Short(name) \
 	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name, 0, offsetof(gclient_t, name), FieldCoord2Short); \
@@ -101,7 +104,7 @@ static void InitFieldWraps()
 	RegisterSingle(ps.rdflags);
 
 	for (int32_t i = 0; i < MAX_STATS; i++)
-		qcvm_field_wrap_list_register(&qvm->field_wraps, qcvm_temp_format(qvm, "client.ps.stats[%i]", i), 0, offsetof(gclient_t, ps.stats) + (sizeof(gclient_t::ps.stats[0]) * i), FieldWrapToT<short>);
+		qcvm_field_wrap_list_register(&qvm->field_wraps, qcvm_temp_format(qvm, "client.ps.stats[%i]", i), 0, offsetof(gclient_t, ps.stats) + (sizeof(player_stat_t) * i), qcvm_field_wrap_to_int16);
 	
 	// gclient_t::ps::pmove
 	RegisterSingle(ps.pmove.pm_type);
@@ -109,15 +112,15 @@ static void InitFieldWraps()
 	RegisterVectorCoord2Short(ps.pmove.origin);
 	RegisterVectorCoord2Short(ps.pmove.velocity);
 	
-	RegisterSingleWrapped(ps.pmove.pm_flags, FieldWrapToT<uint8_t>);
-	RegisterSingleWrapped(ps.pmove.pm_time, FieldWrapToT<uint8_t>);
-	RegisterSingleWrapped(ps.pmove.gravity, FieldWrapToT<short>);
+	RegisterSingleWrapped(ps.pmove.pm_flags, qcvm_field_wrap_to_uint8);
+	RegisterSingleWrapped(ps.pmove.pm_time, qcvm_field_wrap_to_uint8);
+	RegisterSingleWrapped(ps.pmove.gravity, qcvm_field_wrap_to_int16);
 
 	RegisterVectorCoord2Angle(ps.pmove.delta_angles);
 }
 
 // exported from QC
-static struct qc_export_t
+typedef struct
 {
 	int32_t		apiversion;
 	int32_t		clientsize;
@@ -151,7 +154,9 @@ static struct qc_export_t
 	
 	func_t		PreReadLevel;
 	func_t		PostReadLevel;
-} qce;
+} qc_export_t;
+
+static qc_export_t qce;
 
 /*
 ============
@@ -279,7 +284,7 @@ static void RestoreClientData()
 	qcvm_string_list_mark_if_has_ref(&qvm->dynamic_strings, game.client_load_data, itoe(1), (globals.edict_size * game.num_clients) / sizeof(global_t));
 	qcvm_string_list_check_ref_unset(&qvm->dynamic_strings, game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(global_t), true);
 	gi.TagFree(game.client_load_data);
-	game.client_load_data = nullptr;
+	game.client_load_data = NULL;
 }
 
 static void WipeEntities()
@@ -441,16 +446,18 @@ static void ServerCommand()
 
 //=========================================================
 
-const uint32_t	SAVE_MAGIC1		= (('V'<<24)|('S'<<16)|('C'<<8)|'Q');	// "QCSV"
-const uint32_t	SAVE_MAGIC2		= (('A'<<24)|('S'<<16)|('C'<<8)|'Q');	// "QCSA"
-const uint32_t	SAVE_VERSION	= 666;
+static const uint32_t	SAVE_MAGIC1		= (('V'<<24)|('S'<<16)|('C'<<8)|'Q');	// "QCSV"
+static const uint32_t	SAVE_MAGIC2		= (('A'<<24)|('S'<<16)|('C'<<8)|'Q');	// "QCSA"
+static const uint32_t	SAVE_VERSION	= 666;
 
-enum pointer_class_type_t : uint8_t
+enum
 {
 	POINTER_NONE,
 	POINTER_GLOBAL,
 	POINTER_ENT
 };
+
+typedef uint8_t pointer_class_type_t;
 
 static void WriteDefinitionData(FILE *fp, const qcvm_definition_t *def, const global_t *value)
 {
@@ -532,7 +539,7 @@ static void WriteDefinitionData(FILE *fp, const qcvm_definition_t *def, const gl
 	{
 		const edict_t *ent = qcvm_ent_to_entity((ent_t)*value, false);
 
-		if (ent == nullptr)
+		if (ent == NULL)
 			fwrite(&globals.max_edicts, sizeof(globals.max_edicts), 1, fp);
 		else
 			fwrite(&ent->s.number, sizeof(ent->s.number), 1, fp);
@@ -546,7 +553,7 @@ static void WriteDefinitionData(FILE *fp, const qcvm_definition_t *def, const gl
 
 static void WriteEntityFieldData(FILE *fp, edict_t *ent, const qcvm_definition_t *def)
 {
-	const int32_t *field = qcvm_get_entity_field_pointer(ent, (int32_t)def->global_index);
+	const int32_t *field = (const int32_t *)qcvm_get_entity_field_pointer(ent, (int32_t)def->global_index);
 	WriteDefinitionData(fp, def, (const global_t *)field);
 }
 
@@ -558,7 +565,7 @@ static void ReadDefinitionData(qcvm_t *vm, FILE *fp, const qcvm_definition_t *de
 	{
 		size_t def_len;
 		fread(&def_len, sizeof(def_len), 1, fp);
-		char *def_value = qcvm_temp_buffer(vm, def_len, nullptr);
+		char *def_value = qcvm_temp_buffer(vm, def_len);
 		fread(def_value, sizeof(char), def_len, fp);
 		def_value[def_len] = 0;
 		qcvm_set_string_ptr(qvm, value, def_value);
@@ -573,7 +580,7 @@ static void ReadDefinitionData(qcvm_t *vm, FILE *fp, const qcvm_definition_t *de
 			*value = GLOBAL_NULL;
 		else
 		{
-			char *func_name = qcvm_temp_buffer(vm, func_len, nullptr);
+			char *func_name = qcvm_temp_buffer(vm, func_len);
 			fread(func_name, sizeof(char), func_len, fp);
 			func_name[func_len] = 0;
 
@@ -598,7 +605,7 @@ static void ReadDefinitionData(qcvm_t *vm, FILE *fp, const qcvm_definition_t *de
 		{
 			size_t global_len;
 			fread(&global_len, sizeof(global_len), 1, fp);
-			char *global_name = qcvm_temp_buffer(vm, global_len, nullptr);
+			char *global_name = qcvm_temp_buffer(vm, global_len);
 			fread(global_name, sizeof(char), global_len, fp);
 			global_name[global_len] = 0;
 
@@ -645,7 +652,7 @@ static void ReadDefinitionData(qcvm_t *vm, FILE *fp, const qcvm_definition_t *de
 
 static void ReadEntityFieldData(qcvm_t *vm, FILE *fp, edict_t *ent, const qcvm_definition_t *def)
 {
-	int32_t *field = qcvm_get_entity_field_pointer(ent, (int32_t)def->global_index);
+	int32_t *field = (int32_t *)qcvm_get_entity_field_pointer(ent, (int32_t)def->global_index);
 	ReadDefinitionData(vm, fp, def, (global_t *)field);
 }
 
@@ -771,7 +778,7 @@ static void ReadGame(const char *filename)
 		if (!len)
 			break;
 
-		char *def_name = qcvm_temp_buffer(qvm, len, nullptr);
+		char *def_name = qcvm_temp_buffer(qvm, len);
 		fread(def_name, sizeof(char), len, fp);
 		def_name[len] = 0;
 
@@ -796,7 +803,7 @@ static void ReadGame(const char *filename)
 		if (!len)
 			break;
 		
-		char *def_name = qcvm_temp_buffer(qvm, len, nullptr);
+		char *def_name = qcvm_temp_buffer(qvm, len);
 		fread(def_name, sizeof(char), len, fp);
 		def_name[len] = 0;
 
@@ -975,7 +982,7 @@ static void ReadLevel(const char *filename)
 		if (!len)
 			break;
 		
-		char *def_name = qcvm_temp_buffer(qvm, len, nullptr);
+		char *def_name = qcvm_temp_buffer(qvm, len);
 		fread(def_name, sizeof(char), len, fp);
 		def_name[len] = 0;
 
@@ -1001,7 +1008,7 @@ static void ReadLevel(const char *filename)
 		if (!len)
 			break;
 		
-		char *def_name = qcvm_temp_buffer(qvm, len, nullptr);
+		char *def_name = qcvm_temp_buffer(qvm, len);
 		fread(def_name, sizeof(char), len, fp);
 		def_name[len] = 0;
 
@@ -1049,7 +1056,7 @@ static void ReadLevel(const char *filename)
 		edict_t *ent = itoe(i);
 
 		// let the server rebuild world links for this ent
-		ent->area = {};
+		ent->area = (list_t) { NULL, NULL };
 		gi.linkentity(ent);
 	}
 	
@@ -1061,7 +1068,7 @@ static void ReadLevel(const char *filename)
 }
 
 game_export_t globals = {
-	.apiversion = GAME_API_VERSION,
+	.apiversion = 3,
 
 	.Init = InitGame,
 	.Shutdown = ShutdownGame,
@@ -1087,6 +1094,8 @@ game_export_t globals = {
 };
 
 game_import_t gi;
+
+game_t game;
 
 /*
 =================

@@ -28,10 +28,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_MUL(F_OP_MUL_F, vec_t, vec_t, vec_t);
-F_OP_MUL(F_OP_MUL_I, int32_t, int32_t, int32_t);
-F_OP_MUL(F_OP_MUL_IF, int32_t, vec_t, vec_t);
-F_OP_MUL(F_OP_MUL_FI, vec_t, int32_t, vec_t);
+F_OP_MUL(F_OP_MUL_F, vec_t, vec_t, vec_t)
+F_OP_MUL(F_OP_MUL_I, int32_t, int32_t, int32_t)
+F_OP_MUL(F_OP_MUL_IF, int32_t, vec_t, vec_t)
+F_OP_MUL(F_OP_MUL_FI, vec_t, int32_t, vec_t)
 #undef F_OP_MUL
 
 static void F_OP_MUL_V(qcvm_t *vm, const operands_t operands, int *depth)
@@ -83,10 +83,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_DIV(F_OP_DIV_F, vec_t, vec_t, vec_t);
-F_OP_DIV(F_OP_DIV_I, int32_t, int32_t, int32_t);
-F_OP_DIV(F_OP_DIV_IF, int32_t, vec_t, vec_t);
-F_OP_DIV(F_OP_DIV_FI, vec_t, int32_t, vec_t);
+F_OP_DIV(F_OP_DIV_F, vec_t, vec_t, vec_t)
+F_OP_DIV(F_OP_DIV_I, int32_t, int32_t, int32_t)
+F_OP_DIV(F_OP_DIV_IF, int32_t, vec_t, vec_t)
+F_OP_DIV(F_OP_DIV_FI, vec_t, int32_t, vec_t)
 #undef F_OP_DIV
 
 static void F_OP_DIV_VF(qcvm_t *vm, const operands_t operands, int *depth)
@@ -106,10 +106,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_ADD(F_OP_ADD_F, vec_t, vec_t, vec_t);
-F_OP_ADD(F_OP_ADD_I, int32_t, int32_t, int32_t);
-F_OP_ADD(F_OP_ADD_FI, vec_t, int32_t, vec_t);
-F_OP_ADD(F_OP_ADD_IF, int32_t, vec_t, vec_t);
+F_OP_ADD(F_OP_ADD_F, vec_t, vec_t, vec_t)
+F_OP_ADD(F_OP_ADD_I, int32_t, int32_t, int32_t)
+F_OP_ADD(F_OP_ADD_FI, vec_t, int32_t, vec_t)
+F_OP_ADD(F_OP_ADD_IF, int32_t, vec_t, vec_t)
 #undef F_OP_ADD
 
 static void F_OP_ADD_V(qcvm_t *vm, const operands_t operands, int *depth)
@@ -129,10 +129,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_SUB(F_OP_SUB_F, vec_t, vec_t, vec_t);
-F_OP_SUB(F_OP_SUB_I, int32_t, int32_t, int32_t);
-F_OP_SUB(F_OP_SUB_FI, vec_t, int32_t, vec_t);
-F_OP_SUB(F_OP_SUB_IF, int32_t, vec_t, vec_t);
+F_OP_SUB(F_OP_SUB_F, vec_t, vec_t, vec_t)
+F_OP_SUB(F_OP_SUB_I, int32_t, int32_t, int32_t)
+F_OP_SUB(F_OP_SUB_FI, vec_t, int32_t, vec_t)
+F_OP_SUB(F_OP_SUB_IF, int32_t, vec_t, vec_t)
 #undef F_OP_SUB
 
 static void F_OP_SUB_V(qcvm_t *vm, const operands_t operands, int *depth)
@@ -152,12 +152,12 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_EQ(F_OP_EQ_F, vec_t, vec_t, vec_t);
-F_OP_EQ(F_OP_EQ_E, ent_t, ent_t, vec_t);
-F_OP_EQ(F_OP_EQ_FNC, func_t, func_t, vec_t);
-F_OP_EQ(F_OP_EQ_I, int32_t, int32_t, int32_t);
-F_OP_EQ(F_OP_EQ_IF, int32_t, vec_t, int32_t);
-F_OP_EQ(F_OP_EQ_FI, vec_t, int32_t, int32_t);
+F_OP_EQ(F_OP_EQ_F, vec_t, vec_t, vec_t)
+F_OP_EQ(F_OP_EQ_E, ent_t, ent_t, vec_t)
+F_OP_EQ(F_OP_EQ_FNC, func_t, func_t, vec_t)
+F_OP_EQ(F_OP_EQ_I, int32_t, int32_t, int32_t)
+F_OP_EQ(F_OP_EQ_IF, int32_t, vec_t, int32_t)
+F_OP_EQ(F_OP_EQ_FI, vec_t, int32_t, int32_t)
 #undef F_OP_EQ
 
 static void F_OP_EQ_V(qcvm_t *vm, const operands_t operands, int *depth)
@@ -191,12 +191,12 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_NE(F_OP_NE_F, vec_t, vec_t, vec_t);
-F_OP_NE(F_OP_NE_E, ent_t, ent_t, vec_t);
-F_OP_NE(F_OP_NE_FNC, func_t, func_t, vec_t);
-F_OP_NE(F_OP_NE_I, int32_t, int32_t, int32_t);
-F_OP_NE(F_OP_NE_IF, int32_t, vec_t, int32_t);
-F_OP_NE(F_OP_NE_FI, vec_t, int32_t, int32_t);
+F_OP_NE(F_OP_NE_F, vec_t, vec_t, vec_t)
+F_OP_NE(F_OP_NE_E, ent_t, ent_t, vec_t)
+F_OP_NE(F_OP_NE_FNC, func_t, func_t, vec_t)
+F_OP_NE(F_OP_NE_I, int32_t, int32_t, int32_t)
+F_OP_NE(F_OP_NE_IF, int32_t, vec_t, int32_t)
+F_OP_NE(F_OP_NE_FI, vec_t, int32_t, int32_t)
 #undef F_OP_NE
 
 static void F_OP_NE_V(qcvm_t *vm, const operands_t operands, int *depth)
@@ -230,10 +230,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_LE(F_OP_LE_F, vec_t, vec_t, vec_t);
-F_OP_LE(F_OP_LE_I, int32_t, int32_t, int32_t);
-F_OP_LE(F_OP_LE_IF, int32_t, vec_t, int32_t);
-F_OP_LE(F_OP_LE_FI, vec_t, int32_t, int32_t);
+F_OP_LE(F_OP_LE_F, vec_t, vec_t, vec_t)
+F_OP_LE(F_OP_LE_I, int32_t, int32_t, int32_t)
+F_OP_LE(F_OP_LE_IF, int32_t, vec_t, int32_t)
+F_OP_LE(F_OP_LE_FI, vec_t, int32_t, int32_t)
 #undef F_OP_LE
 
 #define F_OP_GE(F_OP, TLeft, TRight, TResult) \
@@ -245,10 +245,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_GE(F_OP_GE_F, vec_t, vec_t, vec_t);
-F_OP_GE(F_OP_GE_I, int32_t, int32_t, int32_t);
-F_OP_GE(F_OP_GE_IF, int32_t, vec_t, int32_t);
-F_OP_GE(F_OP_GE_FI, vec_t, int32_t, int32_t);
+F_OP_GE(F_OP_GE_F, vec_t, vec_t, vec_t)
+F_OP_GE(F_OP_GE_I, int32_t, int32_t, int32_t)
+F_OP_GE(F_OP_GE_IF, int32_t, vec_t, int32_t)
+F_OP_GE(F_OP_GE_FI, vec_t, int32_t, int32_t)
 #undef F_OP_GE
 
 #define F_OP_LT(F_OP, TLeft, TRight, TResult) \
@@ -260,10 +260,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_LT(F_OP_LT_F, vec_t, vec_t, vec_t);
-F_OP_LT(F_OP_LT_I, int32_t, int32_t, int32_t);
-F_OP_LT(F_OP_LT_IF, int32_t, vec_t, int32_t);
-F_OP_LT(F_OP_LT_FI, vec_t, int32_t, int32_t);
+F_OP_LT(F_OP_LT_F, vec_t, vec_t, vec_t)
+F_OP_LT(F_OP_LT_I, int32_t, int32_t, int32_t)
+F_OP_LT(F_OP_LT_IF, int32_t, vec_t, int32_t)
+F_OP_LT(F_OP_LT_FI, vec_t, int32_t, int32_t)
 #undef F_OP_LT
 
 #define F_OP_GT(F_OP, TLeft, TRight, TResult) \
@@ -275,10 +275,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_GT(F_OP_GT_F, vec_t, vec_t, vec_t);
-F_OP_GT(F_OP_GT_I, int32_t, int32_t, int32_t);
-F_OP_GT(F_OP_GT_IF, int32_t, vec_t, int32_t);
-F_OP_GT(F_OP_GT_FI, vec_t, int32_t, int32_t);
+F_OP_GT(F_OP_GT_F, vec_t, vec_t, vec_t)
+F_OP_GT(F_OP_GT_I, int32_t, int32_t, int32_t)
+F_OP_GT(F_OP_GT_IF, int32_t, vec_t, int32_t)
+F_OP_GT(F_OP_GT_FI, vec_t, int32_t, int32_t)
 #undef F_OP_GT
 
 #define F_OP_LOAD(F_OP, TType) \
@@ -291,14 +291,14 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), sizeof(TType) / sizeof(global_t)); \
 }
 
-F_OP_LOAD(F_OP_LOAD_F, vec_t);
-F_OP_LOAD(F_OP_LOAD_V, vec3_t);
-F_OP_LOAD(F_OP_LOAD_S, string_t);
-F_OP_LOAD(F_OP_LOAD_ENT, ent_t);
-F_OP_LOAD(F_OP_LOAD_FLD, int32_t);
-F_OP_LOAD(F_OP_LOAD_FNC, func_t);
-F_OP_LOAD(F_OP_LOAD_I, int32_t);
-F_OP_LOAD(F_OP_LOAD_P, int32_t);
+F_OP_LOAD(F_OP_LOAD_F, vec_t)
+F_OP_LOAD(F_OP_LOAD_V, vec3_t)
+F_OP_LOAD(F_OP_LOAD_S, string_t)
+F_OP_LOAD(F_OP_LOAD_ENT, ent_t)
+F_OP_LOAD(F_OP_LOAD_FLD, int32_t)
+F_OP_LOAD(F_OP_LOAD_FNC, func_t)
+F_OP_LOAD(F_OP_LOAD_I, int32_t)
+F_OP_LOAD(F_OP_LOAD_P, int32_t)
 #undef F_OP_LOAD
 
 static void F_OP_ADDRESS(qcvm_t *vm, const operands_t operands, int *depth)
@@ -321,16 +321,16 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_copy_globals_safe(TResult, TType, vm, operands.b, operands.a); \
 }
 
-F_OP_STORE_SAME(F_OP_STORE_F, vec_t);
-F_OP_STORE_SAME(F_OP_STORE_V, vec3_t);
-F_OP_STORE_SAME(F_OP_STORE_S, string_t);
-F_OP_STORE_SAME(F_OP_STORE_ENT, ent_t);
-F_OP_STORE_SAME(F_OP_STORE_FLD, int32_t);
-F_OP_STORE_SAME(F_OP_STORE_FNC, func_t);
-F_OP_STORE_SAME(F_OP_STORE_I, int32_t);
-F_OP_STORE_DIFF(F_OP_STORE_IF, int32_t, vec_t);
-F_OP_STORE_DIFF(F_OP_STORE_FI, vec_t, int32_t);
-F_OP_STORE_SAME(F_OP_STORE_P, int32_t);
+F_OP_STORE_SAME(F_OP_STORE_F, vec_t)
+F_OP_STORE_SAME(F_OP_STORE_V, vec3_t)
+F_OP_STORE_SAME(F_OP_STORE_S, string_t)
+F_OP_STORE_SAME(F_OP_STORE_ENT, ent_t)
+F_OP_STORE_SAME(F_OP_STORE_FLD, int32_t)
+F_OP_STORE_SAME(F_OP_STORE_FNC, func_t)
+F_OP_STORE_SAME(F_OP_STORE_I, int32_t)
+F_OP_STORE_DIFF(F_OP_STORE_IF, int32_t, vec_t)
+F_OP_STORE_DIFF(F_OP_STORE_FI, vec_t, int32_t)
+F_OP_STORE_SAME(F_OP_STORE_P, int32_t)
 #undef F_OP_STORE
 
 #define F_OP_STOREP(F_OP, TType, TResult) \
@@ -348,24 +348,27 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	*address_ptr = *value; \
 	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, address_ptr, span, false); \
 \
-	edict_t *ent = qcvm_address_to_entity(address); \
-	ptrdiff_t field = qcvm_address_to_field(ent, address); \
-\
-	for (size_t i = 0; i < span; i++) \
-		qcvm_field_wrap_list_wrap(&vm->field_wraps, ent, field + (i * sizeof(global_t)), (const global_t *)value + i); \
+	if (qcvm_address_is_entity(address)) \
+	{ \
+		edict_t *ent = qcvm_address_to_entity(address); \
+		ptrdiff_t field = qcvm_address_to_field(ent, address); \
+	\
+		for (size_t i = 0; i < span; i++) \
+			qcvm_field_wrap_list_wrap(&vm->field_wraps, ent, field + i, (const global_t *)value + i); \
+	} \
 \
 	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, &value, address_ptr, span); \
 }
 
-F_OP_STOREP(F_OP_STOREP_F, vec_t, vec_t);
-F_OP_STOREP(F_OP_STOREP_V, vec3_t, vec3_t);
-F_OP_STOREP(F_OP_STOREP_S, string_t, string_t);
-F_OP_STOREP(F_OP_STOREP_ENT, ent_t, ent_t);
-F_OP_STOREP(F_OP_STOREP_FLD, int32_t, int32_t);
-F_OP_STOREP(F_OP_STOREP_FNC, func_t, func_t);
-F_OP_STOREP(F_OP_STOREP_I, int32_t, int32_t);
-F_OP_STOREP(F_OP_STOREP_IF, int32_t, vec_t);
-F_OP_STOREP(F_OP_STOREP_FI, vec_t, int32_t);
+F_OP_STOREP(F_OP_STOREP_F, vec_t, vec_t)
+F_OP_STOREP(F_OP_STOREP_V, vec3_t, vec3_t)
+F_OP_STOREP(F_OP_STOREP_S, string_t, string_t)
+F_OP_STOREP(F_OP_STOREP_ENT, ent_t, ent_t)
+F_OP_STOREP(F_OP_STOREP_FLD, int32_t, int32_t)
+F_OP_STOREP(F_OP_STOREP_FNC, func_t, func_t)
+F_OP_STOREP(F_OP_STOREP_I, int32_t, int32_t)
+F_OP_STOREP(F_OP_STOREP_IF, int32_t, vec_t)
+F_OP_STOREP(F_OP_STOREP_FI, vec_t, int32_t)
 #undef F_OP_STOREP
 
 #define F_OP_NOT(F_OP, TType, TResult) \
@@ -376,10 +379,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_NOT(F_OP_NOT_F, vec_t, vec_t);
-F_OP_NOT(F_OP_NOT_FNC, func_t, vec_t);
-F_OP_NOT(F_OP_NOT_ENT, ent_t, vec_t);
-F_OP_NOT(F_OP_NOT_I, int32_t, int32_t);
+F_OP_NOT(F_OP_NOT_F, vec_t, vec_t)
+F_OP_NOT(F_OP_NOT_FNC, func_t, vec_t)
+F_OP_NOT(F_OP_NOT_ENT, ent_t, vec_t)
+F_OP_NOT(F_OP_NOT_I, int32_t, int32_t)
 #undef F_OP_NOT
 
 static void F_OP_NOT_V(qcvm_t *vm, const operands_t operands, int *depth)
@@ -415,8 +418,8 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	} \
 }
 
-F_OP_IF(F_OP_IF_I, vec_t);
-F_OP_IF(F_OP_IF_F, int32_t);
+F_OP_IF(F_OP_IF_I, vec_t)
+F_OP_IF(F_OP_IF_F, int32_t)
 #undef F_OP_IF
 
 static void F_OP_IF_S(qcvm_t *vm, const operands_t operands, int *depth)
@@ -442,8 +445,8 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	} \
 }
 
-F_OP_IFNOT(F_OP_IFNOT_I, vec_t);
-F_OP_IFNOT(F_OP_IFNOT_F, int32_t);
+F_OP_IFNOT(F_OP_IFNOT_I, vec_t)
+F_OP_IFNOT(F_OP_IFNOT_F, int32_t)
 #undef F_IFNOT
 
 static void F_OP_IFNOT_S(qcvm_t *vm, const operands_t operands, int *depth)
@@ -478,7 +481,7 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	if (num_args >= 1 && hexen) \
 		qcvm_copy_globals_typed(global_t[3], vm, GLOBAL_PARM0, operands.b); \
 \
-	const int32_t &enter_func = *qcvm_get_global_typed(int32_t, vm, operands.a); \
+	const int32_t enter_func = *qcvm_get_global_typed(int32_t, vm, operands.a); \
 \
 	vm->state.argc = num_args; \
 	if (enter_func <= 0 || enter_func >= vm->functions_size) \
@@ -501,24 +504,24 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_enter(vm, call); \
 }
 
-F_OP_CALL(F_OP_CALL0, 0, false);
-F_OP_CALL(F_OP_CALL1, 1, false);
-F_OP_CALL(F_OP_CALL2, 2, false);
-F_OP_CALL(F_OP_CALL3, 3, false);
-F_OP_CALL(F_OP_CALL4, 4, false);
-F_OP_CALL(F_OP_CALL5, 5, false);
-F_OP_CALL(F_OP_CALL6, 6, false);
-F_OP_CALL(F_OP_CALL7, 7, false);
-F_OP_CALL(F_OP_CALL8, 8, false);
+F_OP_CALL(F_OP_CALL0, 0, false)
+F_OP_CALL(F_OP_CALL1, 1, false)
+F_OP_CALL(F_OP_CALL2, 2, false)
+F_OP_CALL(F_OP_CALL3, 3, false)
+F_OP_CALL(F_OP_CALL4, 4, false)
+F_OP_CALL(F_OP_CALL5, 5, false)
+F_OP_CALL(F_OP_CALL6, 6, false)
+F_OP_CALL(F_OP_CALL7, 7, false)
+F_OP_CALL(F_OP_CALL8, 8, false)
 
-F_OP_CALL(F_OP_CALL1H, 1, true);
-F_OP_CALL(F_OP_CALL2H, 2, true);
-F_OP_CALL(F_OP_CALL3H, 3, true);
-F_OP_CALL(F_OP_CALL4H, 4, true);
-F_OP_CALL(F_OP_CALL5H, 5, true);
-F_OP_CALL(F_OP_CALL6H, 6, true);
-F_OP_CALL(F_OP_CALL7H, 7, true);
-F_OP_CALL(F_OP_CALL8H, 8, true);
+F_OP_CALL(F_OP_CALL1H, 1, true)
+F_OP_CALL(F_OP_CALL2H, 2, true)
+F_OP_CALL(F_OP_CALL3H, 3, true)
+F_OP_CALL(F_OP_CALL4H, 4, true)
+F_OP_CALL(F_OP_CALL5H, 5, true)
+F_OP_CALL(F_OP_CALL6H, 6, true)
+F_OP_CALL(F_OP_CALL7H, 7, true)
+F_OP_CALL(F_OP_CALL8H, 8, true)
 #undef F_OP_CALL
 
 static void F_OP_GOTO(qcvm_t *vm, const operands_t operands, int *depth)
@@ -541,10 +544,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_AND(F_OP_AND_F, vec_t, vec_t, vec_t);
-F_OP_AND(F_OP_AND_I, int32_t, int32_t, int32_t);
-F_OP_AND(F_OP_AND_IF, int32_t, vec_t, int32_t);
-F_OP_AND(F_OP_AND_FI, vec_t, int32_t, int32_t);
+F_OP_AND(F_OP_AND_F, vec_t, vec_t, vec_t)
+F_OP_AND(F_OP_AND_I, int32_t, int32_t, int32_t)
+F_OP_AND(F_OP_AND_IF, int32_t, vec_t, int32_t)
+F_OP_AND(F_OP_AND_FI, vec_t, int32_t, int32_t)
 #undef F_OP_AND
 
 #define F_OP_OR(F_OP, TLeft, TRight, TResult) \
@@ -556,10 +559,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_OR(F_OP_OR_F, vec_t, vec_t, vec_t);
-F_OP_OR(F_OP_OR_I, int32_t, int32_t, int32_t);
-F_OP_OR(F_OP_OR_IF, int32_t, vec_t, int32_t);
-F_OP_OR(F_OP_OR_FI, vec_t, int32_t, int32_t);
+F_OP_OR(F_OP_OR_F, vec_t, vec_t, vec_t)
+F_OP_OR(F_OP_OR_I, int32_t, int32_t, int32_t)
+F_OP_OR(F_OP_OR_IF, int32_t, vec_t, int32_t)
+F_OP_OR(F_OP_OR_FI, vec_t, int32_t, int32_t)
 #undef F_OP_OR
 
 #define F_OP_BITAND(F_OP, TLeft, TRight, TResult) \
@@ -571,10 +574,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_BITAND(F_OP_BITAND_F, vec_t, vec_t, vec_t);
-F_OP_BITAND(F_OP_BITAND_I, int32_t, int32_t, int32_t);
-F_OP_BITAND(F_OP_BITAND_IF, int32_t, vec_t, int32_t);
-F_OP_BITAND(F_OP_BITAND_FI, vec_t, int32_t, int32_t);
+F_OP_BITAND(F_OP_BITAND_F, vec_t, vec_t, vec_t)
+F_OP_BITAND(F_OP_BITAND_I, int32_t, int32_t, int32_t)
+F_OP_BITAND(F_OP_BITAND_IF, int32_t, vec_t, int32_t)
+F_OP_BITAND(F_OP_BITAND_FI, vec_t, int32_t, int32_t)
 #undef F_OP_BITAND
 
 #define F_OP_BITOR(F_OP, TLeft, TRight, TResult) \
@@ -586,10 +589,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_set_global_typed_value(TResult, vm, operands.c, result); \
 }
 
-F_OP_BITOR(F_OP_BITOR_F, vec_t, vec_t, vec_t);
-F_OP_BITOR(F_OP_BITOR_I, int32_t, int32_t, int32_t);
-F_OP_BITOR(F_OP_BITOR_IF, int32_t, vec_t, int32_t);
-F_OP_BITOR(F_OP_BITOR_FI, vec_t, int32_t, int32_t);
+F_OP_BITOR(F_OP_BITOR_F, vec_t, vec_t, vec_t)
+F_OP_BITOR(F_OP_BITOR_I, int32_t, int32_t, int32_t)
+F_OP_BITOR(F_OP_BITOR_IF, int32_t, vec_t, int32_t)
+F_OP_BITOR(F_OP_BITOR_FI, vec_t, int32_t, int32_t)
 #undef F_OP_BITOR
 
 static void F_OP_CONV_ITOF(qcvm_t *vm, const operands_t operands, int *depth)
@@ -685,13 +688,13 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), span); \
 }
 
-F_OP_LOADA(F_OP_LOADA_F, vec_t);
-F_OP_LOADA(F_OP_LOADA_V, vec3_t);
-F_OP_LOADA(F_OP_LOADA_S, string_t);
-F_OP_LOADA(F_OP_LOADA_ENT, ent_t);
-F_OP_LOADA(F_OP_LOADA_FLD, int32_t);
-F_OP_LOADA(F_OP_LOADA_FNC, func_t);
-F_OP_LOADA(F_OP_LOADA_I, int32_t);
+F_OP_LOADA(F_OP_LOADA_F, vec_t)
+F_OP_LOADA(F_OP_LOADA_V, vec3_t)
+F_OP_LOADA(F_OP_LOADA_S, string_t)
+F_OP_LOADA(F_OP_LOADA_ENT, ent_t)
+F_OP_LOADA(F_OP_LOADA_FLD, int32_t)
+F_OP_LOADA(F_OP_LOADA_FNC, func_t)
+F_OP_LOADA(F_OP_LOADA_I, int32_t)
 #undef F_OP_LOADA
 
 static inline void F_OP_LOADP_BASE(qcvm_t *vm, const operands_t operands, int *depth, const size_t TType_size)
@@ -714,13 +717,13 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	F_OP_LOADP_BASE(vm, operands, depth, sizeof(TType)); \
 }
 
-F_OP_LOADP(F_OP_LOADP_F, vec_t);
-F_OP_LOADP(F_OP_LOADP_V, vec3_t);
-F_OP_LOADP(F_OP_LOADP_S, string_t);
-F_OP_LOADP(F_OP_LOADP_ENT, ent_t);
-F_OP_LOADP(F_OP_LOADP_FLD, int32_t);
-F_OP_LOADP(F_OP_LOADP_FNC, func_t);
-F_OP_LOADP(F_OP_LOADP_I, int32_t);
+F_OP_LOADP(F_OP_LOADP_F, vec_t)
+F_OP_LOADP(F_OP_LOADP_V, vec3_t)
+F_OP_LOADP(F_OP_LOADP_S, string_t)
+F_OP_LOADP(F_OP_LOADP_ENT, ent_t)
+F_OP_LOADP(F_OP_LOADP_FLD, int32_t)
+F_OP_LOADP(F_OP_LOADP_FNC, func_t)
+F_OP_LOADP(F_OP_LOADP_I, int32_t)
 #undef F_OP_LOADP
 
 static void F_OP_LOADP_C(qcvm_t *vm, const operands_t operands, int *depth)
@@ -852,13 +855,13 @@ static void F_OP_RAND0(qcvm_t *vm, const operands_t operands, int *depth)
 
 static void F_OP_RAND1(qcvm_t *vm, const operands_t operands, int *depth)
 {
-	const vec_t result = frand(*qcvm_get_global_typed(vec_t, vm, operands.a));
+	const vec_t result = frand_m(*qcvm_get_global_typed(vec_t, vm, operands.a));
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
 }
 
 static void F_OP_RAND2(qcvm_t *vm, const operands_t operands, int *depth)
 {
-	const vec_t result = frand(*qcvm_get_global_typed(vec_t, vm, operands.a), *qcvm_get_global_typed(vec_t, vm, operands.b));
+	const vec_t result = frand_mm(*qcvm_get_global_typed(vec_t, vm, operands.a), *qcvm_get_global_typed(vec_t, vm, operands.b));
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
 }
 
@@ -871,7 +874,7 @@ static void F_OP_RANDV0(qcvm_t *vm, const operands_t operands, int *depth)
 static void F_OP_RANDV1(qcvm_t *vm, const operands_t operands, int *depth)
 {
 	const vec3_t a = *qcvm_get_global_typed(vec3_t, vm, operands.a);
-	const vec3_t result = { frand(a.x), frand(a.y), frand(a.z) };
+	const vec3_t result = { frand_m(a.x), frand_m(a.y), frand_m(a.z) };
 	qcvm_set_global_typed_value(vec3_t, vm, operands.c, result);
 }
 
@@ -879,7 +882,7 @@ static void F_OP_RANDV2(qcvm_t *vm, const operands_t operands, int *depth)
 {
 	const vec3_t a = *qcvm_get_global_typed(vec3_t, vm, operands.a);
 	const vec3_t b = *qcvm_get_global_typed(vec3_t, vm, operands.b);
-	const vec3_t result = { frand(a.x, b.x), frand(a.y, b.y), frand(a.z, b.z) };
+	const vec3_t result = { frand_mm(a.x, b.x), frand_mm(a.y, b.y), frand_mm(a.z, b.z) };
 	qcvm_set_global_typed_value(vec3_t, vm, operands.c, result);
 }
 
@@ -897,10 +900,10 @@ static void F_OP(qcvm_t *vm, const operands_t operands, int *depth) \
 	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, value, field_value, sizeof(TType) / sizeof(global_t)); \
 }
 
-F_OP_STOREF(F_OP_STOREF_F, vec_t);
-F_OP_STOREF(F_OP_STOREF_S, string_t);
-F_OP_STOREF(F_OP_STOREF_I, int32_t);
-F_OP_STOREF(F_OP_STOREF_V, vec3_t);
+F_OP_STOREF(F_OP_STOREF_F, vec_t)
+F_OP_STOREF(F_OP_STOREF_S, string_t)
+F_OP_STOREF(F_OP_STOREF_I, int32_t)
+F_OP_STOREF(F_OP_STOREF_V, vec3_t)
 #undef F_OP_STOREF
 
 #define OP(N) \

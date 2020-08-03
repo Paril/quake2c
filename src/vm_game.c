@@ -25,10 +25,15 @@ static void QC_ClearEntity(qcvm_t *vm)
 
 void SyncPlayerState(qcvm_t *vm, edict_t *ent)
 {
-	for (auto &wrap : vm->field_wraps.wraps)
+	for (size_t i = 0; i < vm->fields_size; i++)
 	{
-		const void *field = qcvm_get_entity_field_pointer(ent, wrap.first / sizeof(global_t));
-		qcvm_field_wrap_list_wrap(&vm->field_wraps, ent, wrap.first, field);
+		const qcvm_field_wrapper_t *wrap = &vm->field_wraps.wraps[i];
+
+		if (!wrap->field)
+			continue;
+
+		const void *field = qcvm_get_entity_field_pointer(ent, i);
+		qcvm_field_wrap_list_wrap(&vm->field_wraps, ent, i, field);
 	}
 }
 
@@ -93,14 +98,14 @@ static inline void QC_parse_value_into_ptr(qcvm_t *vm, const deftype_t type, con
 		*(string_t *)ptr = qcvm_store_or_find_string(vm, ParseSlashes(value));
 		break;
 	case TYPE_FLOAT:
-		*(vec_t *)ptr = strtof(value, nullptr);
+		*(vec_t *)ptr = strtof(value, NULL);
 		break;
 	case TYPE_VECTOR:
 		data_span = 3;
 		sscanf(value, "%f %f %f", (vec_t *)ptr, (vec_t *)ptr + 1, (vec_t *)ptr + 2);
 		break;
 	case TYPE_INTEGER:
-		*(int32_t *)ptr = strtol(value, nullptr, 10);
+		*(int32_t *)ptr = strtol(value, NULL, 10);
 		break;
 	default:
 		qcvm_error(vm, "Couldn't parse field, bad type %i", type);

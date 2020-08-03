@@ -83,19 +83,19 @@ static void QC_tanf(qcvm_t *vm)
 =====================================================================
 */
 
-static const size_t STATE_VECTOR_LENGTH = 624;
-static const size_t STATE_VECTOR_M      = 397; /* changes to STATE_VECTOR_LENGTH also require changes to this */
+enum { STATE_VECTOR_LENGTH = 624 };
+enum { STATE_VECTOR_M      = 397 }; /* changes to STATE_VECTOR_LENGTH also require changes to this */
 
-struct
+static struct
 {
 	uint32_t mt[STATE_VECTOR_LENGTH];
 	int32_t index;
 } qcvm_mt;
 
-static const int32_t UPPER_MASK		= 0x80000000;
-static const int32_t LOWER_MASK		= 0x7fffffff;
-static const int32_t TEMPERING_MASK_B	= 0x9d2c5680;
-static const int32_t TEMPERING_MASK_C	= 0xefc60000;
+enum { UPPER_MASK		= (int32_t)0x80000000 };
+enum { LOWER_MASK		= 0x7fffffff };
+enum { TEMPERING_MASK_B	= (int32_t)0x9d2c5680 };
+enum { TEMPERING_MASK_C	= (int32_t)0xefc60000 };
 
 void Q_srand(const uint32_t seed)
 {
@@ -157,17 +157,17 @@ static uint32_t Q_rand_uniform(uint32_t n)
 
 vec_t frand()
 {
-	return Q_rand() / 0xffffffffu;
+	return (vec_t)(Q_rand()) / 0xffffffffu;
 }
 
-vec_t frand(const vec_t min, const vec_t max)
-{
-	return frand() * (max - min) + min;
-}
-
-vec_t frand(const vec_t max)
+vec_t frand_m(const vec_t max)
 {
 	return frand() * max;
+}
+
+vec_t frand_mm(const vec_t min, const vec_t max)
+{
+	return frand() * (max - min) + min;
 }
 
 static void QC_Q_rand(qcvm_t *vm)

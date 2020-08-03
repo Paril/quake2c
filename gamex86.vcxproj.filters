@@ -15,40 +15,40 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\g_main.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="src\shared\shared.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="src\g_vm.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="src\vm_gi.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="src\vm_game.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="src\vm_ext.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="src\vm_string.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="src\vm_mem.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="src\vm_debug.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="src\vm_math.cpp">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="src\g_thread.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm_opcodes.cpp">
+    <ClCompile Include="src\vm_string.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_opcodes.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_mem.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_math.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_gi.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_game.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_ext.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_debug.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\shared\shared.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\g_vm.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\g_main.c">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>

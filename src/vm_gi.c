@@ -30,50 +30,50 @@ static void QC_positioned_sound(qcvm_t *vm)
 
 static void QC_cvar_get_name(qcvm_t *vm)
 {
-	const cvar_t *cvar = (cvar_t *)qcvm_argv_int32(vm, 0);
+	const cvar_t *cvar = (cvar_t *)(qcvm_argv_int32(vm, 0));
 	qcvm_return_string(vm, cvar->name);
 }
 
 static void QC_cvar_get_string(qcvm_t *vm)
 {
-	const cvar_t *cvar = (cvar_t *)qcvm_argv_int32(vm, 0);
+	const cvar_t *cvar = (cvar_t *)(qcvm_argv_int32(vm, 0));
 	qcvm_return_string(vm, cvar->string);
 }
 
 static void QC_cvar_get_latched_string(qcvm_t *vm)
 {
-	const cvar_t *cvar = (cvar_t *)qcvm_argv_int32(vm, 0);
+	const cvar_t *cvar = (cvar_t *)(qcvm_argv_int32(vm, 0));
 	qcvm_return_string(vm, cvar->latched_string);
 }
 
 static void QC_cvar_get_modified(qcvm_t *vm)
 {
-	const cvar_t *cvar = (cvar_t *)qcvm_argv_int32(vm, 0);
+	const cvar_t *cvar = (cvar_t *)(qcvm_argv_int32(vm, 0));
 	qcvm_return_int32(vm, cvar->modified);
 }
 static void QC_cvar_get_flags(qcvm_t *vm)
 {
-	const cvar_t *cvar = (cvar_t *)qcvm_argv_int32(vm, 0);
+	const cvar_t *cvar = (cvar_t *)(qcvm_argv_int32(vm, 0));
 	qcvm_return_int32(vm, cvar->flags);
 }
 
 static void QC_cvar_set_modified(qcvm_t *vm)
 {
-	cvar_t *cvar = (cvar_t *)qcvm_argv_int32(vm, 0);
-	const qboolean value = (qboolean)qcvm_argv_int32(vm, 1);
+	cvar_t *cvar = (cvar_t *)(qcvm_argv_int32(vm, 0));
+	const qboolean value = (qboolean)(qcvm_argv_int32(vm, 1));
 
 	cvar->modified = value;
 }
 
 static void QC_cvar_get_floatVal(qcvm_t *vm)
 {
-	const cvar_t *cvar = (cvar_t *)qcvm_argv_int32(vm, 0);
+	const cvar_t *cvar = (cvar_t *)(qcvm_argv_int32(vm, 0));
 	qcvm_return_float(vm, cvar->value);
 }
 
 static void QC_cvar_get_intVal(qcvm_t *vm)
 {
-	const cvar_t *cvar = (cvar_t *)qcvm_argv_int32(vm, 0);
+	const cvar_t *cvar = (cvar_t *)(qcvm_argv_int32(vm, 0));
 	qcvm_return_int32(vm, (int32_t)cvar->value);
 }
 
@@ -146,17 +146,17 @@ typedef int QC_csurface_t;
 
 static void QC_csurface_get_name(qcvm_t *vm)
 {
-	const csurface_t *surf = (csurface_t *)qcvm_argv_int32(vm, 0);
+	const csurface_t *surf = (csurface_t *)(qcvm_argv_int32(vm, 0));
 
 	if (!surf)
-		qcvm_return_string(vm, nullptr);
+		qcvm_return_string(vm, NULL);
 	else
 		qcvm_return_string(vm, surf->name);
 }
 
 static void QC_csurface_get_flags(qcvm_t *vm)
 {
-	const csurface_t *surf = (csurface_t *)qcvm_argv_int32(vm, 0);
+	const csurface_t *surf = (csurface_t *)(qcvm_argv_int32(vm, 0));
 
 	if (!surf)
 		qcvm_return_int32(vm, 0);
@@ -166,7 +166,7 @@ static void QC_csurface_get_flags(qcvm_t *vm)
 
 static void QC_csurface_get_value(qcvm_t *vm)
 {
-	const csurface_t *surf = (csurface_t *)qcvm_argv_int32(vm, 0);
+	const csurface_t *surf = (csurface_t *)(qcvm_argv_int32(vm, 0));
 
 	if (!surf)
 		qcvm_return_int32(vm, 0);
@@ -174,7 +174,7 @@ static void QC_csurface_get_value(qcvm_t *vm)
 		qcvm_return_int32(vm, surf->value);
 }
 
-struct QC_trace_t
+typedef struct
 {
 	int				allsolid;
 	int				startsolid;
@@ -184,7 +184,7 @@ struct QC_trace_t
 	QC_csurface_t	surface;
 	int				contents;
 	ent_t			ent;
-};
+} QC_trace_t;
 
 static void QC_trace(qcvm_t *vm)
 {
@@ -231,7 +231,7 @@ static void QC_inPHS(qcvm_t *vm)
 static void QC_SetAreaPortalState(qcvm_t *vm)
 {
 	const int32_t num = qcvm_argv_int32(vm, 0);
-	const qboolean state = (qboolean)qcvm_argv_int32(vm, 1);
+	const qboolean state = (qboolean)(qcvm_argv_int32(vm, 1));
 
 	gi.SetAreaPortalState(num, state);
 }
@@ -332,7 +332,7 @@ static void entity_set_remove(entity_set_t *set, edict_t *ent)
 		if ((*link)->entity != ent)
 			continue;
 
-		(*link)->entity = nullptr;
+		(*link)->entity = NULL;
 
 		entity_set_link_t *removed_link = *link;
 		*link = (*link)->next;
@@ -353,7 +353,7 @@ static void entity_set_clear(entity_set_t *set)
 	set->count = 0;
 
 	for (entity_set_link_t *link = set->head; link; link = link->next)
-		link->entity = nullptr;
+		link->entity = NULL;
 }
 
 static void entity_set_free(entity_set_t *set)
@@ -376,7 +376,7 @@ static void QC_entity_set_alloc(qcvm_t *vm)
 
 static void QC_entity_set_get(qcvm_t *vm)
 {
-	const entity_set_t *set = (entity_set_t *)qcvm_argv_int32(vm, 0);
+	const entity_set_t *set = (entity_set_t *)(qcvm_argv_int32(vm, 0));
 	const int32_t index = qcvm_argv_int32(vm, 1);
 
 	qcvm_return_entity(vm, entity_set_get(set, index));
@@ -384,39 +384,39 @@ static void QC_entity_set_get(qcvm_t *vm)
 
 static void QC_entity_set_add(qcvm_t *vm)
 {
-	entity_set_t *set = (entity_set_t *)qcvm_argv_int32(vm, 0);
+	entity_set_t *set = (entity_set_t *)(qcvm_argv_int32(vm, 0));
 	edict_t *ent = qcvm_argv_entity(vm, 1);
 	entity_set_add(set, ent);
 }
 
 static void QC_entity_set_remove(qcvm_t *vm)
 {
-	entity_set_t *set = (entity_set_t *)qcvm_argv_int32(vm, 0);
+	entity_set_t *set = (entity_set_t *)(qcvm_argv_int32(vm, 0));
 	edict_t *ent = qcvm_argv_entity(vm, 1);
 	entity_set_remove(set, ent);
 }
 
 static void QC_entity_set_length(qcvm_t *vm)
 {
-	entity_set_t *set = (entity_set_t *)qcvm_argv_int32(vm, 0);
+	entity_set_t *set = (entity_set_t *)(qcvm_argv_int32(vm, 0));
 	qcvm_return_int32(vm, (int32_t)set->count);
 }
 
 static void QC_entity_set_clear(qcvm_t *vm)
 {
-	entity_set_t *set = (entity_set_t *)qcvm_argv_int32(vm, 0);
+	entity_set_t *set = (entity_set_t *)(qcvm_argv_int32(vm, 0));
 	entity_set_clear(set);
 }
 
 static void QC_entity_set_free(qcvm_t *vm)
 {
-	entity_set_t *set = (entity_set_t *)qcvm_argv_int32(vm, 0);
+	entity_set_t *set = (entity_set_t *)(qcvm_argv_int32(vm, 0));
 	entity_set_free(set);
 }
 
 static void QC_BoxEdicts(qcvm_t *vm)
 {
-	entity_set_t *set = (entity_set_t *)qcvm_argv_int32(vm, 0);
+	entity_set_t *set = (entity_set_t *)(qcvm_argv_int32(vm, 0));
 	const vec3_t mins = qcvm_argv_vector(vm, 1);
 	const vec3_t maxs = qcvm_argv_vector(vm, 2);
 	const int32_t maxcount = qcvm_argv_int32(vm, 3);
@@ -431,7 +431,7 @@ static void QC_BoxEdicts(qcvm_t *vm)
 		entity_set_add(set, raw_entities[i]);
 }
 
-struct QC_pmove_state_t
+typedef struct
 {
     pmtype_t pm_type;
 
@@ -442,9 +442,9 @@ struct QC_pmove_state_t
     int	gravity;
     vec3_t delta_angles;	// add to command angles to get view direction
 							// changed by spawns, rotating objects, and teleporters
-};
+} QC_pmove_state_t;
 
-struct QC_pmove_t
+typedef struct
 {
 	// inout
 	QC_pmove_state_t	s;
@@ -468,7 +468,7 @@ struct QC_pmove_t
 	// in (callbacks)
 	func_t trace;
 	func_t pointcontents;
-};
+} QC_pmove_t;
 
 static entity_set_t touchents_memory;
 
@@ -604,7 +604,7 @@ static void QC_multicast(qcvm_t *vm)
 static void QC_unicast(qcvm_t *vm)
 {
 	edict_t *ent = qcvm_argv_entity(vm, 0);
-	const qboolean reliable = (qboolean)qcvm_argv_int32(vm, 1);
+	const qboolean reliable = (qboolean)(qcvm_argv_int32(vm, 1));
 
 	gi.unicast(ent, reliable);
 }

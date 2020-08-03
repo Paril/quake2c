@@ -24,15 +24,13 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 typedef struct edict_s edict_t;
 typedef struct gclient_s gclient_t;
 
-static const int GAME_API_VERSION	= 3;
-
 //===============================================================
 
 //
 // per-level limits
 //
-static const size_t MAX_CLIENTS		= 256;	// absolute limit
-static const size_t MAX_EDICTS		= 1024;	// must change protocol to increase more
+enum { MAX_CLIENTS		= 256 };	// absolute limit
+enum { MAX_EDICTS		= 1024 };	// must change protocol to increase more
 
 // game print flags
 enum
@@ -57,7 +55,6 @@ enum
 };
 
 typedef int multicast_t;
-
 
 //
 // SOUNDS
@@ -102,13 +99,13 @@ enum
 	CVAR_SERVERINFO	= 4,	// added to serverinfo when changed
 	CVAR_NOSET		= 8,	// don't allow change from console at all,
 							// but can be set from the command line
-	CVAR_LATCH	= 16	// save changes until server restart
+	CVAR_LATCH		= 16	// save changes until server restart
 };
 
 typedef int cvar_flags_t;
 
 // nothing outside the cvar.*() functions should modify these fields!
-struct cvar_t
+typedef struct
 {
 	char			*name;
 	char			*string;
@@ -116,7 +113,7 @@ struct cvar_t
 	cvar_flags_t	flags;
 	qboolean		modified;   // set each time the cvar is changed
 	float			value;
-};
+} cvar_t;
 
 /*
 ==============================================================
@@ -136,24 +133,24 @@ typedef int box_edicts_area_t;
 typedef uint8_t plane_type_t;
 
 // plane_t structure
-struct cplane_t
+typedef struct
 {
 	vec3_t			normal;
 	float			dist;
 	plane_type_t	type;           // for fast side tests
 	uint8_t			signbits;       // signx + (signy<<1) + (signz<<1)
 	uint8_t			pad[2];
-};
+} cplane_t;
 
-struct csurface_t
+typedef struct
 {
 	char			name[16];
 	surface_flags_t	flags;
 	int				value;
-};
+} csurface_t;
 
 // a trace is returned when a box is swept through the world
-struct trace_t
+typedef struct
 {
 	qboolean		allsolid;   // if true, plane is not valid
 	qboolean		startsolid; // if true, the initial point was in a solid area
@@ -163,7 +160,7 @@ struct trace_t
 	csurface_t		*surface;   // surface hit
 	content_flags_t	contents;   // contents on other side of surface hit
 	edict_t			*ent;       // not set by CM_*() functions
-};
+} trace_t;
 
 //
 // button bits
@@ -178,7 +175,7 @@ enum
 typedef uint8_t button_bits_t;
 
 // usercmd_t is sent to the server each client frame
-struct usercmd_t
+typedef struct
 {
 	uint8_t			msec;
 	button_bits_t	buttons;
@@ -186,7 +183,7 @@ struct usercmd_t
 	short			forwardmove, sidemove, upmove;
 	uint8_t			impulse;	// remove?
 	uint8_t			lightlevel;	// light level the player is standing on
-};
+} usercmd_t;
 
 // pmove_state_t is the information necessary for client side movement
 // prediction
@@ -223,7 +220,7 @@ typedef uint8_t pmflags_t;
 // prediction stays in sync, so no floats are used.
 // if any part of the game code modifies this struct, it
 // will result in a prediction error of some degree.
-struct pmove_state_t
+typedef struct
 {
 	pmtype_t	pm_type;
 
@@ -234,11 +231,11 @@ struct pmove_state_t
 	short		gravity;
 	short		delta_angles[3];	// add to command angles to get view direction
 												// changed by spawns, rotating objects, and teleporters
-};
+} pmove_state_t;
 
-const size_t MAX_TOUCH	= 32;
+enum { MAX_TOUCH	= 32 };
 
-struct pmove_t
+typedef struct
 {
 	// state (in / out)
 	pmove_state_t	s;
@@ -263,14 +260,14 @@ struct pmove_t
 	// callbacks to test the world
 	trace_t			(* q_gameabi trace)(const vec3_t *start, const vec3_t *mins, const vec3_t *maxs, const vec3_t *end);
 	content_flags_t	(*pointcontents)(const vec3_t *point);
-};
+} pmove_t;
 
 //===============================================================
 
 //
 // functions provided by the main engine
 //
-extern "C" struct game_import_t
+typedef struct
 {
 	// special messages
 	void (* q_printf(2, 3) bprintf)(print_level_t printlevel, const char *fmt, ...);
@@ -344,12 +341,12 @@ extern "C" struct game_import_t
 	void (*AddCommandString)(const char *text);
 
 	void (*DebugGraph)(vec_t value, int color);
-};
+} game_import_t;
 
 //
 // functions exported by the game subsystem
 //
-extern "C" struct game_export_t
+typedef struct
 {
 	int	apiversion;
 
@@ -401,4 +398,4 @@ extern "C" struct game_export_t
 	int			edict_size;
 	int			num_edicts;	// current number, <= max_edicts
 	int			max_edicts;
-};
+} game_export_t;

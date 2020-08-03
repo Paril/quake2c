@@ -30,6 +30,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <unistd.h>
 #endif
 
+#include <stdbool.h>
+
 #ifdef _WIN32
 #define PRIz    "Iu"
 #else

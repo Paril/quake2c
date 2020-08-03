@@ -1,21 +1,22 @@
-//extern "C"
-//{
+extern "C"
+{
 	#define QCVM_INTERNAL
 	#include "shared/shared.h"
 	#include "game.h"
 	#include "g_vm.h"
 	#include "g_thread.h"
-//};
+};
 
 #ifdef ALLOW_DEBUGGING
 #include <thread>
 #include <mutex>
 #include <chrono>
 
-qcvm_mutex_t qcvm_cpp_create_mutex()
+qcvm_mutex_t qcvm_cpp_create_mutex(void)
 {
 	return reinterpret_cast<qcvm_mutex_t>(new std::mutex);
 }
+
 void qcvm_cpp_free_mutex(qcvm_mutex_t mutex)
 {
 	delete reinterpret_cast<std::mutex *>(mutex);

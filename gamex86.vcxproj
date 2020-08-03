@@ -65,6 +65,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt %(AdditionalOptions)</AdditionalOptions>
+      <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
       <ModuleDefinitionFile>src\game.def</ModuleDefinitionFile>
@@ -85,6 +86,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt %(AdditionalOptions)</AdditionalOptions>
+      <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -96,18 +98,73 @@
     <None Include="src\game.def" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\g_main.cpp" />
+    <ClCompile Include="src\g_main.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </LanguageStandard>
+    </ClCompile>
     <ClCompile Include="src\g_thread.cpp" />
-    <ClCompile Include="src\g_vm.cpp" />
-    <ClCompile Include="src\shared\shared.cpp" />
-    <ClCompile Include="src\vm_debug.cpp" />
-    <ClCompile Include="src\vm_ext.cpp" />
-    <ClCompile Include="src\vm_game.cpp" />
-    <ClCompile Include="src\vm_gi.cpp" />
-    <ClCompile Include="src\vm_math.cpp" />
-    <ClCompile Include="src\vm_mem.cpp" />
-    <ClCompile Include="src\vm_opcodes.cpp" />
-    <ClCompile Include="src\vm_string.cpp" />
+    <ClCompile Include="src\g_vm.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </LanguageStandard>
+    </ClCompile>
+    <ClCompile Include="src\shared\shared.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </LanguageStandard>
+    </ClCompile>
+    <ClCompile Include="src\vm_debug.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </LanguageStandard>
+    </ClCompile>
+    <ClCompile Include="src\vm_ext.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </LanguageStandard>
+    </ClCompile>
+    <ClCompile Include="src\vm_game.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </LanguageStandard>
+    </ClCompile>
+    <ClCompile Include="src\vm_gi.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </LanguageStandard>
+    </ClCompile>
+    <ClCompile Include="src\vm_math.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </LanguageStandard>
+    </ClCompile>
+    <ClCompile Include="src\vm_mem.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </LanguageStandard>
+    </ClCompile>
+    <ClCompile Include="src\vm_opcodes.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </LanguageStandard>
+    </ClCompile>
+    <ClCompile Include="src\vm_string.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      </LanguageStandard>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\game.h" />
