@@ -2,6 +2,7 @@
 #include "game.h"
 #include "g_vm.h"
 #include "vm_game.h"
+#include "vm_gi.h"
 
 static void QC_sound(qcvm_t *vm)
 {

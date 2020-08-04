@@ -1,6 +1,7 @@
 #include "shared/shared.h"
 #include "game.h"
 #include "g_vm.h"
+#include "vm_math.h"
 
 static void QC_fabsf(qcvm_t *vm)
 {

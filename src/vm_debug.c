@@ -2,6 +2,8 @@
 #include "game.h"
 #include "g_vm.h"
 #include "vm_game.h"
+#include "vm_debug.h"
+#include "vm_string.h"
 
 static void QC_stacktrace(qcvm_t *vm)
 {

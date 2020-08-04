@@ -21,23 +21,15 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "game.h"
 #include "g_vm.h"
 #include "vm_game.h"
+#include "vm_debug.h"
+#include "vm_string.h"
+#include "vm_gi.h"
 
 #ifdef ALLOW_DEBUGGING
 #include "g_thread.h"
 #endif
 
 static qcvm_t *qvm;
-
-static void InitBuiltins()
-{
-	qcvm_init_gi_builtins(qvm);
-	qcvm_init_game_builtins(qvm);
-	qcvm_init_ext_builtins(qvm);
-	qcvm_init_string_builtins(qvm);
-	qcvm_init_mem_builtins(qvm);
-	qcvm_init_debug_builtins(qvm);
-	qcvm_init_math_builtins(qvm);
-}
 
 static void FieldCoord2Short(void *out, const void *in)
 {
@@ -179,7 +171,9 @@ static void InitGame ()
 	qvm->profile_flags = (int32_t)gi.cvar("qc_profile_flags", "0", CVAR_LATCH)->value;
 #endif
 
-	InitBuiltins();
+	qcvm_init_all_builtins(qvm);
+	qcvm_init_gi_builtins(qvm);
+
 	InitFieldWraps();
 
 	qcvm_check(qvm);
@@ -278,7 +272,7 @@ static void RestoreClientData()
 			memcpy(dst, src, sizeof(qcvm_global_t) * len);
 		}
 
-		SyncPlayerState(qvm, ent);
+		qcvm_sync_player_state(qvm, ent);
 	}
 	
 	qcvm_string_list_mark_if_has_ref(&qvm->dynamic_strings, game.client_load_data, itoe(1), (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
@@ -351,7 +345,7 @@ static void ClientBegin(edict_t *e)
 	const qcvm_ent_t ent = qcvm_entity_to_ent(e);
 	qcvm_set_global_typed_value(qcvm_ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_execute(qvm, func);
-	SyncPlayerState(qvm, e);
+	qcvm_sync_player_state(qvm, e);
 }
 
 static void ClientUserinfoChanged(edict_t *e, char *userinfo)
@@ -365,7 +359,7 @@ static void ClientUserinfoChanged(edict_t *e, char *userinfo)
 	qcvm_set_global_typed_value(qcvm_ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_set_global_str(qvm, GLOBAL_PARM1, userinfo);
 	qcvm_execute(qvm, func);
-	SyncPlayerState(qvm, e);
+	qcvm_sync_player_state(qvm, e);
 }
 
 static void ClientDisconnect(edict_t *e)
@@ -378,7 +372,7 @@ static void ClientDisconnect(edict_t *e)
 	const qcvm_ent_t ent = qcvm_entity_to_ent(e);
 	qcvm_set_global_typed_value(qcvm_ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_execute(qvm, func);
-	SyncPlayerState(qvm, e);
+	qcvm_sync_player_state(qvm, e);
 }
 
 static void ClientCommand(edict_t *e)
@@ -391,7 +385,7 @@ static void ClientCommand(edict_t *e)
 	const qcvm_ent_t ent = qcvm_entity_to_ent(e);
 	qcvm_set_global_typed_value(qcvm_ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_execute(qvm, func);
-	SyncPlayerState(qvm, e);
+	qcvm_sync_player_state(qvm, e);
 }
 
 static void ClientThink(edict_t *e, usercmd_t *ucmd)
@@ -418,7 +412,7 @@ static void ClientThink(edict_t *e, usercmd_t *ucmd)
 	qcvm_set_global_typed_value(QC_usercmd_t, qvm, GLOBAL_PARM1, cmd);
 
 	qcvm_execute(qvm, func);
-	SyncPlayerState(qvm, e);
+	qcvm_sync_player_state(qvm, e);
 }
 
 static void RunFrame()
@@ -431,7 +425,7 @@ static void RunFrame()
 	qcvm_execute(qvm, func);
 
 	for (size_t i = 0; i < game.num_clients; i++)
-		SyncPlayerState(qvm, itoe(1 + i));
+		qcvm_sync_player_state(qvm, itoe(1 + i));
 }
 
 static void ServerCommand()
@@ -831,7 +825,7 @@ static void ReadGame(const char *filename)
 	qcvm_execute(qvm, func);
 
 	for (size_t i = 0; i < game.num_clients; i++)
-		SyncPlayerState(qvm, itoe(i + 1));
+		qcvm_sync_player_state(qvm, itoe(i + 1));
 
 	fclose(fp);
 }

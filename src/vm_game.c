@@ -2,6 +2,7 @@
 #include "game.h"
 #include "g_vm.h"
 #include "vm_game.h"
+#include "vm_string.h"
 
 static void QC_SetNumEdicts(qcvm_t *vm)
 {
@@ -23,24 +24,26 @@ static void QC_ClearEntity(qcvm_t *vm)
 	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, entity, globals.edict_size / sizeof(qcvm_global_t), false);
 }
 
-void SyncPlayerState(qcvm_t *vm, edict_t *ent)
+void qcvm_sync_player_state(qcvm_t *vm, edict_t *ent)
 {
-	for (size_t i = 0; i < vm->fields_size; i++)
+	for (const qcvm_field_wrapper_t *wrap = vm->field_wraps.wrap_head; wrap; wrap = wrap->next)
 	{
-		const qcvm_field_wrapper_t *wrap = &vm->field_wraps.wraps[i];
+		const int32_t *src = (int32_t *)qcvm_get_entity_field_pointer(ent, wrap->field_offset);
 
-		if (!wrap->field)
-			continue;
-
-		const void *field = qcvm_get_entity_field_pointer(ent, i);
-		qcvm_field_wrap_list_wrap(&vm->field_wraps, ent, i, field);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-align"
+		if (wrap->setter)
+			wrap->setter((uint8_t *)(ent->client) + wrap->client_offset, src);
+		else
+			*(int32_t *)((uint8_t *)(ent->client) + wrap->client_offset) = *src;
+#pragma GCC diagnostic pop
 	}
 }
 
 static void QC_SyncPlayerState(qcvm_t *vm)
 {
 	edict_t *ent = qcvm_argv_entity(vm, 0);
-	SyncPlayerState(vm, ent);
+	qcvm_sync_player_state(vm, ent);
 }
 
 const char *ParseSlashes(const char *value)

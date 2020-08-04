@@ -4,6 +4,11 @@
 #include "g_vm.h"
 #include "vm_game.h"
 #include "vm_opcodes.h"
+#include "vm_math.h"
+#include "vm_debug.h"
+#include "vm_mem.h"
+#include "vm_string.h"
+#include "vm_ext.h"
 
 #include <time.h>
 
@@ -732,7 +737,6 @@ const char *qcvm_parse_format(const qcvm_string_t formatid, const qcvm_t *vm, co
 static void qcvm_field_wrap_list_init(qcvm_field_wrap_list_t *list, qcvm_t *vm)
 {
 	list->vm = vm;
-	list->wraps = (qcvm_field_wrapper_t *)qcvm_alloc(vm, sizeof(qcvm_field_wrapper_t) * list->vm->fields_size);
 }
 
 void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *field_name, const size_t field_offset, const size_t client_offset, qcvm_field_setter_t setter)
@@ -746,31 +750,21 @@ void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *fie
 
 		assert((f->global_index + field_offset) >= 0 && (f->global_index + field_offset) < list->vm->fields_size);
 
-		list->wraps[f->global_index + field_offset] = (qcvm_field_wrapper_t) {
+		qcvm_field_wrapper_t *wrapper = (qcvm_field_wrapper_t *)qcvm_alloc(list->vm, sizeof(qcvm_field_wrapper_t));
+		*wrapper = (qcvm_field_wrapper_t) {
 			f,
+			f->global_index + field_offset,
 			client_offset,
-			setter
+			setter,
+			list->wrap_head
 		};
+		list->wrap_head = wrapper;
+		list->field_range_min = (list->field_range_min == 0) ? wrapper->field_offset : minsz(list->field_range_min, wrapper->field_offset);
+		list->field_range_max = (list->field_range_max == 0) ? (wrapper->field_offset + 1) : maxsz(list->field_range_max, wrapper->field_offset + 1);
 		return;
 	}
 
 	qcvm_error(list->vm, "missing field to wrap");
-}
-
-void qcvm_field_wrap_list_wrap(qcvm_field_wrap_list_t *list, const edict_t *ent, const int32_t field, const void *src)
-{
-	if (!list->wraps[field].field)
-		return;
-
-	const qcvm_field_wrapper_t *wrap = &list->wraps[field];
-		
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcast-align"
-	if (wrap->setter)
-		wrap->setter((uint8_t *)(ent->client) + wrap->client_offset, (const int32_t *)(src));
-	else
-		*(int32_t *)((uint8_t *)(ent->client) + wrap->client_offset) = *(const int32_t *)(src);
-#pragma GCC diagnostic pop
 }
 
 static void qcvm_state_init(qcvm_state_t *state, qcvm_t *vm)
@@ -2071,4 +2065,14 @@ void qcvm_shutdown(qcvm_t *vm)
 #endif
 
 	qcvm_free(vm);
+}
+
+void qcvm_init_all_builtins(qcvm_t *vm)
+{
+	qcvm_init_game_builtins(vm);
+	qcvm_init_ext_builtins(vm);
+	qcvm_init_string_builtins(vm);
+	qcvm_init_mem_builtins(vm);
+	qcvm_init_debug_builtins(vm);
+	qcvm_init_math_builtins(vm);
 }

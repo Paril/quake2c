@@ -2,7 +2,7 @@
 #include "shared/shared.h"
 #include "game.h"
 #include "g_vm.h"
-#include "vm_game.h"
+#include "vm_math.h"
 
 static void F_OP_DONE(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
@@ -347,15 +347,6 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 	TResult *address_ptr = (TResult *)address; \
 	*address_ptr = *value; \
 	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, address_ptr, span, false); \
-\
-	if (qcvm_address_is_entity(address)) \
-	{ \
-		edict_t *ent = qcvm_address_to_entity(address); \
-		ptrdiff_t field = qcvm_address_to_field(ent, address); \
-	\
-		for (size_t i = 0; i < span; i++) \
-			qcvm_field_wrap_list_wrap(&vm->field_wraps, ent, field + i, (const qcvm_global_t *)value + i); \
-	} \
 \
 	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, &value, address_ptr, span); \
 }

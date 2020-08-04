@@ -301,21 +301,23 @@ void qcvm_builtin_list_register(qcvm_builtin_list_t *list, const char *name, qcv
 
 typedef void(*qcvm_field_setter_t)(void *out, const void *in);
 
-typedef struct
+typedef struct qcvm_field_wrapper_s
 {
 	const qcvm_definition_t		*field;
-	size_t						client_offset;
+	size_t						field_offset, client_offset;
 	qcvm_field_setter_t			setter;
+
+	struct qcvm_field_wrapper_s	*next;
 } qcvm_field_wrapper_t;
 
 typedef struct
 {
 	qcvm_t					*vm;
-	qcvm_field_wrapper_t	*wraps;
+	qcvm_field_wrapper_t	*wrap_head;
+	size_t					field_range_min, field_range_max;
 } qcvm_field_wrap_list_t;
 
 void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *field_name, const size_t field_offset, const size_t client_offset, qcvm_field_setter_t setter);
-void qcvm_field_wrap_list_wrap(qcvm_field_wrap_list_t *list, const edict_t *ent, const int32_t field, const void *src);
 
 #ifdef ALLOW_DEBUGGING
 typedef struct
@@ -529,14 +531,6 @@ bool qcvm_find_string(qcvm_t *vm, const char *value, qcvm_string_t *rstr);
 // Note: currently *copies* value if it's acquired
 qcvm_string_t qcvm_store_or_find_string(qcvm_t *vm, const char *value);
 
-#ifdef ALLOW_DEBUGGING
-qcvm_eval_result_t qcvm_evaluate(qcvm_t *vm, const char *variable);
-
-void qcvm_break_on_current_statement(qcvm_t *vm);
-
-void qcvm_set_breakpoint(qcvm_t *vm, const bool is_set, const char *file, const int line);
-#endif
-
 int qcvm_line_number_for(const qcvm_t *vm, const qcvm_statement_t *statement);
 
 qcvm_func_t qcvm_find_function_id(const qcvm_t *vm, const char *name);
@@ -583,6 +577,8 @@ void qcvm_shutdown(qcvm_t *vm);
 // Helpful macro for quickly registering a builtin
 #define qcvm_register_builtin(name) \
 	qcvm_builtin_list_register(&vm->builtins, #name, QC_ ## name)
+
+void qcvm_init_all_builtins(qcvm_t *vm);
 
 #ifdef QCVM_INTERNAL
 void qcvm_enter(qcvm_t *vm, qcvm_function_t *function);

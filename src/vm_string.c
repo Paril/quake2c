@@ -1,6 +1,7 @@
 #include "shared/shared.h"
 #include "game.h"
 #include "g_vm.h"
+#include "vm_string.h"
 
 enum { NUM_ROTATING_BUFFERS = 4 };
 

@@ -1,6 +1,7 @@
 #include "shared/shared.h"
 #include "game.h"
 #include "g_vm.h"
+#include "vm_ext.h"
 
 static void QC_ModInt(qcvm_t *vm)
 {

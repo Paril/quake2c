@@ -83,5 +83,23 @@
     <ClInclude Include="src\g_thread.h">
       <Filter>inc</Filter>
     </ClInclude>
+    <ClInclude Include="src\vm_math.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vm_debug.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vm_mem.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vm_string.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vm_ext.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vm_gi.h">
+      <Filter>inc</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

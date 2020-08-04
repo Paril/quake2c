@@ -175,8 +175,14 @@
     <ClInclude Include="src\shared\api.h" />
     <ClInclude Include="src\shared\platform.h" />
     <ClInclude Include="src\shared\shared.h" />
+    <ClInclude Include="src\vm_debug.h" />
+    <ClInclude Include="src\vm_ext.h" />
     <ClInclude Include="src\vm_game.h" />
+    <ClInclude Include="src\vm_gi.h" />
+    <ClInclude Include="src\vm_math.h" />
+    <ClInclude Include="src\vm_mem.h" />
     <ClInclude Include="src\vm_opcodes.h" />
+    <ClInclude Include="src\vm_string.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
