@@ -55,7 +55,11 @@ enum
 	STAT_SPECTATOR,
 	// Bits from here to 31 are free for mods
 
+#ifdef KMQUAKE2_ENGINE_MOD
+	MAX_STATS	= 256
+#else
 	MAX_STATS	= 32
+#endif
 };
 
 typedef int16_t player_stat_t;
@@ -79,6 +83,20 @@ typedef struct
 	vec3_t      gunoffset;
 	int         gunindex;
 	int         gunframe;
+
+#ifdef KMQUAKE2_ENGINE_MOD //Knightmare added
+	int			gunskin;		// for animated weapon skins
+	int			gunindex2;		// for a second weapon model (boot)
+	int			gunframe2;
+	int			gunskin2;
+
+	// server-side speed control!
+	int			maxspeed;
+	int			duckspeed;
+	int			waterspeed;
+	int			accel;
+	int			stopspeed;
+#endif
 
 	float       blend[4];       // rgba full screen effect
 

@@ -31,6 +31,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 static qcvm_t *qvm;
 
+#ifdef KMQUAKE2_ENGINE_MOD
+bool is_kmq2_progs;
+#endif
+
 static void FieldCoord2Short(void *out, const void *in)
 {
 	*(short *)(out) = (*(const vec_t *)(in) * coord2short);
@@ -101,7 +105,11 @@ static void InitFieldWraps()
 	// gclient_t::ps::pmove
 	RegisterSingle(ps.pmove.pm_type);
 	
+#ifdef KMQUAKE2_ENGINE_MOD
+	RegisterVector(ps.pmove.origin);
+#else
 	RegisterVectorCoord2Short(ps.pmove.origin);
+#endif
 	RegisterVectorCoord2Short(ps.pmove.velocity);
 	
 	RegisterSingleWrapped(ps.pmove.pm_flags, qcvm_field_wrap_to_uint8);
@@ -150,6 +158,48 @@ typedef struct
 
 static qc_export_t qce;
 
+static const char *GetProgsName(void)
+{
+	cvar_t *game_var = gi.cvar("game", "", 0);
+
+#ifdef KMQUAKE2_ENGINE_MOD
+	const char *kmq2_progs = qcvm_temp_format(qvm, "%s/kmq2progs.dat", game_var->string);
+
+	if (access(kmq2_progs, F_OK) != -1)
+	{
+		is_kmq2_progs = true;
+		return kmq2_progs;
+	}
+#endif
+
+	return qcvm_temp_format(qvm, "%s/progs.dat", game_var->string);
+}
+
+#ifdef KMQUAKE2_ENGINE_MOD
+static void InitKMQ2Compatibility(void)
+{
+	size_t offset = 0;
+
+	// after modelindex4, add 2 indices
+	// after skinnum, add 1 index
+	// after sound, add 1 index
+	for (qcvm_definition_t *field = qvm->fields; field < qvm->fields + qvm->fields_size; field++)
+	{
+		if (!field->name_index)
+			continue;
+
+		if (!strcmp(qcvm_get_string(qvm, field->name_index), "s.modelindex4"))
+			offset += 2;
+		else if (!strcmp(qcvm_get_string(qvm, field->name_index), "s.skinnum"))
+			offset++;
+		else if (!strcmp(qcvm_get_string(qvm, field->name_index), "s.sound"))
+			offset++;
+		else if (offset)
+			field->global_index += offset;
+	}
+}
+#endif
+
 /*
 ============
 InitGame
@@ -163,9 +213,7 @@ static void InitGame ()
 {
 	qvm = (qcvm_t *)gi.TagMalloc(sizeof(qcvm_t), TAG_GAME);
 
-	cvar_t *game_var = gi.cvar("game", "", 0);
-
-	qcvm_load(qvm, "Quake II DLL Wrapper", qcvm_temp_format(qvm, "%s/progs.dat", game_var->string));
+	qcvm_load(qvm, "Quake2C DLL", GetProgsName());
 
 #ifdef ALLOW_PROFILING
 	qvm->profile_flags = (int32_t)gi.cvar("qc_profile_flags", "0", CVAR_LATCH)->value;
@@ -173,6 +221,11 @@ static void InitGame ()
 
 	qcvm_init_all_builtins(qvm);
 	qcvm_init_gi_builtins(qvm);
+
+#ifdef KMQUAKE2_ENGINE_MOD
+	if (!is_kmq2_progs)
+		InitKMQ2Compatibility();
+#endif
 
 	InitFieldWraps();
 
@@ -202,11 +255,14 @@ static void InitGame ()
 	size_t entity_data_size = 0;
 
 	for (qcvm_definition_t *field = qvm->fields; field < qvm->fields + qvm->fields_size; field++)
-		entity_data_size = maxsz(entity_data_size, field->global_index * sizeof(int32_t));
+		entity_data_size = maxsz(entity_data_size, (field->global_index + 3) * sizeof(qcvm_global_t));
 
 	// initialize all entities for this game
 	globals.max_edicts = MAX_EDICTS;
-	globals.edict_size = sizeof(edict_t) + entity_data_size;
+	globals.edict_size = entity_data_size;
+
+	qcvm_debug(qvm, "Field size: %u bytes\n", entity_data_size);
+
 	globals.num_edicts = game.num_clients + 1;
 	globals.edicts = (edict_t *)gi.TagMalloc((globals.max_edicts + 1) * globals.edict_size, TAG_GAME);
 
@@ -229,10 +285,15 @@ static void ShutdownGame()
 	gi.FreeTags (TAG_GAME);
 }
 
-static void AssignClientPointers()
+static void WipeClientPointers()
 {
 	for (size_t i = 0; i < game.num_clients; i++)
-		itoe(i + 1)->client = &game.clients[i];
+		itoe(i + 1)->client = NULL;
+}
+
+static void AssignClientPointer(edict_t *e)
+{
+	e->client = &game.clients[e->s.number - 1];
 }
 
 static void BackupClientData()
@@ -285,10 +346,10 @@ static void WipeEntities()
 {
 	memset(globals.edicts, 0, globals.max_edicts * globals.edict_size);
 
-	for (int32_t i = 0; i < globals.max_edicts; i++)
+	for (int32_t i = 0; i < globals.max_edicts + 1; i++)
 		itoe(i)->s.number = i;
 
-	AssignClientPointers();
+	WipeClientPointers();
 }
 
 static void SpawnEntities(const char *mapname, const char *entities, const char *spawnpoint)
@@ -324,6 +385,8 @@ static qboolean ClientConnect(edict_t *e, char *userinfo)
 	qcvm_check_debugger_commands(qvm);
 #endif
 
+	AssignClientPointer(e);
+
 	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientConnect);
 	const qcvm_ent_t ent = qcvm_entity_to_ent(e);
 	qcvm_set_global_typed_value(qcvm_ent_t, qvm, GLOBAL_PARM0, ent);
@@ -332,7 +395,12 @@ static qboolean ClientConnect(edict_t *e, char *userinfo)
 
 	Q_strlcpy(userinfo, qcvm_get_string(qvm, *qcvm_get_global_typed(qcvm_string_t, qvm, GLOBAL_PARM1)), MAX_INFO_STRING);
 
-	return *qcvm_get_global_typed(qboolean, qvm, GLOBAL_RETURN);
+	const qboolean succeed = *qcvm_get_global_typed(qboolean, qvm, GLOBAL_RETURN);
+
+	if (!succeed)
+		e->client = NULL;
+
+	return succeed;
 }
 
 static void ClientBegin(edict_t *e)
@@ -340,6 +408,8 @@ static void ClientBegin(edict_t *e)
 #ifdef ALLOW_DEBUGGING
 	qcvm_check_debugger_commands(qvm);
 #endif
+
+	AssignClientPointer(e);
 
 	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientBegin);
 	const qcvm_ent_t ent = qcvm_entity_to_ent(e);
@@ -1041,7 +1111,7 @@ static void ReadLevel(const char *filename)
 		}
 	}
 
-	AssignClientPointers();
+	WipeClientPointers();
 
 	RestoreClientData();
 

@@ -48,8 +48,8 @@ typedef struct
 
 	uint32_t		ofs_files;	//non list format. no comp
 	uint32_t		ofs_linenums;	//numstatements big	//comp 64
-	qcvm_offset_t		bodylessfuncs;
-	qcvm_offset_t		types;
+	qcvm_offset_t	bodylessfuncs;
+	qcvm_offset_t	types;
 
 	uint32_t		blockscompressed;
 
@@ -764,7 +764,7 @@ void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *fie
 		return;
 	}
 
-	qcvm_error(list->vm, "missing field to wrap");
+	gi.dprintf("QCVM WARNING: can't find field %s in progs", field_name);
 }
 
 static void qcvm_state_init(qcvm_state_t *state, qcvm_t *vm)
@@ -1576,29 +1576,32 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 #endif
 
 #ifdef ALLOW_DEBUGGING
-		if (statement->opcode & OP_BREAKPOINT)
-			qcvm_break_on_current_statement(vm);
-		else
+		if (vm->debug.attached)
 		{
-			// figure out if we need to break here.
-			// step into is easiest: next QC execution that is not on the same function+line combo
-			if (vm->debug.state == DEBUG_STEP_INTO)
+			if (statement->opcode & OP_BREAKPOINT)
+				qcvm_break_on_current_statement(vm);
+			else
 			{
-				if (vm->debug.step_function != current->function || qcvm_line_number_for(vm, vm->debug.step_statement) != qcvm_line_number_for(vm, current->statement))
-					qcvm_break_on_current_statement(vm);
-			}
-			// I lied, step out is the easiest
-			else if (vm->debug.state == DEBUG_STEP_OUT)
-			{
-				if (vm->debug.step_depth > vm->state.stack_size)
-					qcvm_break_on_current_statement(vm);
-			}
-			// step over: either step out, or the next step that is in the same function + stack depth + not on same line
-			else if (vm->debug.state == DEBUG_STEP_OVER)
-			{
-				if (vm->debug.step_depth > vm->state.stack_size ||
-					(vm->debug.step_depth == vm->state.stack_size && vm->debug.step_function == current->function && qcvm_line_number_for(vm, vm->debug.step_statement) != qcvm_line_number_for(vm, current->statement)))
-					qcvm_break_on_current_statement(vm);
+				// figure out if we need to break here.
+				// step into is easiest: next QC execution that is not on the same function+line combo
+				if (vm->debug.state == DEBUG_STEP_INTO)
+				{
+					if (vm->debug.step_function != current->function || qcvm_line_number_for(vm, vm->debug.step_statement) != qcvm_line_number_for(vm, current->statement))
+						qcvm_break_on_current_statement(vm);
+				}
+				// I lied, step out is the easiest
+				else if (vm->debug.state == DEBUG_STEP_OUT)
+				{
+					if (vm->debug.step_depth > vm->state.stack_size)
+						qcvm_break_on_current_statement(vm);
+				}
+				// step over: either step out, or the next step that is in the same function + stack depth + not on same line
+				else if (vm->debug.state == DEBUG_STEP_OVER)
+				{
+					if (vm->debug.step_depth > vm->state.stack_size ||
+						(vm->debug.step_depth == vm->state.stack_size && vm->debug.step_function == current->function && qcvm_line_number_for(vm, vm->debug.step_statement) != qcvm_line_number_for(vm, current->statement)))
+						qcvm_break_on_current_statement(vm);
+				}
 			}
 		}
 

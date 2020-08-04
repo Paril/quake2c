@@ -1,12 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
-    <ProjectConfiguration Include="Debug|Win32">
-      <Configuration>Debug</Configuration>
+    <ProjectConfiguration Include="KMQuake2 Debug|Win32">
+      <Configuration>KMQuake2 Debug</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
-    <ProjectConfiguration Include="Release|Win32">
-      <Configuration>Release</Configuration>
+    <ProjectConfiguration Include="KMQuake2 Release|Win32">
+      <Configuration>KMQuake2 Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Vanilla Debug|Win32">
+      <Configuration>Vanilla Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Vanilla Release|Win32">
+      <Configuration>Vanilla Release</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
   </ItemGroup>
@@ -17,13 +25,26 @@
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>ClangCL</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>ClangCL</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>ClangCL</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>ClangCL</PlatformToolset>
@@ -35,28 +56,46 @@
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'" Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
     <OutDir>bin\</OutDir>
     <CodeAnalysisRuleSet>MixedMinimumRules.ruleset</CodeAnalysisRuleSet>
     <IncludePath>src/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+    <OutDir>bin\</OutDir>
+    <CodeAnalysisRuleSet>MixedMinimumRules.ruleset</CodeAnalysisRuleSet>
+    <IncludePath>src/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <TargetName>kmq2$(ProjectName)</TargetName>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
     <OutDir>bin\</OutDir>
     <CodeAnalysisRuleSet>MixedMinimumRules.ruleset</CodeAnalysisRuleSet>
     <IncludePath>src/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
   </PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
+    <OutDir>bin\</OutDir>
+    <CodeAnalysisRuleSet>MixedMinimumRules.ruleset</CodeAnalysisRuleSet>
+    <IncludePath>src/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <TargetName>kmq2$(ProjectName)</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
     <ClCompile>
       <WarningLevel>EnableAllWarnings</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_ITERATOR_DEBUG_LEVEL=0;_USE_MATH_DEFINES;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_USE_MATH_DEFINES;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4018;4146;4668;5045;4062;4820;4100;4706;4710;4711;4514;4061;4365;4838;4738;4774;4571;4625;4626;5026;5027;4305;4244;4242</DisableSpecificWarnings>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MinimalRebuild>false</MinimalRebuild>
@@ -72,13 +111,55 @@
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>EnableAllWarnings</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>KMQUAKE2_ENGINE_MOD;_USE_MATH_DEFINES;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DisableSpecificWarnings>4018;4146;4668;5045;4062;4820;4100;4706;4710;4711;4514;4061;4365;4838;4738;4774;4571;4625;4626;5026;5027;4305;4244;4242</DisableSpecificWarnings>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <MinimalRebuild>false</MinimalRebuild>
+      <DiagnosticsFormat>Caret</DiagnosticsFormat>
+      <ErrorReporting>Send</ErrorReporting>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt %(AdditionalOptions)</AdditionalOptions>
+      <ExceptionHandling>false</ExceptionHandling>
+    </ClCompile>
+    <Link>
+      <ModuleDefinitionFile>src\game.def</ModuleDefinitionFile>
+      <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
     <ClCompile>
       <WarningLevel>EnableAllWarnings</WarningLevel>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>_ITERATOR_DEBUG_LEVEL=0;_USE_MATH_DEFINES;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_USE_MATH_DEFINES;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DisableSpecificWarnings>4018;4146;4668;5045;4062;4820;4100;4706;4710;4711;4514;4061;4365;4838;4738;4774;4571;4625;4626;5026;5027;4305;4244;4242</DisableSpecificWarnings>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <DiagnosticsFormat>Caret</DiagnosticsFormat>
+      <ErrorReporting>Send</ErrorReporting>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt %(AdditionalOptions)</AdditionalOptions>
+      <ExceptionHandling>false</ExceptionHandling>
+    </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <ModuleDefinitionFile>src\game.def</ModuleDefinitionFile>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
+    <ClCompile>
+      <WarningLevel>EnableAllWarnings</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>KMQUAKE2_ENGINE_MOD;_USE_MATH_DEFINES;_CRT_NONSTDC_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4018;4146;4668;5045;4062;4820;4100;4706;4710;4711;4514;4061;4365;4838;4738;4774;4571;4625;4626;5026;5027;4305;4244;4242</DisableSpecificWarnings>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <DiagnosticsFormat>Caret</DiagnosticsFormat>
@@ -99,70 +180,114 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\g_main.c">
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
       </LanguageStandard>
     </ClCompile>
     <ClCompile Include="src\g_thread.cpp" />
     <ClCompile Include="src\g_vm.c">
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
       </LanguageStandard>
     </ClCompile>
     <ClCompile Include="src\shared\shared.c">
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
       </LanguageStandard>
     </ClCompile>
     <ClCompile Include="src\vm_debug.c">
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
       </LanguageStandard>
     </ClCompile>
     <ClCompile Include="src\vm_ext.c">
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
       </LanguageStandard>
     </ClCompile>
     <ClCompile Include="src\vm_game.c">
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
       </LanguageStandard>
     </ClCompile>
     <ClCompile Include="src\vm_gi.c">
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
       </LanguageStandard>
     </ClCompile>
     <ClCompile Include="src\vm_math.c">
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
       </LanguageStandard>
     </ClCompile>
     <ClCompile Include="src\vm_mem.c">
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
       </LanguageStandard>
     </ClCompile>
     <ClCompile Include="src\vm_opcodes.c">
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
       </LanguageStandard>
     </ClCompile>
     <ClCompile Include="src\vm_string.c">
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
       </LanguageStandard>
     </ClCompile>
   </ItemGroup>

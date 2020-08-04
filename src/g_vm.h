@@ -231,6 +231,20 @@ typedef struct
 #endif
 } qcvm_stack_t;
 
+typedef enum
+{
+	QCVM_POINTER_NULL,
+	QCVM_POINTER_GLOBAL,
+	QCVM_POINTER_ENTITY,
+	QCVM_POINTER_STACK
+} qcvm_pointer_type_t;
+
+typedef struct
+{
+	qcvm_pointer_type_t	type : 4;
+	uint32_t offset : 28;
+} qcvm_pointer_t;
+
 void qcvm_stack_needs_resize(qcvm_stack_t *stack);
 void qcvm_stack_push_ref_string(qcvm_stack_t *stack, const qcvm_string_backup_t ref_string);
 

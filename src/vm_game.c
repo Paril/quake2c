@@ -18,14 +18,14 @@ static void QC_ClearEntity(qcvm_t *vm)
 	
 	entity->s.number = number;
 
-	if (number > 0 && number <= game.num_clients)
-		entity->client = &game.clients[number - 1];
-
 	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, entity, globals.edict_size / sizeof(qcvm_global_t), false);
 }
 
 void qcvm_sync_player_state(qcvm_t *vm, edict_t *ent)
 {
+	if (!ent->client)
+		return;
+
 	for (const qcvm_field_wrapper_t *wrap = vm->field_wraps.wrap_head; wrap; wrap = wrap->next)
 	{
 		const int32_t *src = (int32_t *)qcvm_get_entity_field_pointer(ent, wrap->field_offset);
@@ -38,12 +38,6 @@ void qcvm_sync_player_state(qcvm_t *vm, edict_t *ent)
 			*(int32_t *)((uint8_t *)(ent->client) + wrap->client_offset) = *src;
 #pragma GCC diagnostic pop
 	}
-}
-
-static void QC_SyncPlayerState(qcvm_t *vm)
-{
-	edict_t *ent = qcvm_argv_entity(vm, 0);
-	qcvm_sync_player_state(vm, ent);
 }
 
 const char *ParseSlashes(const char *value)
@@ -177,7 +171,6 @@ void qcvm_init_game_builtins(qcvm_t *vm)
 {
 	qcvm_register_builtin(SetNumEdicts);
 	qcvm_register_builtin(ClearEntity);
-	qcvm_register_builtin(SyncPlayerState);
 	
 	qcvm_register_builtin(entity_key_parse);
 	qcvm_register_builtin(struct_key_parse);

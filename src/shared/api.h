@@ -179,8 +179,8 @@ typedef struct
 {
 	uint8_t			msec;
 	button_bits_t	buttons;
-	short			angles[3];
-	short			forwardmove, sidemove, upmove;
+	int16_t			angles[3];
+	int16_t			forwardmove, sidemove, upmove;
 	uint8_t			impulse;	// remove?
 	uint8_t			lightlevel;	// light level the player is standing on
 } usercmd_t;
@@ -224,12 +224,16 @@ typedef struct
 {
 	pmtype_t	pm_type;
 
-	short		origin[3];		// 12.3
-	short		velocity[3];	// 12.3
+#ifdef KMQUAKE2_ENGINE_MOD
+	int32_t		origin[3];		// 12.3
+#else
+	int16_t		origin[3];		// 12.3
+#endif
+	int16_t		velocity[3];	// 12.3
 	pmflags_t	pm_flags;		// ducked, jump_held, etc
 	uint8_t		pm_time;		// each unit = 8 ms
-	short		gravity;
-	short		delta_angles[3];	// add to command angles to get view direction
+	int16_t		gravity;
+	int16_t		delta_angles[3];	// add to command angles to get view direction
 												// changed by spawns, rotating objects, and teleporters
 } pmove_state_t;
 
@@ -245,22 +249,28 @@ typedef struct
 	qboolean	snapinitial;    // if s has been changed outside pmove
 
 	// results (out)
-	int		numtouch;
+	int32_t	numtouch;
 	edict_t	*touchents[MAX_TOUCH];
 
 	vec3_t	viewangles;         // clamped
-	float	viewheight;
+	vec_t	viewheight;
 
 	vec3_t	mins, maxs;         // bounding box size
 
 	edict_t	*groundentity;
-	int		watertype;
-	int		waterlevel;
+	int32_t	watertype;
+	int32_t	waterlevel;
 
 	// callbacks to test the world
 	trace_t			(* q_gameabi trace)(const vec3_t *start, const vec3_t *mins, const vec3_t *maxs, const vec3_t *end);
 	content_flags_t	(*pointcontents)(const vec3_t *point);
 } pmove_t;
+
+#ifdef KMQUAKE2_ENGINE_MOD
+typedef int32_t fileHandle_t;
+
+typedef int32_t fsMode_t;
+#endif
 
 //===============================================================
 
@@ -341,6 +351,24 @@ typedef struct
 	void (*AddCommandString)(const char *text);
 
 	void (*DebugGraph)(vec_t value, int color);
+
+	// Knightmare- support game DLL loading from pak files thru engine
+	// This can be used to load script files, etc
+#ifdef KMQUAKE2_ENGINE_MOD
+	char	**(*ListPak) (char *find, int *num);	// Deprecated- DO NOT USE!
+	int		(*LoadFile) (char *name, void **buf);
+	void	(*FreeFile) (void *buf);
+	void	(*FreeFileList) (char **list, int n);
+	int		(*OpenFile) (const char *name, fileHandle_t *f, fsMode_t mode);
+	int		(*OpenCompressedFile) (const char *zipName, const char *fileName, fileHandle_t *f, fsMode_t mode);
+	void	(*CloseFile) (fileHandle_t f);
+	int		(*FRead) (void *buffer, int size, fileHandle_t f);
+	int		(*FWrite) (const void *buffer, int size, fileHandle_t f);
+	char	*(*FS_GameDir) (void);
+	char	*(*FS_SaveGameDir) (void);
+	void	(*CreatePath) (char *path);
+	char	**(*GetFileList) (const char *path, const char *extension, int *num);
+#endif
 } game_import_t;
 
 //

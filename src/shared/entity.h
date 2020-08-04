@@ -18,14 +18,23 @@ typedef struct
 	vec3_t  old_origin;     // for lerping
 	int     modelindex;
 	int     modelindex2, modelindex3, modelindex4;  // weapons, CTF flags, etc
+#ifdef KMQUAKE2_ENGINE_MOD //Knightmare- Privater wanted this
+	int		modelindex5, modelindex6;	//more attached models
+#endif
 	int     frame;
 	int     skinnum;
+#ifdef KMQUAKE2_ENGINE_MOD //Knightmare- allow the server to set this
+	float	alpha;	//entity transparency
+#endif
 	entity_effects_t	effects;
 	render_effects_t	renderfx;
 	int     solid;			// for client side prediction, 8*(bits 0-4) is x/y radius
 							// 8*(bits 5-9) is z down distance, 8(bits10-15) is z up
 							// gi.linkentity sets this properly
 	int     sound;			// for looping sounds, to guarantee shutoff
+#ifdef KMQUAKE2_ENGINE_MOD // Knightmare- added sound attenuation
+	float	attenuation;
+#endif
 	entity_event_t	event;	// impulse events -- muzzle flashes, footsteps, etc
 							// events only go out for a single frame, they
 							// are automatically cleared each frame
