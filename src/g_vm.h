@@ -49,8 +49,6 @@ enum
 typedef int qcvm_string_t;
 
 // NOTE: in QC, the value 0 is used for the world.
-// For compatibility sake, we also consider 0 to be world,
-// but entities are direct memory addresses into globals.edicts.
 // The value "1" is used to mean a null entity, which is required
 // to differentiate things like groundentity that can be the world.
 enum
@@ -482,7 +480,8 @@ void qcvm_set_global(qcvm_t *vm, const qcvm_global_t global, const void *value, 
 
 qcvm_string_t qcvm_set_global_str(qcvm_t *vm, const qcvm_global_t global, const char *value);
 
-qcvm_string_t qcvm_set_string_ptr(qcvm_t *vm, qcvm_global_t *ptr, const char *value);
+// This is mostly an internal function, but basically assigns string to pointer.
+qcvm_string_t qcvm_set_string_ptr(qcvm_t *vm, void *ptr, const char *value);
 
 // safe way of copying globals *of the same types* between globals
 void qcvm_copy_globals(qcvm_t *vm, const qcvm_global_t dst, const qcvm_global_t src, const size_t size);
@@ -525,6 +524,8 @@ vec_t qcvm_argv_float(const qcvm_t *vm, const uint8_t d);
 
 vec3_t qcvm_argv_vector(const qcvm_t *vm, const uint8_t d);
 
+qcvm_pointer_t qcvm_argv_pointer(const qcvm_t *vm, const uint8_t d);
+
 void qcvm_return_float(qcvm_t *vm, const vec_t value);
 
 void qcvm_return_vector(qcvm_t *vm, const vec3_t value);
@@ -538,6 +539,8 @@ void qcvm_return_func(qcvm_t *vm, const qcvm_func_t func);
 void qcvm_return_string_id(qcvm_t *vm, const qcvm_string_t str);
 
 void qcvm_return_string(qcvm_t *vm, const char *str);
+
+void qcvm_return_pointer(qcvm_t *vm, const qcvm_pointer_t ptr);
 
 bool qcvm_find_string(qcvm_t *vm, const char *value, qcvm_string_t *rstr);
 
@@ -557,19 +560,13 @@ const char *qcvm_get_string(const qcvm_t *vm, const qcvm_string_t str);
 
 size_t qcvm_get_string_length(const qcvm_t *vm, const qcvm_string_t str);
 
-void *qcvm_get_entity_field_pointer(edict_t *ent, const int32_t field);
+qcvm_pointer_t qcvm_get_entity_field_pointer(qcvm_t *vm, edict_t *ent, const int32_t field);
 
-int32_t qcvm_entity_field_address(edict_t *ent, const int32_t field);
+bool qcvm_pointer_valid(const qcvm_t *vm, const qcvm_pointer_t pointer, const bool allow_null, const size_t len);
 
-uint8_t *qcvm_address_to_entity_field(const int32_t address);
+qcvm_pointer_t qcvm_make_pointer(const qcvm_t *vm, const qcvm_pointer_type_t type, const void *pointer);
 
-ptrdiff_t qcvm_address_to_field(edict_t *entity, const int32_t address);
-
-edict_t *qcvm_address_to_entity(const int32_t address);
-
-bool qcvm_address_is_entity(const int32_t address);
-
-bool qcvm_pointer_valid(const qcvm_t *vm, const size_t address, const bool allow_null, const size_t len);
+void *qcvm_resolve_pointer(const qcvm_t *vm, const qcvm_pointer_t pointer);
 
 const char *qcvm_stack_trace(const qcvm_t *vm);
 

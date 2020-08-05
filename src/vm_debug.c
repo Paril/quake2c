@@ -26,7 +26,7 @@ static void QC_dumpentity(qcvm_t *vm)
 	{
 		fprintf(fp, "%s: ", qcvm_get_string(vm, f->name_index));
 
-		const ptrdiff_t val = (ptrdiff_t)(qcvm_get_entity_field_pointer(ent, (int32_t)f->global_index));
+		const ptrdiff_t val = (ptrdiff_t)(qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, ent, (int32_t)f->global_index)));
 
 		switch (f->id)
 		{

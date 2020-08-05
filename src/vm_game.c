@@ -28,7 +28,7 @@ void qcvm_sync_player_state(qcvm_t *vm, edict_t *ent)
 
 	for (const qcvm_field_wrapper_t *wrap = vm->field_wraps.wrap_head; wrap; wrap = wrap->next)
 	{
-		const int32_t *src = (int32_t *)qcvm_get_entity_field_pointer(ent, wrap->field_offset);
+		const int32_t *src = (int32_t *)qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, ent, wrap->field_offset));
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
@@ -120,7 +120,7 @@ static void QC_entity_key_parse(qcvm_t *vm)
 	const int32_t field = qcvm_argv_int32(vm, 1);
 	const char *value = qcvm_argv_string(vm, 2);
 
-	void *ptr = qcvm_get_entity_field_pointer(ent, field);
+	void *ptr = qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, ent, field));
 
 	qcvm_definition_t *f = vm->field_map_by_id[(qcvm_global_t)field];
 

@@ -492,8 +492,8 @@ static trace_t QC_pm_trace(const vec3_t *start, const vec3_t *mins, const vec3_t
 
 	qcvm_function_t *func = qcvm_get_function(pmove_vm, QC_pm_trace_func);
 	qcvm_set_allowed_stack(pmove_vm, &qc_tr, sizeof(qc_tr));
-	const int32_t address = (int32_t)&qc_tr;
-	qcvm_set_global_typed_value(int32_t, pmove_vm, GLOBAL_PARM0, address);
+	const qcvm_pointer_t pointer = qcvm_make_pointer(pmove_vm, QCVM_POINTER_STACK, &qc_tr);
+	qcvm_set_global_typed_value(qcvm_pointer_t, pmove_vm, GLOBAL_PARM0, pointer);
 	qcvm_set_global_typed_ptr(vec3_t, pmove_vm, GLOBAL_PARM1, start);
 	qcvm_set_global_typed_ptr(vec3_t, pmove_vm, GLOBAL_PARM2, mins);
 	qcvm_set_global_typed_ptr(vec3_t, pmove_vm, GLOBAL_PARM3, maxs);

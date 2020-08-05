@@ -327,8 +327,8 @@ static void RestoreClientData()
 
 			const size_t len = def->id == TYPE_VECTOR ? 3 : 1;
 
-			void *dst = qcvm_get_entity_field_pointer(ent, def->global_index);
-			void *src = qcvm_get_entity_field_pointer(backup, def->global_index);
+			void *dst = qcvm_resolve_pointer(qvm, qcvm_get_entity_field_pointer(qvm, ent, def->global_index));
+			void *src = (int32_t *)backup + def->global_index;
 
 			memcpy(dst, src, sizeof(qcvm_global_t) * len);
 		}
@@ -514,15 +514,6 @@ static const uint32_t	SAVE_MAGIC1		= (('V'<<24)|('S'<<16)|('C'<<8)|'Q');	// "QCS
 static const uint32_t	SAVE_MAGIC2		= (('A'<<24)|('S'<<16)|('C'<<8)|'Q');	// "QCSA"
 static const uint32_t	SAVE_VERSION	= 666;
 
-enum
-{
-	POINTER_NONE,
-	POINTER_GLOBAL,
-	POINTER_ENT
-};
-
-typedef uint8_t pointer_class_type_t;
-
 static void WriteDefinitionData(FILE *fp, const qcvm_definition_t *def, const qcvm_global_t *value)
 {
 	const qcvm_deftype_t type = def->id & ~TYPE_GLOBAL;
@@ -547,58 +538,6 @@ static void WriteDefinitionData(FILE *fp, const qcvm_definition_t *def, const qc
 		fwrite(str, sizeof(char), strlength, fp);
 		return;
 	}
-	else if (type == TYPE_POINTER)
-	{
-		pointer_class_type_t classtype = POINTER_NONE;
-
-		if (*value == GLOBAL_NULL)
-		{
-			fwrite(&classtype, sizeof(classtype), 1, fp);
-			return;
-		}
-
-		const ptrdiff_t ptr_val = (ptrdiff_t)*value;
-		
-		if (ptr_val >= (ptrdiff_t)qvm->global_data && ptr_val < (ptrdiff_t)(qvm->global_data + qvm->global_size))
-		{
-			classtype = POINTER_GLOBAL;
-			fwrite(&classtype, sizeof(classtype), 1, fp);
-
-			// find closest def
-			qcvm_global_t def_id = (qcvm_global_t)((ptr_val - (ptrdiff_t)qvm->global_data) / sizeof(qcvm_global_t));
-			size_t offset = 0;
-
-			while (def_id >= GLOBAL_QC)
-			{
-				if (qvm->definition_map_by_id[def_id])
-					break;
-
-				def_id = (qcvm_global_t)((int32_t)(def_id) - 1);
-				offset++;
-			}
-
-			if (def_id < GLOBAL_QC)
-				qcvm_error(qvm, "couldn't find ptr reference");
-
-			qcvm_definition_t *closest_def = qvm->definition_map_by_id[def_id];
-			const char *str = qcvm_get_string(qvm, closest_def->name_index);
-			const size_t len = qcvm_get_string_length(qvm, closest_def->name_index);
-
-			fwrite(&len, sizeof(len), 1, fp);
-			fwrite(str, sizeof(char), strlen(str), fp);
-			fwrite(&offset, sizeof(offset), 1, fp);
-		}
-		else if (ptr_val >= (ptrdiff_t)globals.edicts && ptr_val < (ptrdiff_t)globals.edicts + (globals.edict_size * globals.max_edicts))
-		{
-			classtype = POINTER_ENT;
-			qcvm_error(qvm, "ent field ptrs not supported at the moment");
-			//fwrite
-		}
-		else
-			qcvm_error(qvm, "somehow got a bad field ptr");
-		
-		return;
-	}
 	else if (type == TYPE_ENTITY)
 	{
 		const edict_t *ent = qcvm_ent_to_entity((qcvm_ent_t)*value, false);
@@ -617,7 +556,7 @@ static void WriteDefinitionData(FILE *fp, const qcvm_definition_t *def, const qc
 
 static void WriteEntityFieldData(FILE *fp, edict_t *ent, const qcvm_definition_t *def)
 {
-	const int32_t *field = (const int32_t *)qcvm_get_entity_field_pointer(ent, (int32_t)def->global_index);
+	const int32_t *field = (const int32_t *)qcvm_resolve_pointer(qvm, qcvm_get_entity_field_pointer(qvm, ent, (int32_t)def->global_index));
 	WriteDefinitionData(fp, def, (const qcvm_global_t *)field);
 }
 
@@ -655,48 +594,6 @@ static void ReadDefinitionData(qcvm_t *vm, FILE *fp, const qcvm_definition_t *de
 		}
 		return;
 	}
-	else if (type == TYPE_POINTER)
-	{
-		pointer_class_type_t ptrclass;
-		fread(&ptrclass, sizeof(ptrclass), 1, fp);
-
-		if (ptrclass == POINTER_NONE)
-		{
-			*value = GLOBAL_NULL;
-			return;
-		}
-		else if (ptrclass == POINTER_GLOBAL)
-		{
-			size_t global_len;
-			fread(&global_len, sizeof(global_len), 1, fp);
-			char *global_name = qcvm_temp_buffer(vm, global_len);
-			fread(global_name, sizeof(char), global_len, fp);
-			global_name[global_len] = 0;
-
-			qcvm_definition_hash_t *hashed = qvm->definition_hashes[Q_hash_string(global_name, qvm->definitions_size)];
-
-			for (; hashed; hashed = hashed->hash_next)
-				if (!strcmp(qcvm_get_string(vm, hashed->def->name_index), global_name))
-					break;
-
-			if (!hashed)
-				qcvm_error(qvm, "bad pointer; can't map %s", global_name);
-
-			qcvm_definition_t *global_def = hashed->def;
-			size_t global_offset;
-			fread(&global_offset, sizeof(global_offset), 1, fp);
-
-			qcvm_global_t *ptr = qcvm_get_global(qvm, (qcvm_global_t)((uint32_t)global_def->global_index + global_offset));
-			*value = (qcvm_global_t)(ptrdiff_t)ptr;
-			return;
-		}
-		else if (ptrclass == POINTER_ENT)
-		{
-			qcvm_error(qvm, "ent pointers not supported");
-		}
-		
-		qcvm_error(qvm, "bad pointer");
-	}
 	else if (type == TYPE_ENTITY)
 	{
 		int32_t number;
@@ -716,7 +613,7 @@ static void ReadDefinitionData(qcvm_t *vm, FILE *fp, const qcvm_definition_t *de
 
 static void ReadEntityFieldData(qcvm_t *vm, FILE *fp, edict_t *ent, const qcvm_definition_t *def)
 {
-	int32_t *field = (int32_t *)qcvm_get_entity_field_pointer(ent, (int32_t)def->global_index);
+	int32_t *field = (int32_t *)qcvm_resolve_pointer(qvm, qcvm_get_entity_field_pointer(qvm, ent, (int32_t)def->global_index));
 	ReadDefinitionData(vm, fp, def, (qcvm_global_t *)field);
 }
 
