@@ -105,7 +105,7 @@ qcvm_string_t qcvm_string_list_store(qcvm_string_list_t *list, const char *str, 
 				memcpy(list->strings, old_strings, sizeof(qcvm_ref_counted_string_t) * list->strings_size);
 				qcvm_mem_free(list->vm, old_strings);
 			}
-			qcvm_debug(list->vm, "Increased ref string storage to %u\n", list->strings_allocated);
+			qcvm_debug(list->vm, "Increased ref string storage to %u due to \"%s\"\n", list->strings_allocated, str);
 		}
 
 		index = list->strings_size++;
@@ -205,7 +205,7 @@ static void qcvm_string_list_ref_link(qcvm_string_list_t *list, uint32_t hash, c
 		const size_t old_size = list->ref_storage_allocated;
 		list->ref_storage_allocated += REF_STRING_RESERVE * 2;
 
-		qcvm_debug(list->vm, "Increased ref string pointer storage to %u\n", list->ref_storage_allocated);
+		qcvm_debug(list->vm, "Increased ref string pointer storage to %u due to \"%s\"\n", list->ref_storage_allocated, qcvm_get_string(list->vm, id));
 
 		qcvm_ref_storage_hash_t	*old_ref_storage_data = list->ref_storage_data;
 		list->ref_storage_data = (qcvm_ref_storage_hash_t*)qcvm_alloc(list->vm, sizeof(qcvm_ref_storage_hash_t) * list->ref_storage_allocated);
@@ -276,6 +276,10 @@ static void qcvm_string_list_ref_link(qcvm_string_list_t *list, uint32_t hash, c
 	// hash us in
 	hashed->ptr = ptr;
 	hashed->id = id;
+#ifdef _DEBUG
+	if (list->vm->state.current >= 0)
+		hashed->stack = list->vm->state.stack[list->vm->state.current];
+#endif
 	hashed->hash_value = hash;
 	qcvm_ref_storage_hash_t *old_head = list->ref_storage_hashes[hash];
 	hashed->hash_next = old_head;
@@ -285,6 +289,125 @@ static void qcvm_string_list_ref_link(qcvm_string_list_t *list, uint32_t hash, c
 
 	list->ref_storage_stored++;
 }
+
+#ifdef _DEBUG
+static const char *qcvm_function_for_local(qcvm_t *vm, const qcvm_global_t local)
+{
+	qcvm_global_t closest = -1;
+	qcvm_function_t *closest_func = NULL;
+
+	for (qcvm_function_t *func = vm->functions; func < vm->functions + vm->functions_size; func++)
+	{
+		if (local < func->first_arg)
+			continue;
+		else if (local == func->first_arg)
+		{
+			closest_func = func;
+			break;
+		}
+		else if ((local - func->first_arg) < closest)
+		{
+			closest = (local - func->first_arg);
+			closest_func = func;
+		}
+	}
+
+	if (closest_func && closest_func->name_index)
+		return qcvm_get_string(vm, closest_func->name_index);
+
+	return NULL;
+}
+
+static const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
+{
+	if (ptr >= vm->global_data && ptr < (vm->global_data + vm->global_size))
+	{
+		const qcvm_global_t offset = ptr - vm->global_data;
+		qcvm_global_t closest = -1;
+		qcvm_definition_t *closest_def = NULL;
+
+		for (qcvm_definition_t *def = vm->definitions; def < vm->definitions + vm->definitions_size; def++)
+		{
+			if (def->global_index == offset)
+			{
+				closest = def->global_index;
+				closest_def = def;
+				break;
+			}
+			else if (def->global_index < offset)
+			{
+				if ((offset - def->global_index) < closest)
+				{
+					closest = offset - def->global_index;
+					closest_def = def;
+				}
+			}
+		}
+
+		if (closest == -1 || !closest_def || !closest_def->name_index)
+			return qcvm_temp_format(vm, "global %u", offset);
+
+		const char *func = qcvm_function_for_local(vm, offset);
+
+		if (func)
+			return qcvm_temp_format(vm, "global %s::%s + %u", func, qcvm_get_string(vm, closest_def->name_index), closest);
+
+		return qcvm_temp_format(vm, "global %s + %u", qcvm_get_string(vm, closest_def->name_index), closest);
+	}
+	else if (ptr >= (qcvm_global_t *)globals.edicts && ptr < (qcvm_global_t *)globals.edicts + (globals.edict_size * globals.max_edicts))
+	{
+		const edict_t *ent = qcvm_ent_to_entity((qcvm_ent_t)ptr, false);
+		const qcvm_global_t field_offset = ptr - (qcvm_global_t *)ent;
+
+		if (field_offset < vm->field_real_size)
+		{
+			const qcvm_definition_t *def = vm->field_map_by_id[field_offset];
+			size_t offset;
+
+			for (offset = 0; !def; def = vm->field_map_by_id[field_offset - (++offset)]) ;
+
+			if (def)
+			{
+				if (offset)
+					return qcvm_temp_format(vm, "field %u::%s + %u", ent->s.number, qcvm_get_string(vm, def->name_index), offset);
+				
+				return qcvm_temp_format(vm, "field %u::%s", ent->s.number, qcvm_get_string(vm, def->name_index));
+			}
+		}
+
+		return qcvm_temp_format(vm, "field %u::%u ???", ent->s.number, field_offset);
+
+	}
+
+	return "???";
+}
+
+void qcvm_string_list_dump_refs(FILE *fp, qcvm_string_list_t *list)
+{
+	fprintf(fp, "strings: %u / %u (%u / %u free indices)\n", list->strings_size, list->strings_allocated, list->free_indices_size, list->free_indices_allocated);
+	fprintf(fp, "ref pointers: %u stored / %u\n", list->ref_storage_stored, list->ref_storage_allocated);
+
+	for (qcvm_ref_counted_string_t *str = list->strings; str < list->strings + list->strings_size; str++)
+	{
+		if (!str->str)
+			continue;
+
+		const qcvm_string_t id = -((str - list->strings) + 1);
+
+		fprintf(fp, "%i\t%s\t%u\n", id, str->str, str->ref_count);
+
+		for (qcvm_ref_storage_hash_t *hashed = list->ref_storage_data; hashed < list->ref_storage_data + list->ref_storage_allocated; hashed++)
+		{
+			if (!hashed->ptr)
+				continue;
+			else if (hashed->id != id)
+				continue;
+
+			fprintf(fp, "\t%s\t%s\n", qcvm_dump_pointer(list->vm, (const qcvm_global_t *)hashed->ptr), qcvm_stack_entry(list->vm, &hashed->stack));
+		}
+	}
+}
+#endif
 
 static void qcvm_string_list_ref_unlink(qcvm_string_list_t *list, qcvm_ref_storage_hash_t *hashed)
 {
@@ -764,7 +887,7 @@ void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *fie
 		return;
 	}
 
-	gi.dprintf("QCVM WARNING: can't find field %s in progs", field_name);
+	gi.dprintf("QCVM WARNING: can't find field %s in progs\n", field_name);
 }
 
 static void qcvm_state_init(qcvm_state_t *state, qcvm_t *vm)
@@ -981,30 +1104,33 @@ void qcvm_copy_globals(qcvm_t *vm, const qcvm_global_t dst, const qcvm_global_t 
 	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, src_ptr, dst_ptr, count);
 }
 
+const char *qcvm_stack_entry(const qcvm_t *vm, const qcvm_stack_t *s)
+{
+	if (!vm->linenumbers)
+		return "dunno:dunno";
+
+	if (!s->function)
+		return "C code";
+
+	const char *func = qcvm_get_string(vm, s->function->name_index);
+
+	if (!*func)
+		func = "dunno";
+
+	const char *file = qcvm_get_string(vm, s->function->file_index);
+
+	if (!*file)
+		file = "dunno.qc";
+
+	return qcvm_temp_format(vm, "%s (%s:%i @ stmt %u)", func, file, qcvm_line_number_for(vm, s->statement), s->statement - vm->statements);
+}
+
 const char *qcvm_stack_trace(const qcvm_t *vm)
 {
 	const char *str = "> ";
 
 	for (qcvm_stack_t *s = &vm->state.stack[vm->state.current]; s >= vm->state.stack && s->function; s--)
-	{
-		if (!vm->linenumbers)
-			return "dunno:dunno";
-
-		if (!s->function)
-			return "C code";
-
-		const char *func = qcvm_get_string(vm, s->function->name_index);
-
-		if (!*func)
-			func = "dunno";
-
-		const char *file = qcvm_get_string(vm, s->function->file_index);
-
-		if (!*file)
-			file = "dunno.qc";
-
-		str = qcvm_temp_format(vm, "%s%s (%s:%i @ stmt %u)\n", str, func, file, qcvm_line_number_for(vm, s->statement), s->statement - vm->statements);
-	}
+		str = qcvm_temp_format(vm, "%s%s\n", str, qcvm_stack_entry(vm, s));
 
 	return str;
 }
@@ -1021,7 +1147,11 @@ edict_t *qcvm_ent_to_entity(const qcvm_ent_t ent, bool allow_invalid)
 	else if (ent == ENT_WORLD)
 		return itoe(0);
 
-	return itoe(((uint8_t *)(ent) - (uint8_t *)(globals.edicts)) / globals.edict_size);
+	int32_t num = ((uint8_t *)(ent) - (uint8_t *)(globals.edicts)) / globals.edict_size;
+
+	assert(num >= 0 && num < MAX_EDICTS);
+
+	return itoe(num);
 }
 
 qcvm_ent_t qcvm_entity_to_ent(edict_t *ent)
@@ -1881,14 +2011,11 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 	fseek(fp, header.sections.field.offset, SEEK_SET);
 	VMLoadDefinitions(vm, fp, vm->fields, &header, vm->fields_size);
 
-	vm->field_map_by_id = (qcvm_definition_t **)qcvm_alloc(vm, sizeof(qcvm_definition_t) * vm->fields_size);
 	vm->field_hashes = (qcvm_definition_hash_t **)qcvm_alloc(vm, sizeof(qcvm_definition_hash_t *) * vm->fields_size);
 	vm->field_hashes_data = (qcvm_definition_hash_t *)qcvm_alloc(vm, sizeof(qcvm_definition_hash_t) * vm->fields_size);
 
 	for (qcvm_definition_t *field = vm->fields; field < vm->fields + vm->fields_size; field++)
 	{
-		vm->field_map_by_id[field->global_index] = field;
-
 		qcvm_definition_hash_t *hashed = &vm->field_hashes_data[field - vm->fields];
 		hashed->def = field;
 		hashed->hash_value = Q_hash_string(qcvm_get_string(vm, field->name_index), vm->fields_size);
@@ -1959,8 +2086,28 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 	}
 }
 
-void qcvm_check(const qcvm_t *vm)
+void qcvm_check(qcvm_t *vm)
 {
+	for (qcvm_definition_t *field = vm->fields + 1; field < vm->fields + vm->fields_size; field++)
+		vm->field_real_size = maxsz(vm->field_real_size, field->global_index + (field->id == TYPE_VECTOR ? 3 : 1));
+
+	vm->field_map_by_id = (qcvm_definition_t **)qcvm_alloc(vm, sizeof(qcvm_definition_t *) * vm->field_real_size);
+
+	for (qcvm_definition_t *f = vm->fields + 1; f < vm->fields + vm->fields_size; f++)
+	{
+		const char *field_name = qcvm_get_string(vm, f->name_index);
+		qcvm_definition_hash_t *hashed = vm->definition_hashes[Q_hash_string(field_name, vm->definitions_size)];
+
+		for (; hashed; hashed = hashed->hash_next)
+			if ((hashed->def->id & ~TYPE_GLOBAL) == TYPE_FIELD && !strcmp(qcvm_get_string(vm, hashed->def->name_index), field_name))
+				break;
+
+		if (!hashed)
+			qcvm_error(vm, "Bad field %s", field_name);
+
+		vm->field_map_by_id[vm->global_data[hashed->def->global_index]] = f;
+	}
+
 	for (qcvm_function_t *func = vm->functions; func < vm->functions + vm->functions_size; func++)
 		if (func->id == 0 && func->name_index != STRING_EMPTY)
 			gi.dprintf("Missing builtin function: %s\n", qcvm_get_string(vm, func->name_index));

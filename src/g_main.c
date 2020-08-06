@@ -37,12 +37,17 @@ bool is_kmq2_progs;
 
 static void FieldCoord2Short(void *out, const void *in)
 {
-	*(short *)(out) = (*(const vec_t *)(in) * coord2short);
+	*(int16_t *)(out) = (*(const vec_t *)(in) * coord2short);
+}
+
+static void FieldCoord2Int(void *out, const void *in)
+{
+	*(int32_t *)(out) = (*(const vec_t *)(in) * coord2short);
 }
 
 static void FieldCoord2Angle(void *out, const void *in)
 {
-	*(short *)(out) = (*(const vec_t *)(in) * angle2short);
+	*(int16_t *)(out) = (*(const vec_t *)(in) * angle2short);
 }
 
 #define qcvm_field_wrap_to_type(name, T) \
@@ -106,7 +111,12 @@ static void InitFieldWraps()
 	RegisterSingle(ps.pmove.pm_type);
 	
 #ifdef KMQUAKE2_ENGINE_MOD
-	RegisterVector(ps.pmove.origin);
+#define RegisterVectorCoord2Int(name) \
+	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name, 0, offsetof(gclient_t, name), FieldCoord2Int); \
+	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name, 1, offsetof(gclient_t, name) + 4, FieldCoord2Int); \
+	qcvm_field_wrap_list_register(&qvm->field_wraps, "client." #name, 2, offsetof(gclient_t, name) + 8, FieldCoord2Int)
+
+	RegisterVectorCoord2Int(ps.pmove.origin);
 #else
 	RegisterVectorCoord2Short(ps.pmove.origin);
 #endif
@@ -180,25 +190,83 @@ static void InitKMQ2Compatibility(void)
 {
 	size_t offset = 0;
 
+	size_t global_start = UINT_MAX, global_end = 0;
+
+	qcvm_global_t s_modelindex4 = 0, s_skinnum = 0, s_sound = 0;
+
 	// after modelindex4, add 2 indices
 	// after skinnum, add 1 index
 	// after sound, add 1 index
-	for (qcvm_definition_t *field = qvm->fields; field < qvm->fields + qvm->fields_size; field++)
+	for (size_t i = 1; i < qvm->fields_size; i++)
 	{
-		if (!field->name_index)
+		qcvm_definition_t *field = &qvm->fields[i];
+
+		if (!field || !field->name_index)
 			continue;
 
+		const char *field_name = qcvm_get_string(qvm, field->name_index);
+		qcvm_definition_hash_t *hashed = qvm->definition_hashes[Q_hash_string(field_name, qvm->definitions_size)];
+
+		for (; hashed; hashed = hashed->hash_next)
+			if ((hashed->def->id & ~TYPE_GLOBAL) == TYPE_FIELD && !strcmp(qcvm_get_string(qvm, hashed->def->name_index), field_name))
+				break;
+
+		if (!hashed)
+			qcvm_error(qvm, "Bad field %s", field_name);
+		
+		global_start = minsz(global_start, hashed->def->global_index);
+		global_end = maxsz(global_end, hashed->def->global_index + ((field->id == TYPE_VECTOR) ? 3 : 1));
+
+		field->global_index += offset;
+
 		if (!strcmp(qcvm_get_string(qvm, field->name_index), "s.modelindex4"))
+		{
 			offset += 2;
+			s_modelindex4 = hashed->def->global_index;
+		}
 		else if (!strcmp(qcvm_get_string(qvm, field->name_index), "s.skinnum"))
+		{
 			offset++;
+			s_skinnum = hashed->def->global_index;
+		}
 		else if (!strcmp(qcvm_get_string(qvm, field->name_index), "s.sound"))
+		{
 			offset++;
-		else if (offset)
-			field->global_index += offset;
+			s_sound = hashed->def->global_index;
+		}
+	}
+
+	for (size_t i = global_start; i < global_end; i++)
+	{
+		offset = 0;
+		
+		if (i > s_modelindex4)
+			offset += 2;
+		if (i > s_skinnum)
+			offset++;
+		if (i > s_sound)
+			offset++;
+
+		qvm->global_data[i] += offset;
 	}
 }
 #endif
+
+static void WipeClientPointers()
+{
+	for (size_t i = 0; i < game.num_clients; i++)
+		itoe(i + 1)->client = NULL;
+}
+
+static void WipeEntities()
+{
+	memset(globals.edicts, 0, globals.max_edicts * globals.edict_size);
+
+	for (int32_t i = 0; i < globals.max_edicts + 1; i++)
+		itoe(i)->s.number = i;
+
+	WipeClientPointers();
+}
 
 /*
 ============
@@ -252,19 +320,16 @@ static void InitGame ()
 	game.num_clients = minsz(MAX_CLIENTS, (size_t)maxclients->value);
 	game.clients = (gclient_t *)gi.TagMalloc(sizeof(gclient_t) * game.num_clients, TAG_GAME);
 
-	size_t entity_data_size = 0;
-
-	for (qcvm_definition_t *field = qvm->fields; field < qvm->fields + qvm->fields_size; field++)
-		entity_data_size = maxsz(entity_data_size, (field->global_index + 3) * sizeof(qcvm_global_t));
-
 	// initialize all entities for this game
 	globals.max_edicts = MAX_EDICTS;
-	globals.edict_size = entity_data_size;
+	globals.edict_size = qvm->field_real_size * 4;
 
-	qcvm_debug(qvm, "Field size: %u bytes\n", entity_data_size);
+	qcvm_debug(qvm, "Field size: %u bytes\n", globals.edict_size);
 
 	globals.num_edicts = game.num_clients + 1;
 	globals.edicts = (edict_t *)gi.TagMalloc((globals.max_edicts + 1) * globals.edict_size, TAG_GAME);
+
+	WipeEntities();
 
 	func = qcvm_get_function(qvm, qce.InitGame);
 	qcvm_execute(qvm, func);
@@ -283,12 +348,6 @@ static void ShutdownGame()
 
 	gi.FreeTags (TAG_LEVEL);
 	gi.FreeTags (TAG_GAME);
-}
-
-static void WipeClientPointers()
-{
-	for (size_t i = 0; i < game.num_clients; i++)
-		itoe(i + 1)->client = NULL;
 }
 
 static void AssignClientPointer(edict_t *e)
@@ -340,16 +399,6 @@ static void RestoreClientData()
 	qcvm_string_list_check_ref_unset(&qvm->dynamic_strings, game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t), true);
 	gi.TagFree(game.client_load_data);
 	game.client_load_data = NULL;
-}
-
-static void WipeEntities()
-{
-	memset(globals.edicts, 0, globals.max_edicts * globals.edict_size);
-
-	for (int32_t i = 0; i < globals.max_edicts + 1; i++)
-		itoe(i)->s.number = i;
-
-	WipeClientPointers();
 }
 
 static void SpawnEntities(const char *mapname, const char *entities, const char *spawnpoint)
@@ -500,6 +549,16 @@ static void RunFrame()
 
 static void ServerCommand()
 {
+	const char *cmd = gi.argv(1);
+
+	if (strcmp(cmd, "qc_dump_strings") == 0)
+	{
+		FILE *fp = fopen(qcvm_temp_format(qvm, "%sstrings.txt", qvm->path), "w");
+		qcvm_string_list_dump_refs(fp, &qvm->dynamic_strings);
+		fclose(fp);
+		return;
+	}
+
 #ifdef ALLOW_DEBUGGING
 	qcvm_check_debugger_commands(qvm);
 #endif

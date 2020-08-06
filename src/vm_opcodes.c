@@ -285,8 +285,9 @@ F_OP_GT(F_OP_GT_FI, vec_t, int32_t, int32_t)
 static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 { \
 	edict_t *ent = qcvm_ent_to_entity(*qcvm_get_global_typed(qcvm_ent_t, vm, operands.a), true); \
-	int32_t field_offset = *qcvm_get_global_typed(int32_t, vm, operands.b); \
-	TType *field_value = (TType *)((int32_t*)ent + field_offset); \
+	const int32_t field = *qcvm_get_global_typed(int32_t, vm, operands.b); \
+	const qcvm_pointer_t pointer = qcvm_get_entity_field_pointer(vm, ent, field); \
+	TType *field_value = (TType *)qcvm_resolve_pointer(vm, pointer); \
 	qcvm_set_global_typed_ptr(TType, vm, operands.c, field_value); \
 	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), sizeof(TType) / sizeof(qcvm_global_t)); \
 }
@@ -899,9 +900,9 @@ static void F_OP_RANDV2(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 { \
 	edict_t *ent = qcvm_ent_to_entity(*qcvm_get_global_typed(qcvm_ent_t, vm, operands.a), true); \
-	const ptrdiff_t field_offset = *qcvm_get_global_typed(int32_t, vm, operands.b); \
-	const size_t address = (size_t)((int32_t*)ent + field_offset); \
-	TType *field_value = (TType *)address; \
+	const int32_t field = *qcvm_get_global_typed(int32_t, vm, operands.b); \
+	const qcvm_pointer_t address = qcvm_get_entity_field_pointer(vm, ent, field); \
+	TType *field_value = (TType *)qcvm_resolve_pointer(vm, address); \
 	const TType *value = qcvm_get_global_typed(TType, vm, operands.c); \
 \
 	*field_value = *value; \

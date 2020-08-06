@@ -117,15 +117,26 @@ static inline void QC_parse_value_into_ptr(qcvm_t *vm, const qcvm_deftype_t type
 static void QC_entity_key_parse(qcvm_t *vm)
 {
 	edict_t *ent = qcvm_argv_entity(vm, 0);
-	const int32_t field = qcvm_argv_int32(vm, 1);
+	const char *key = qcvm_argv_string(vm, 1);
 	const char *value = qcvm_argv_string(vm, 2);
+
+	qcvm_definition_hash_t *hashed = vm->definition_hashes[Q_hash_string(key, vm->definitions_size)];
+
+	for (; hashed; hashed = hashed->hash_next)
+		if ((hashed->def->id & ~TYPE_GLOBAL) == TYPE_FIELD && !strcmp(qcvm_get_string(vm, hashed->def->name_index), key))
+			break;
+
+	if (!hashed)
+		qcvm_error(vm, "Bad field %s", key);
+
+	const qcvm_global_t field = vm->global_data[hashed->def->global_index];
 
 	void *ptr = qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, ent, field));
 
-	qcvm_definition_t *f = vm->field_map_by_id[(qcvm_global_t)field];
+	qcvm_definition_t *f = vm->field_map_by_id[field];
 
-	if (!f)
-		qcvm_error(vm, "Couldn't match field %i", field);
+	if (!f || strcmp(key, qcvm_get_string(vm, f->name_index)) || f->global_index != field)
+		qcvm_error(vm, "Couldn't match field %u", field);
 
 	QC_parse_value_into_ptr(vm, f->id, value, ptr);
 }

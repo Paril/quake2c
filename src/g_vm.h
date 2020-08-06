@@ -260,8 +260,11 @@ static const size_t FREE_STRING_RESERVE = 64;
 
 typedef struct qcvm_ref_storage_hash_s
 {
-	const void	*ptr;
+	const void		*ptr;
 	qcvm_string_t	id;
+#ifdef _DEBUG
+	qcvm_stack_t	stack;
+#endif
 
 	uint32_t						hash_value;
 	struct qcvm_ref_storage_hash_s	*hash_next, *hash_prev;
@@ -301,6 +304,10 @@ void qcvm_string_list_mark_if_has_ref(qcvm_string_list_t *list, const void *src_
 bool qcvm_string_list_is_ref_counted(qcvm_string_list_t *list, const qcvm_string_t id);
 qcvm_string_backup_t qcvm_string_list_pop_ref(qcvm_string_list_t *list, const void *ptr);
 void qcvm_string_list_push_ref(qcvm_string_list_t *list, const qcvm_string_backup_t *backup);
+
+#ifdef _DEBUG
+void qcvm_string_list_dump_refs(FILE *fp, qcvm_string_list_t *list);
+#endif
 
 typedef struct
 {
@@ -397,6 +404,7 @@ typedef struct qcvm_s
 	qcvm_definition_t		*fields;
 	size_t					fields_size;
 	qcvm_definition_t		**field_map_by_id;
+	size_t					field_real_size;
 	qcvm_definition_hash_t	**field_hashes, *field_hashes_data;
 	qcvm_statement_t		*statements;
 	size_t					statements_size;
@@ -568,6 +576,8 @@ qcvm_pointer_t qcvm_make_pointer(const qcvm_t *vm, const qcvm_pointer_type_t typ
 
 void *qcvm_resolve_pointer(const qcvm_t *vm, const qcvm_pointer_t pointer);
 
+const char *qcvm_stack_entry(const qcvm_t *vm, const qcvm_stack_t *s);
+
 const char *qcvm_stack_trace(const qcvm_t *vm);
 
 void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function);
@@ -581,7 +591,7 @@ const char *qcvm_parse_format(const qcvm_string_t formatid, const qcvm_t *vm, co
 
 void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename);
 
-void qcvm_check(const qcvm_t *vm);
+void qcvm_check(qcvm_t *vm);
 
 void qcvm_shutdown(qcvm_t *vm);
 

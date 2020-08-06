@@ -289,3 +289,5 @@ __pycache__/
 /progs/*.asm
 /progs/*.bak
 /*.exe
+/KMQuake2 Debug
+/KMQuake2 Release

@@ -100,7 +100,7 @@ static void qcvm_debugger_thread()
 
 		thread_vm->debug.lock_mutex(input_mutex);
 		debug_pos = 0;
-		gi.dprintf("FROM DEBUGGER: %s", debug_string);
+		//gi.dprintf("FROM DEBUGGER: %s", debug_string);
 		awaiting_steal = true;
 		thread_vm->debug.unlock_mutex(input_mutex);
 
