@@ -33,7 +33,7 @@ static void QC_memclear(qcvm_t *vm)
 
 	memset(dst_ptr, 0, size);
 
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, dst_ptr, span, false);
+	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, dst_ptr, span, true);
 }
 
 static void QC_memcmp(qcvm_t *vm)

@@ -18,7 +18,7 @@ static void QC_ClearEntity(qcvm_t *vm)
 	
 	entity->s.number = number;
 
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, entity, globals.edict_size / sizeof(qcvm_global_t), false);
+	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, entity, globals.edict_size / sizeof(qcvm_global_t), true);
 }
 
 void qcvm_sync_player_state(qcvm_t *vm, edict_t *ent)

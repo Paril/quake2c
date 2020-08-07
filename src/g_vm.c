@@ -318,7 +318,7 @@ static const char *qcvm_function_for_local(qcvm_t *vm, const qcvm_global_t local
 	return NULL;
 }
 
-static const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
+const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
 {
 	if (ptr >= vm->global_data && ptr < (vm->global_data + vm->global_size))
 	{
@@ -350,9 +350,9 @@ static const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
 		const char *func = qcvm_function_for_local(vm, offset);
 
 		if (func)
-			return qcvm_temp_format(vm, "global %s::%s + %u", func, qcvm_get_string(vm, closest_def->name_index), closest);
+			return qcvm_temp_format(vm, "global %s::%s + %u[%u]", func, qcvm_get_string(vm, closest_def->name_index), closest, offset);
 
-		return qcvm_temp_format(vm, "global %s + %u", qcvm_get_string(vm, closest_def->name_index), closest);
+		return qcvm_temp_format(vm, "global %s + %u[%u]", qcvm_get_string(vm, closest_def->name_index), closest, offset);
 	}
 	else if (ptr >= (qcvm_global_t *)globals.edicts && ptr < (qcvm_global_t *)globals.edicts + (globals.edict_size * globals.max_edicts))
 	{
@@ -369,14 +369,13 @@ static const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
 			if (def)
 			{
 				if (offset)
-					return qcvm_temp_format(vm, "field %u::%s + %u", ent->s.number, qcvm_get_string(vm, def->name_index), offset);
+					return qcvm_temp_format(vm, "field %u::%s + %u[%u]", ent->s.number, qcvm_get_string(vm, def->name_index), offset, field_offset);
 				
-				return qcvm_temp_format(vm, "field %u::%s", ent->s.number, qcvm_get_string(vm, def->name_index));
+				return qcvm_temp_format(vm, "field %u::%s[%u]", ent->s.number, qcvm_get_string(vm, def->name_index), field_offset);
 			}
 		}
 
 		return qcvm_temp_format(vm, "field %u::%u ???", ent->s.number, field_offset);
-
 	}
 
 	return "???";
@@ -403,7 +402,10 @@ void qcvm_string_list_dump_refs(FILE *fp, qcvm_string_list_t *list)
 			else if (hashed->id != id)
 				continue;
 
-			fprintf(fp, "\t%s\t%s\n", qcvm_dump_pointer(list->vm, (const qcvm_global_t *)hashed->ptr), qcvm_stack_entry(list->vm, &hashed->stack));
+			const qcvm_string_t current_id = *(qcvm_string_t *)(hashed->ptr);
+			const bool still_has_string = current_id == hashed->id;
+
+			fprintf(fp, "\t%s\t%s\t%s (%u)\n", qcvm_dump_pointer(list->vm, (const qcvm_global_t *)hashed->ptr), qcvm_stack_entry(list->vm, &hashed->stack), still_has_string ? "valid" : "invalid", current_id);
 		}
 	}
 }
@@ -423,6 +425,8 @@ static void qcvm_string_list_ref_unlink(qcvm_string_list_t *list, qcvm_ref_stora
 		hashed->hash_next->hash_prev = hashed->hash_prev;
 
 	// put into free list
+	hashed->ptr = NULL;
+	hashed->id = 0;
 	hashed->hash_next = list->ref_storage_free;
 	hashed->hash_prev = NULL;
 	if (list->ref_storage_free)
@@ -478,9 +482,11 @@ void qcvm_string_list_mark_ref_copy(qcvm_string_list_t *list, const qcvm_string_
 	END_TIMER(list->vm, PROFILE_TIMERS);
 }
 
-void qcvm_string_list_check_ref_unset(qcvm_string_list_t *list, const void *ptr, const size_t span, const bool assume_changed)
+bool qcvm_string_list_check_ref_unset(qcvm_string_list_t *list, const void *ptr, const size_t span, const bool assume_changed)
 {
 	START_TIMER(list->vm, StringCheckUnset);
+
+	bool any_unset = false;
 
 	for (size_t i = 0; i < span; i++)
 	{
@@ -489,7 +495,7 @@ void qcvm_string_list_check_ref_unset(qcvm_string_list_t *list, const void *ptr,
 		qcvm_ref_storage_hash_t *hashed = qcvm_string_list_get_storage_hash(list, Q_hash_pointer((uint32_t)gptr, list->ref_storage_allocated));
 
 		for (; hashed; hashed = hashed->hash_next)
-			if (hashed->ptr == ptr)
+			if (hashed->ptr == gptr)
 				break;
 
 		if (!hashed)
@@ -511,23 +517,34 @@ void qcvm_string_list_check_ref_unset(qcvm_string_list_t *list, const void *ptr,
 
 		// unlink
 		qcvm_string_list_ref_unlink(list, hashed);
+
+		any_unset = true;
 	}
 
 	END_TIMER(list->vm, PROFILE_TIMERS);
+
+	return any_unset;
 }
 
-qcvm_string_t *qcvm_string_list_has_ref(qcvm_string_list_t *list, const void *ptr)
+qcvm_string_t *qcvm_string_list_has_ref(qcvm_string_list_t *list, const void *ptr, qcvm_ref_storage_hash_t **hashed_ptr)
 {
 	START_TIMER(list->vm, StringHasRef);
 
-	qcvm_ref_storage_hash_t *hashed = qcvm_string_list_get_storage_hash(list, Q_hash_pointer((uint32_t)ptr, list->ref_storage_allocated));
+	qcvm_ref_storage_hash_t *hashed = qcvm_string_list_get_storage_hash(list, Q_hash_pointer((uint32_t)ptr, list->ref_storage_allocated)), *next;
 
-	for (; hashed; hashed = hashed->hash_next)
+	for (; hashed; hashed = next)
 	{
+		next = hashed->hash_next;
+
 		if (hashed->ptr == ptr)
 		{
 			qcvm_string_t *rv = &hashed->id;
+
 			END_TIMER(list->vm, PROFILE_TIMERS);
+
+			if (hashed_ptr)
+				*hashed_ptr = hashed;
+
 			return rv;
 		}
 	}
@@ -538,47 +555,36 @@ qcvm_string_t *qcvm_string_list_has_ref(qcvm_string_list_t *list, const void *pt
 
 void qcvm_string_list_mark_refs_copied(qcvm_string_list_t *list, const void *src, const void *dst, const size_t span)
 {
-	// unref any strings that were in dst
-	qcvm_string_list_check_ref_unset(list, dst, span, false);
-	
 	START_TIMER(list->vm, StringMarkRefsCopied);
 
 	// grab list of fields that have strings
 	for (size_t i = 0; i < span; i++)
 	{
 		const qcvm_global_t *sptr = (const qcvm_global_t *)src + i;
-		qcvm_string_t *str;
+		qcvm_string_t *sstr = qcvm_string_list_has_ref(list, sptr, NULL);
 
-		if (!(str = qcvm_string_list_has_ref(list, sptr)))
+		const qcvm_global_t *dptr = (const qcvm_global_t *)dst + i;
+		qcvm_ref_storage_hash_t *hashed;
+		qcvm_string_t *dstr = qcvm_string_list_has_ref(list, dptr, &hashed);
+
+		// dst already has a string, check if it's the same ID
+		if (dstr)
+		{
+			// we're copying same string, so just skip
+			if (sstr && *sstr == *dstr)
+				continue;
+
+			// different strings, unref us
+			qcvm_string_list_release(list, *dstr);
+			qcvm_string_list_ref_unlink(list, hashed);
+		}
+
+		// no new string, so keep going
+		if (!sstr)
 			continue;
 		
 		// mark them as being inside of src as well now
-		const qcvm_global_t *dptr = (const qcvm_global_t *)dst + i;
-		qcvm_string_list_mark_ref_copy(list, *str, dptr);
-	}
-
-	END_TIMER(list->vm, PROFILE_TIMERS);
-}
-
-void qcvm_string_list_mark_if_has_ref(qcvm_string_list_t *list, const void *src_ptr, const void *dst_ptr, const size_t span)
-{
-	START_TIMER(list->vm, StringMarkIfHasRef);
-
-	for (size_t i = 0; i < span; i++)
-	{
-		const qcvm_global_t *src_gptr = (const qcvm_global_t *)src_ptr + i;
-		const qcvm_global_t *dst_gptr = (const qcvm_global_t *)dst_ptr + i;
-
-		qcvm_ref_storage_hash_t *hashed = qcvm_string_list_get_storage_hash(list, Q_hash_pointer((uint32_t)src_gptr, list->ref_storage_allocated));
-
-		for (; hashed; hashed = hashed->hash_next)
-		{
-			if (hashed->ptr == src_gptr)
-			{
-				qcvm_string_list_mark_ref_copy(list, hashed->id, dst_gptr);
-				break;
-			}
-		}
+		qcvm_string_list_mark_ref_copy(list, *sstr, dptr);
 	}
 
 	END_TIMER(list->vm, PROFILE_TIMERS);
@@ -1097,11 +1103,8 @@ void qcvm_copy_globals(qcvm_t *vm, const qcvm_global_t dst, const qcvm_global_t 
 	void *dst_ptr = qcvm_get_global(vm, dst);
 
 	memcpy(dst_ptr, src_ptr, size);
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, dst_ptr, count, false);
 
-	// if there were any ref strings in src, make sure they are
-	// reffed in dst too
-	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, src_ptr, dst_ptr, count);
+	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, src_ptr, dst_ptr, count);
 }
 
 const char *qcvm_stack_entry(const qcvm_t *vm, const qcvm_stack_t *s)
@@ -1492,7 +1495,7 @@ void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 
 			const void *ptr = qcvm_get_global(vm, (qcvm_global_t)arg);
 
-			if (qcvm_string_list_has_ref(&vm->dynamic_strings, ptr))
+			if (qcvm_string_list_has_ref(&vm->dynamic_strings, ptr, NULL))
 				qcvm_stack_push_ref_string(cur_stack, qcvm_string_list_pop_ref(&vm->dynamic_strings, ptr));
 		}
 

@@ -289,7 +289,7 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 	const qcvm_pointer_t pointer = qcvm_get_entity_field_pointer(vm, ent, field); \
 	TType *field_value = (TType *)qcvm_resolve_pointer(vm, pointer); \
 	qcvm_set_global_typed_ptr(TType, vm, operands.c, field_value); \
-	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), sizeof(TType) / sizeof(qcvm_global_t)); \
+	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), sizeof(TType) / sizeof(qcvm_global_t)); \
 }
 
 F_OP_LOAD(F_OP_LOAD_F, vec_t)
@@ -349,8 +349,7 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 \
 	TResult *address_ptr = (TResult *)qcvm_resolve_pointer(vm, pointer); \
 	*address_ptr = *value; \
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, address_ptr, span, false); \
-	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, &value, address_ptr, span); \
+	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, value, address_ptr, span); \
 }
 
 F_OP_STOREP(F_OP_STOREP_F, vec_t, vec_t)
@@ -454,47 +453,47 @@ static void F_OP_IFNOT_S(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 	}
 }
 
+static inline void F_OP_BASE(const size_t num_args, const bool hexen, qcvm_t *vm, const qcvm_operands_t operands, int *depth)
+{
+	if (num_args >= 2 && hexen)
+		qcvm_copy_globals_typed(qcvm_global_t[3], vm, GLOBAL_PARM1, operands.c);
+
+	if (num_args >= 1 && hexen)
+		qcvm_copy_globals_typed(qcvm_global_t[3], vm, GLOBAL_PARM0, operands.b);
+
+	const int32_t enter_func = *qcvm_get_global_typed(int32_t, vm, operands.a);
+
+	vm->state.argc = num_args;
+	if (enter_func <= 0 || enter_func >= vm->functions_size)
+		qcvm_error(vm, "NULL function");
+	
 #ifdef ALLOW_PROFILING
-#define PROFILE_FUNCTION_CALL \
-	if (vm->profile_flags & PROFILE_FIELDS) \
-	{ \
-		qcvm_stack_t *current = &vm->state.stack[vm->state.current]; \
-		current->profile->fields[NumFuncCalls]++; \
+	if (vm->profile_flags & PROFILE_FIELDS)
+	{
+		qcvm_stack_t *current = &vm->state.stack[vm->state.current];
+		current->profile->fields[NumFuncCalls]++;
 	}
-#else
-#define PROFILE_FUNCTION_CALL
 #endif
+
+	qcvm_function_t *call = &vm->functions[enter_func];
+
+	if (!call->id)
+		qcvm_error(vm, "Tried to call missing function %s", qcvm_get_string(vm, call->name_index));
+
+	if (call->id < 0) /* negative statements are built in functions */
+	{
+		qcvm_call_builtin(vm, call);
+		return;
+	}
+
+	(*depth)++;
+	qcvm_enter(vm, call);
+}
 
 #define F_OP_CALL(F_OP, num_args, hexen) \
 static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 { \
-	if (num_args >= 2 && hexen) \
-		qcvm_copy_globals_typed(qcvm_global_t[3], vm, GLOBAL_PARM1, operands.c); \
-\
-	if (num_args >= 1 && hexen) \
-		qcvm_copy_globals_typed(qcvm_global_t[3], vm, GLOBAL_PARM0, operands.b); \
-\
-	const int32_t enter_func = *qcvm_get_global_typed(int32_t, vm, operands.a); \
-\
-	vm->state.argc = num_args; \
-	if (enter_func <= 0 || enter_func >= vm->functions_size) \
-		qcvm_error(vm, "NULL function"); \
-\
-	PROFILE_FUNCTION_CALL; \
-\
-	qcvm_function_t *call = &vm->functions[enter_func]; \
-\
-	if (!call->id) \
-		qcvm_error(vm, "Tried to call missing function %s", qcvm_get_string(vm, call->name_index)); \
-\
-	if (call->id < 0) /* negative statements are built in functions */ \
-	{ \
-		qcvm_call_builtin(vm, call); \
-		return; \
-	} \
-\
-	(*depth)++; \
-	qcvm_enter(vm, call); \
+	F_OP_BASE(num_args, hexen, vm, operands, depth); \
 }
 
 F_OP_CALL(F_OP_CALL0, 0, false)
@@ -694,7 +693,7 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 	qcvm_set_global_typed_ptr(TType, vm, operands.c, field_value); \
 \
 	const size_t span = sizeof(TType) / sizeof(qcvm_global_t); \
-	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), span); \
+	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), span); \
 }
 
 F_OP_LOADA(F_OP_LOADA_F, vec_t)
@@ -718,7 +717,7 @@ static inline void F_OP_LOADP_BASE(qcvm_t *vm, const qcvm_operands_t operands, i
 	void *field_value = (void *)(qcvm_resolve_pointer(vm, pointer));
 	qcvm_set_global(vm, operands.c, field_value, TType_size);
 
-	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), span);
+	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), span);
 }
 
 #define F_OP_LOADP(F_OP, TType) \
@@ -899,6 +898,7 @@ static void F_OP_RANDV2(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 #define F_OP_STOREF(F_OP, TType) \
 static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 { \
+	const size_t span = sizeof(TType) / sizeof(qcvm_global_t); \
 	edict_t *ent = qcvm_ent_to_entity(*qcvm_get_global_typed(qcvm_ent_t, vm, operands.a), true); \
 	const int32_t field = *qcvm_get_global_typed(int32_t, vm, operands.b); \
 	const qcvm_pointer_t address = qcvm_get_entity_field_pointer(vm, ent, field); \
@@ -907,7 +907,7 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 \
 	*field_value = *value; \
 \
-	qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, value, field_value, sizeof(TType) / sizeof(qcvm_global_t)); \
+	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, value, field_value, span); \
 }
 
 F_OP_STOREF(F_OP_STOREF_F, vec_t)

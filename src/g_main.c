@@ -362,7 +362,7 @@ static void BackupClientData()
 	// the gclient_t structures.
 	game.client_load_data = (uint8_t *)gi.TagMalloc(globals.edict_size * game.num_clients, TAG_GAME);
 	memcpy(game.client_load_data, itoe(1), globals.edict_size * game.num_clients);
-	qcvm_string_list_mark_if_has_ref(&qvm->dynamic_strings, itoe(1), game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
+	qcvm_string_list_mark_refs_copied(&qvm->dynamic_strings, itoe(1), game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
 }
 
 static void RestoreClientData()
@@ -395,7 +395,7 @@ static void RestoreClientData()
 		qcvm_sync_player_state(qvm, ent);
 	}
 	
-	qcvm_string_list_mark_if_has_ref(&qvm->dynamic_strings, game.client_load_data, itoe(1), (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
+	qcvm_string_list_mark_refs_copied(&qvm->dynamic_strings, game.client_load_data, itoe(1), (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
 	qcvm_string_list_check_ref_unset(&qvm->dynamic_strings, game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t), true);
 	gi.TagFree(game.client_load_data);
 	game.client_load_data = NULL;

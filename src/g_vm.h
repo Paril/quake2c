@@ -3,7 +3,7 @@
 typedef struct qcvm_s qcvm_t;
 
 #define ALLOW_DEBUGGING
-#define ALLOW_PROFILING
+//#define ALLOW_PROFILING
 
 #ifdef ALLOW_DEBUGGING
 typedef enum
@@ -202,13 +202,13 @@ typedef struct
 
 typedef struct
 {
-	const void					*ptr;
-	qcvm_string_t					id;
+	const void		*ptr;
+	qcvm_string_t	id;
 } qcvm_string_backup_t;
 
 typedef struct
 {
-	qcvm_global_t		global;
+	qcvm_global_t	global;
 	int32_t			value;
 } qcvm_stack_local_t;
 
@@ -217,8 +217,8 @@ enum { STACK_STRINGS_RESERVE = 64 };
 typedef struct
 {
 	qcvm_t					*vm;
-	qcvm_function_t				*function;
-	const qcvm_statement_t		*statement;
+	qcvm_function_t			*function;
+	const qcvm_statement_t	*statement;
 	qcvm_stack_local_t		*locals;
 	qcvm_string_backup_t	*ref_strings;
 	size_t					ref_strings_size, ref_strings_allocated;
@@ -297,15 +297,14 @@ void qcvm_string_list_release(qcvm_string_list_t *list, const qcvm_string_t id);
 // mark a memory address as containing a reference to the specified string.
 // increases ref count by 1 and shoves it into the list.
 void qcvm_string_list_mark_ref_copy(qcvm_string_list_t *list, const qcvm_string_t id, const void *ptr);
-void qcvm_string_list_check_ref_unset(qcvm_string_list_t *list, const void *ptr, const size_t span, const bool assume_changed/* = false*/);
-qcvm_string_t *qcvm_string_list_has_ref(qcvm_string_list_t *list, const void *ptr);
+bool qcvm_string_list_check_ref_unset(qcvm_string_list_t *list, const void *ptr, const size_t span, const bool assume_changed/* = false*/);
 void qcvm_string_list_mark_refs_copied(qcvm_string_list_t *list, const void *src, const void *dst, const size_t span);
-void qcvm_string_list_mark_if_has_ref(qcvm_string_list_t *list, const void *src_ptr, const void *dst_ptr, const size_t span);
 bool qcvm_string_list_is_ref_counted(qcvm_string_list_t *list, const qcvm_string_t id);
 qcvm_string_backup_t qcvm_string_list_pop_ref(qcvm_string_list_t *list, const void *ptr);
 void qcvm_string_list_push_ref(qcvm_string_list_t *list, const qcvm_string_backup_t *backup);
 
 #ifdef _DEBUG
+const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr);
 void qcvm_string_list_dump_refs(FILE *fp, qcvm_string_list_t *list);
 #endif
 
@@ -509,11 +508,7 @@ void qcvm_copy_globals(qcvm_t *vm, const qcvm_global_t dst, const qcvm_global_t 
 \
 		*(dst_ptr) = *(src_ptr); \
 \
-		qcvm_string_list_check_ref_unset(&vm->dynamic_strings, dst_ptr, span, false); \
-\
-		/* if there were any ref strings in src, make sure they are */ \
-		/* reffed in dst too */ \
-		qcvm_string_list_mark_if_has_ref(&vm->dynamic_strings, src_ptr, dst_ptr, span); \
+		qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, src_ptr, dst_ptr, span); \
 	}
 
 edict_t *qcvm_ent_to_entity(const qcvm_ent_t ent, bool allow_invalid);
