@@ -1,5 +1,4 @@
 #include "shared/shared.h"
-#include "game.h"
 #include "g_vm.h"
 #include "vm_game.h"
 #include "vm_debug.h"
@@ -7,7 +6,7 @@
 
 static void QC_stacktrace(qcvm_t *vm)
 {
-	gi.dprintf("%s\n", qcvm_stack_trace(vm));
+	vm->debug_print(qcvm_stack_trace(vm));
 }
 
 static void QC_debugbreak(qcvm_t *vm)
@@ -84,7 +83,7 @@ static void qcvm_debugger_thread()
 			{
 				debug_pos = 0;
 				debug_string[0] = 0;
-				gi.dprintf("DEBUGGER STRING OVERFLOW :(");
+				thread_vm->debug_print("DEBUGGER STRING OVERFLOW :(");
 			}
 
 			debug_string[debug_pos] = c;
@@ -100,7 +99,6 @@ static void qcvm_debugger_thread()
 
 		thread_vm->debug.lock_mutex(input_mutex);
 		debug_pos = 0;
-		//gi.dprintf("FROM DEBUGGER: %s", debug_string);
 		awaiting_steal = true;
 		thread_vm->debug.unlock_mutex(input_mutex);
 
@@ -120,11 +118,8 @@ static void qcvm_debugger_thread()
 
 void qcvm_wait_for_debugger_commands(qcvm_t *vm);
 
-static void qcvm_init_debugger(qcvm_t *vm)
+void qcvm_init_debugger(qcvm_t *vm)
 {
-	if (!*gi.cvar("qc_debugger", "", CVAR_NONE)->string)
-		return;
-
 	thread_vm = vm;
 	input_mutex = thread_vm->debug.create_mutex();
 	thread_vm->debug.thread_sleep(5000);
@@ -139,7 +134,6 @@ static void qcvm_init_debugger(qcvm_t *vm)
 
 void qcvm_send_debugger_command(const qcvm_t *vm, const char *cmd)
 {
-	gi.dprintf("TO DEBUGGER: %s\n", cmd);
 	printf("%s\n", cmd);
 	fflush(stdout);
 }
@@ -156,9 +150,6 @@ static const char *strtok_emulate(qcvm_t *vm, qcvm_function_t *func, const char 
 
 void qcvm_check_debugger_commands(qcvm_t *vm)
 {
-	if (!running_thread)
-		qcvm_init_debugger(vm);
-
 	if (!thread_vm)
 		return;
 	
@@ -173,12 +164,10 @@ void qcvm_check_debugger_commands(qcvm_t *vm)
 	while (*debugger_command && debugger_command[strlen(debugger_command) - 1] == '\n')
 		debugger_command[strlen(debugger_command) - 1] = 0;
 
-	gi.dprintf("EXECUTING DEBUGGER CMD: %s\n", debugger_command);
-
 	qcvm_function_t *qc_strtok = qcvm_find_function(vm, "strtok");
 
 	if (!qc_strtok)
-		gi.dprintf("Can't find strtok :(");
+		qcvm_error(vm, "Can't find strtok :(");
 	else if (strncmp(debugger_command, "debuggerwnd ", 12) == 0)
 	{
 		vm->debug.attached = true;
@@ -268,7 +257,7 @@ void qcvm_check_debugger_commands(qcvm_t *vm)
 			if (result.entid == ENT_INVALID)
 				value = "\"invalid/null entity\"";
 			else
-				value = qcvm_temp_format(vm, "\"entity %i\"", qcvm_ent_to_entity(result.entid, false)->s.number);
+				value = qcvm_temp_format(vm, "\"entity %i\"", qcvm_ent_to_entity(vm, result.entid, false)->s.number);
 			break;
 		case TYPE_FUNCTION:
 			if (result.funcid == FUNC_VOID)

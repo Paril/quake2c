@@ -169,13 +169,13 @@ static void QC_struct_key_parse(qcvm_t *vm)
 static void QC_itoe(qcvm_t *vm)
 {
 	const int32_t number = qcvm_argv_int32(vm, 0);
-	qcvm_return_entity(vm, itoe(number));
+	qcvm_return_entity(vm, qcvm_itoe(vm, number));
 }
 
 static void QC_etoi(qcvm_t *vm)
 {
-	const size_t address = qcvm_argv_int32(vm, 0);
-	qcvm_return_int32(vm, ((uint8_t *)address - (uint8_t *)globals.edicts) / globals.edict_size);
+	const edict_t *ent = qcvm_argv_entity(vm, 0);
+	qcvm_return_int32(vm, qcvm_entity_to_ent(vm, ent));
 }
 
 void qcvm_init_game_builtins(qcvm_t *vm)

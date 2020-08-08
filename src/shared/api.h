@@ -32,50 +32,9 @@ typedef struct gclient_s gclient_t;
 enum { MAX_CLIENTS		= 256 };	// absolute limit
 enum { MAX_EDICTS		= 1024 };	// must change protocol to increase more
 
-// game print flags
-enum
-{
-	PRINT_LOW,		// pickup messages
-	PRINT_MEDIUM,	// death messages
-	PRINT_HIGH,		// critical messages
-	PRINT_CHAT		// chat messages    
-};
-
 typedef int print_level_t;
 
-// destination class for gi.multicast()
-enum
-{
-	MULTICAST_ALL,
-	MULTICAST_PHS,
-	MULTICAST_PVS,
-	MULTICAST_ALL_R,
-	MULTICAST_PHS_R,
-	MULTICAST_PVS_R
-};
-
 typedef int multicast_t;
-
-//
-// SOUNDS
-//
-
-// sound channels
-// channel 0 never willingly overrides
-// other channels (1-7) allways override a playing sound on that channel
-enum
-{
-	CHAN_AUTO,
-	CHAN_WEAPON,
-	CHAN_VOICE,
-	CHAN_ITEM,
-	CHAN_BODY,
-	// 3 unused IDs
-
-// modifier flags
-	CHAN_NO_PHS_ADD	= 8,	// send to all clients, not just ones in PHS (ATTN 0 will also do this)
-	CHAN_RELIABLE	= 16	// send by reliable message, not datagram
-};
 
 typedef int sound_channel_t;
 

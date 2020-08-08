@@ -7,6 +7,7 @@ void qcvm_set_breakpoint(qcvm_t *vm, const bool is_set, const char *file, const 
 void qcvm_check_debugger_commands(qcvm_t *vm);
 void qcvm_send_debugger_command(const qcvm_t *vm, const char *cmd);
 void qcvm_wait_for_debugger_commands(qcvm_t *vm);
+void qcvm_init_debugger(qcvm_t *vm);
 #endif
 
 void qcvm_init_debug_builtins(qcvm_t *vm);

@@ -107,8 +107,64 @@ static void QC_configstring(qcvm_t *vm)
 {
 	const config_string_t id = qcvm_argv_int32(vm, 0);
 	const char *str = qcvm_argv_string(vm, 1);
+	
+#ifdef KMQUAKE2_ENGINE_MOD
+	if (!is_kmq2_progs)
+	{
+		// old configstrings need to be adjusted to work properly
+		enum
+		{
+			MAX_MODELS			= 8192,
+			MAX_SOUNDS			= 8192,
+			MAX_IMAGES			= 2048,
+			MAX_LIGHTSTYLES		= 256,
+			MAX_ITEMS			= 256,
+			MAX_GENERAL			= (MAX_CLIENTS*2),
 
-	gi.configstring(id, str);
+			OLD_MAX_MODELS		= 256,
+			OLD_MAX_SOUNDS		= 256,
+			OLD_MAX_IMAGES		= 256,
+
+			CS_MODELS			= 32,
+			CS_SOUNDS			= (CS_MODELS+MAX_MODELS),
+			CS_IMAGES			= (CS_SOUNDS+MAX_SOUNDS),
+			CS_LIGHTS			= (CS_IMAGES+MAX_IMAGES),
+			CS_ITEMS			= (CS_LIGHTS+MAX_LIGHTSTYLES),
+			CS_PLAYERSKINS		= (CS_ITEMS+MAX_ITEMS),
+			CS_GENERAL			= (CS_PLAYERSKINS+MAX_CLIENTS),
+			MAX_CONFIGSTRINGS	= (CS_GENERAL+MAX_GENERAL),
+
+			OLD_CS_SOUNDS			= (CS_MODELS+OLD_MAX_MODELS),
+			OLD_CS_IMAGES			= (OLD_CS_SOUNDS+OLD_MAX_SOUNDS),
+			OLD_CS_LIGHTS			= (OLD_CS_IMAGES+OLD_MAX_IMAGES),
+			OLD_CS_ITEMS			= (OLD_CS_LIGHTS+MAX_LIGHTSTYLES),
+			OLD_CS_PLAYERSKINS		= (OLD_CS_ITEMS+MAX_ITEMS),
+			OLD_CS_GENERAL			= (OLD_CS_PLAYERSKINS+MAX_CLIENTS),
+			OLD_MAX_CONFIGSTRINGS	= (OLD_CS_GENERAL+MAX_GENERAL)
+		};
+
+		config_string_t real_id;
+
+		if (id >= OLD_CS_GENERAL)
+			real_id = CS_GENERAL + (id - OLD_CS_GENERAL);
+		else if (id >= OLD_CS_PLAYERSKINS)
+			real_id = CS_PLAYERSKINS + (id - OLD_CS_PLAYERSKINS);
+		else if (id >= OLD_CS_ITEMS)
+			real_id = CS_ITEMS + (id - OLD_CS_ITEMS);
+		else if (id >= OLD_CS_LIGHTS)
+			real_id = CS_LIGHTS + (id - OLD_CS_LIGHTS);
+		else if (id >= OLD_CS_IMAGES)
+			real_id = CS_IMAGES + (id - OLD_CS_IMAGES);
+		else if (id >= OLD_CS_SOUNDS)
+			real_id = CS_SOUNDS + (id - OLD_CS_SOUNDS);
+		else
+			real_id = id;
+
+		gi.configstring(real_id, str);
+	}
+	else
+#endif
+		gi.configstring(id, str);
 }
 
 static void QC_error(qcvm_t *vm)
@@ -205,7 +261,7 @@ static void QC_trace(qcvm_t *vm)
 	trace->plane = trace_result.plane;
 	trace->surface = (QC_csurface_t)trace_result.surface;
 	trace->contents = trace_result.contents;
-	trace->ent = qcvm_entity_to_ent(trace_result.ent);
+	trace->ent = qcvm_entity_to_ent(vm, trace_result.ent);
 	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, trace, sizeof(*trace) / sizeof(qcvm_global_t), false);
 }
 
@@ -508,7 +564,7 @@ static trace_t QC_pm_trace(const vec3_t *start, const vec3_t *mins, const vec3_t
 	tr.plane = qc_tr.plane;
 	tr.surface = (csurface_t *)qc_tr.surface;
 	tr.contents = (content_flags_t)qc_tr.contents;
-	tr.ent = qcvm_ent_to_entity(qc_tr.ent, false);
+	tr.ent = qcvm_ent_to_entity(pmove_vm, qc_tr.ent, false);
 
 	return tr;
 }
@@ -585,10 +641,7 @@ static void QC_Pmove(qcvm_t *vm)
 	qc_pm->mins = pm.mins;
 	qc_pm->maxs = pm.maxs;
 
-	if (!pm.groundentity)
-		qc_pm->groundentity = ENT_INVALID;
-	else
-		qc_pm->groundentity = qcvm_entity_to_ent(pm.groundentity);
+	qc_pm->groundentity = qcvm_entity_to_ent(vm, pm.groundentity);
 	qc_pm->watertype = pm.watertype;
 	qc_pm->waterlevel = pm.waterlevel;
 	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, qc_pm, sizeof(*qc_pm) / sizeof(qcvm_global_t), false);

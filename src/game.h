@@ -12,15 +12,7 @@ typedef struct
 	gclient_t	*clients;
 	size_t		num_clients;
 
-	uint8_t		*client_load_data;
+	void		*client_load_data;
 } game_t;
 
 extern game_t game;
-
-inline edict_t *itoe(const size_t n)
-{
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcast-align"
-	return (edict_t *)((uint8_t *)globals.edicts + (n * globals.edict_size));
-#pragma GCC diagnostic pop
-}

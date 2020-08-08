@@ -176,10 +176,7 @@ static const char *GetProgsName(void)
 	const char *kmq2_progs = qcvm_temp_format(qvm, "%s/kmq2progs.dat", game_var->string);
 
 	if (access(kmq2_progs, F_OK) != -1)
-	{
-		is_kmq2_progs = true;
 		return kmq2_progs;
-	}
 #endif
 
 	return qcvm_temp_format(qvm, "%s/progs.dat", game_var->string);
@@ -255,17 +252,32 @@ static void InitKMQ2Compatibility(void)
 static void WipeClientPointers()
 {
 	for (size_t i = 0; i < game.num_clients; i++)
-		itoe(i + 1)->client = NULL;
+		((edict_t *)qcvm_itoe(qvm, i + 1))->client = NULL;
 }
 
 static void WipeEntities()
 {
 	memset(globals.edicts, 0, globals.max_edicts * globals.edict_size);
 
-	for (int32_t i = 0; i < globals.max_edicts + 1; i++)
-		itoe(i)->s.number = i;
+	for (int32_t i = 0; i < globals.max_edicts; i++)
+		((edict_t *)qcvm_itoe(qvm, i))->s.number = i;
 
 	WipeClientPointers();
+}
+
+static void qvm_error(const char *str)
+{
+	gi.error("%s", str);
+}
+
+static void qvm_debug(const char *str)
+{
+	gi.dprintf("%s\n", str);
+}
+
+static void *qvm_alloc(const size_t sz)
+{
+	return gi.TagMalloc(sz, TAG_GAME);
 }
 
 /*
@@ -281,7 +293,17 @@ static void InitGame ()
 {
 	qvm = (qcvm_t *)gi.TagMalloc(sizeof(qcvm_t), TAG_GAME);
 
+	qvm->warning = gi.dprintf;
+	qvm->error = qvm_error;
+	qvm->debug_print = qvm_debug;
+	qvm->alloc = qvm_alloc;
+	qvm->free = gi.TagFree;
+
 	qcvm_load(qvm, "Quake2C DLL", GetProgsName());
+
+#ifdef KMQUAKE2_ENGINE_MOD
+	is_kmq2_progs = !!qcvm_find_definition(qvm, "__ext_kmq2");
+#endif
 
 #ifdef ALLOW_PROFILING
 	qvm->profile_flags = (int32_t)gi.cvar("qc_profile_flags", "0", CVAR_LATCH)->value;
@@ -307,7 +329,11 @@ static void InitGame ()
 	qvm->debug.create_thread = qcvm_cpp_create_thread;
 	qvm->debug.thread_sleep = qcvm_cpp_thread_sleep;
 
-	qcvm_check_debugger_commands(qvm);
+	if (gi.cvar("qc_debugger", "", CVAR_NONE)->value)
+	{
+		qcvm_init_debugger(qvm);
+		qcvm_check_debugger_commands(qvm);
+	}
 #endif
 
 	// Call GetGameAPI
@@ -321,13 +347,13 @@ static void InitGame ()
 	game.clients = (gclient_t *)gi.TagMalloc(sizeof(gclient_t) * game.num_clients, TAG_GAME);
 
 	// initialize all entities for this game
-	globals.max_edicts = MAX_EDICTS;
-	globals.edict_size = qvm->field_real_size * 4;
+	qvm->max_edicts = globals.max_edicts = MAX_EDICTS;
+	qvm->edict_size = globals.edict_size = qvm->field_real_size * 4;
 
 	qcvm_debug(qvm, "Field size: %u bytes\n", globals.edict_size);
 
 	globals.num_edicts = game.num_clients + 1;
-	globals.edicts = (edict_t *)gi.TagMalloc((globals.max_edicts + 1) * globals.edict_size, TAG_GAME);
+	qvm->edicts = globals.edicts = (edict_t *)gi.TagMalloc(globals.max_edicts * globals.edict_size, TAG_GAME);
 
 	WipeEntities();
 
@@ -360,9 +386,11 @@ static void BackupClientData()
 	// in Q2, gclient_t was stored in a separate pointer, but in Q2QC they're fields
 	// and as such wiped with the entity structure. We have to mimic the original Q2 behavior of backing up
 	// the gclient_t structures.
+	edict_t *first_player = (edict_t *)qcvm_itoe(qvm, 1);
+
 	game.client_load_data = (uint8_t *)gi.TagMalloc(globals.edict_size * game.num_clients, TAG_GAME);
-	memcpy(game.client_load_data, itoe(1), globals.edict_size * game.num_clients);
-	qcvm_string_list_mark_refs_copied(&qvm->dynamic_strings, itoe(1), game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
+	memcpy(game.client_load_data, first_player, globals.edict_size * game.num_clients);
+	qcvm_string_list_mark_refs_copied(&qvm->dynamic_strings, first_player, game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
 }
 
 static void RestoreClientData()
@@ -370,10 +398,10 @@ static void RestoreClientData()
 	// copy over any client-specific data back into the clients and re-sync
 	for (size_t i = 0; i < game.num_clients; i++)
 	{
-		edict_t *ent = itoe(i + 1);
+		edict_t *ent = (edict_t *)qcvm_itoe(qvm, i + 1);
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
-		edict_t *backup = (edict_t *)(game.client_load_data + (globals.edict_size * i));
+		edict_t *backup = (edict_t *)((uint8_t *)game.client_load_data + (globals.edict_size * i));
 #pragma GCC diagnostic pop
 
 		// restore client structs
@@ -395,7 +423,7 @@ static void RestoreClientData()
 		qcvm_sync_player_state(qvm, ent);
 	}
 	
-	qcvm_string_list_mark_refs_copied(&qvm->dynamic_strings, game.client_load_data, itoe(1), (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
+	qcvm_string_list_mark_refs_copied(&qvm->dynamic_strings, game.client_load_data, qcvm_itoe(qvm, 1), (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
 	qcvm_string_list_check_ref_unset(&qvm->dynamic_strings, game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t), true);
 	gi.TagFree(game.client_load_data);
 	game.client_load_data = NULL;
@@ -437,7 +465,7 @@ static qboolean ClientConnect(edict_t *e, char *userinfo)
 	AssignClientPointer(e);
 
 	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientConnect);
-	const qcvm_ent_t ent = qcvm_entity_to_ent(e);
+	const qcvm_ent_t ent = qcvm_entity_to_ent(qvm, e);
 	qcvm_set_global_typed_value(qcvm_ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_set_global_str(qvm, GLOBAL_PARM1, userinfo);
 	qcvm_execute(qvm, func);
@@ -461,7 +489,7 @@ static void ClientBegin(edict_t *e)
 	AssignClientPointer(e);
 
 	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientBegin);
-	const qcvm_ent_t ent = qcvm_entity_to_ent(e);
+	const qcvm_ent_t ent = qcvm_entity_to_ent(qvm, e);
 	qcvm_set_global_typed_value(qcvm_ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_execute(qvm, func);
 	qcvm_sync_player_state(qvm, e);
@@ -474,7 +502,7 @@ static void ClientUserinfoChanged(edict_t *e, char *userinfo)
 #endif
 
 	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientUserinfoChanged);
-	const qcvm_ent_t ent = qcvm_entity_to_ent(e);
+	const qcvm_ent_t ent = qcvm_entity_to_ent(qvm, e);
 	qcvm_set_global_typed_value(qcvm_ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_set_global_str(qvm, GLOBAL_PARM1, userinfo);
 	qcvm_execute(qvm, func);
@@ -488,7 +516,7 @@ static void ClientDisconnect(edict_t *e)
 #endif
 
 	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientDisconnect);
-	const qcvm_ent_t ent = qcvm_entity_to_ent(e);
+	const qcvm_ent_t ent = qcvm_entity_to_ent(qvm, e);
 	qcvm_set_global_typed_value(qcvm_ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_execute(qvm, func);
 	qcvm_sync_player_state(qvm, e);
@@ -501,7 +529,7 @@ static void ClientCommand(edict_t *e)
 #endif
 
 	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientCommand);
-	const qcvm_ent_t ent = qcvm_entity_to_ent(e);
+	const qcvm_ent_t ent = qcvm_entity_to_ent(qvm, e);
 	qcvm_set_global_typed_value(qcvm_ent_t, qvm, GLOBAL_PARM0, ent);
 	qcvm_execute(qvm, func);
 	qcvm_sync_player_state(qvm, e);
@@ -514,7 +542,7 @@ static void ClientThink(edict_t *e, usercmd_t *ucmd)
 #endif
 
 	qcvm_function_t *func = qcvm_get_function(qvm, qce.ClientThink);
-	const qcvm_ent_t ent = qcvm_entity_to_ent(e);
+	const qcvm_ent_t ent = qcvm_entity_to_ent(qvm, e);
 	qcvm_set_global_typed_value(qcvm_ent_t, qvm, GLOBAL_PARM0, ent);
 
 	QC_usercmd_t cmd = {
@@ -544,7 +572,7 @@ static void RunFrame()
 	qcvm_execute(qvm, func);
 
 	for (size_t i = 0; i < game.num_clients; i++)
-		qcvm_sync_player_state(qvm, itoe(1 + i));
+		qcvm_sync_player_state(qvm, qcvm_itoe(qvm, 1 + i));
 }
 
 static void ServerCommand()
@@ -599,7 +627,7 @@ static void WriteDefinitionData(FILE *fp, const qcvm_definition_t *def, const qc
 	}
 	else if (type == TYPE_ENTITY)
 	{
-		const edict_t *ent = qcvm_ent_to_entity((qcvm_ent_t)*value, false);
+		const edict_t *ent = qcvm_ent_to_entity(qvm, (qcvm_ent_t)*value, false);
 
 		if (ent == NULL)
 			fwrite(&globals.max_edicts, sizeof(globals.max_edicts), 1, fp);
@@ -657,12 +685,7 @@ static void ReadDefinitionData(qcvm_t *vm, FILE *fp, const qcvm_definition_t *de
 	{
 		int32_t number;
 		fread(&number, sizeof(number), 1, fp);
-
-		if (number == globals.max_edicts)
-			*value = (qcvm_global_t)ENT_INVALID;
-		else
-			*value = (qcvm_global_t)qcvm_entity_to_ent(itoe(number));
-
+		*value = (qcvm_global_t)qcvm_entity_to_ent(qvm, qcvm_itoe(qvm, number));
 		return;
 	}
 	
@@ -739,7 +762,7 @@ static void WriteGame(const char *filename, qboolean autosave)
 		fwrite(name, sizeof(char), name_len, fp);
 
 		for (size_t i = 0; i < game.num_clients; i++)
-			WriteEntityFieldData(fp, itoe(i + 1), def);
+			WriteEntityFieldData(fp, qcvm_itoe(qvm, i + 1), def);
 	}
 	
 	name_len = 0;
@@ -844,14 +867,14 @@ static void ReadGame(const char *filename)
 		qcvm_definition_t *field = hashed->def;
 		
 		for (size_t i = 0; i < game.num_clients; i++)
-			ReadEntityFieldData(qvm, fp, itoe(i + 1), field);
+			ReadEntityFieldData(qvm, fp, qcvm_itoe(qvm, i + 1), field);
 	}
 
 	func = qcvm_get_function(qvm, qce.PostReadGame);
 	qcvm_execute(qvm, func);
 
 	for (size_t i = 0; i < game.num_clients; i++)
-		qcvm_sync_player_state(qvm, itoe(i + 1));
+		qcvm_sync_player_state(qvm, qcvm_itoe(qvm, i + 1));
 
 	fclose(fp);
 }
@@ -914,7 +937,7 @@ static void WriteLevel(const char *filename)
 
 		for (size_t i = 0; i < globals.num_edicts; i++)
 		{
-			edict_t *ent = itoe(i);
+			edict_t *ent = qcvm_itoe(qvm, i);
 
 			if (!ent->inuse)
 				continue;
@@ -1062,7 +1085,7 @@ static void ReadLevel(const char *filename)
 			if (ent_id >= globals.num_edicts)
 				globals.num_edicts = ent_id + 1;
 
-			edict_t *ent = itoe(ent_id);
+			edict_t *ent = qcvm_itoe(qvm, ent_id);
 			ReadEntityFieldData(qvm, fp, ent, field);
 		}
 	}
@@ -1073,7 +1096,7 @@ static void ReadLevel(const char *filename)
 
 	for (size_t i = 0; i < globals.num_edicts; i++)
 	{
-		edict_t *ent = itoe(i);
+		edict_t *ent = qcvm_itoe(qvm, i);
 
 		// let the server rebuild world links for this ent
 		ent->area = (list_t) { NULL, NULL };

@@ -2,7 +2,6 @@ extern "C"
 {
 	#define QCVM_INTERNAL
 	#include "shared/shared.h"
-	#include "game.h"
 	#include "g_vm.h"
 	#include "g_thread.h"
 };

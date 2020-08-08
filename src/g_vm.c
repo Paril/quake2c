@@ -1,6 +1,5 @@
 #define QCVM_INTERNAL
 #include "shared/shared.h"
-#include "game.h"
 #include "g_vm.h"
 #include "vm_game.h"
 #include "vm_opcodes.h"
@@ -354,9 +353,9 @@ const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
 
 		return qcvm_temp_format(vm, "global %s + %u[%u]", qcvm_get_string(vm, closest_def->name_index), closest, offset);
 	}
-	else if (ptr >= (qcvm_global_t *)globals.edicts && ptr < (qcvm_global_t *)globals.edicts + (globals.edict_size * globals.max_edicts))
+	else if (ptr >= (qcvm_global_t *)vm->edicts && ptr < (qcvm_global_t *)vm->edicts + (vm->edict_size * vm->max_edicts))
 	{
-		const edict_t *ent = qcvm_ent_to_entity((qcvm_ent_t)ptr, false);
+		const edict_t *ent = qcvm_ent_to_entity(vm, (qcvm_ent_t)ptr, false);
 		const qcvm_global_t field_offset = ptr - (qcvm_global_t *)ent;
 
 		if (field_offset < vm->field_real_size)
@@ -893,7 +892,7 @@ void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *fie
 		return;
 	}
 
-	gi.dprintf("QCVM WARNING: can't find field %s in progs\n", field_name);
+	list->vm->warning("QCVM WARNING: can't find field %s in progs\n", field_name);
 }
 
 static void qcvm_state_init(qcvm_state_t *state, qcvm_t *vm)
@@ -956,7 +955,6 @@ void qcvm_state_stack_pop(qcvm_state_t *state)
 
 static void qcvm_init(qcvm_t *vm)
 {
-	memset(vm, 0, sizeof(*vm));
 	qcvm_string_list_init(&vm->dynamic_strings, vm);
 	qcvm_builtin_list_init(&vm->builtins, vm);
 	qcvm_state_init(&vm->state, vm);
@@ -986,7 +984,7 @@ void qcvm_error(const qcvm_t *vm, const char *format, ...)
 	__debugbreak();
 #endif
 
-	gi.error("%s", buffer);
+	vm->error(buffer);
 }
 
 #ifdef _DEBUG
@@ -999,18 +997,18 @@ void qcvm_debug(const qcvm_t *vm, const char *format, ...)
 	vsnprintf(buffer, sizeof(buffer), format, argptr);
 	va_end(argptr);
 
-	gi.dprintf("QCVM DEBUG: %s", buffer);
+	vm->debug_print(buffer);
 }
 #endif
 
 void *qcvm_alloc(const qcvm_t *vm, size_t size)
 {
-	return gi.TagMalloc(size, TAG_GAME);
+	return vm->alloc(size);
 }
 
 void qcvm_mem_free(const qcvm_t *vm, void *ptr)
 {
-	gi.TagFree(ptr);
+	vm->free(ptr);
 }
 
 void qcvm_set_allowed_stack(qcvm_t *vm, const void *ptr, const size_t length)
@@ -1019,7 +1017,7 @@ void qcvm_set_allowed_stack(qcvm_t *vm, const void *ptr, const size_t length)
 		qcvm_error(vm, "QCVM 'Allowed Stack' must be a multiple of 4.");
 
 	vm->allowed_stack = ptr;
-	vm->allowed_stack_size = length / sizeof(qcvm_global_t);
+	vm->allowed_stack_size = length;
 }
 
 qcvm_global_t *qcvm_get_global(qcvm_t *vm, const qcvm_global_t g)
@@ -1048,7 +1046,7 @@ void *qcvm_get_global_ptr(qcvm_t *vm, const qcvm_global_t global, const size_t v
 
 	assert((value_size % 4) == 0);
 
-	if (!qcvm_pointer_valid(vm, address, false, value_size / sizeof(qcvm_global_t)))
+	if (!qcvm_pointer_valid(vm, address, false, value_size))
 		qcvm_error(vm, "bad address");
 
 	return (void *)(qcvm_resolve_pointer(vm, address));
@@ -1138,38 +1136,36 @@ const char *qcvm_stack_trace(const qcvm_t *vm)
 	return str;
 }
 
-edict_t *qcvm_ent_to_entity(const qcvm_ent_t ent, bool allow_invalid)
+edict_t *qcvm_ent_to_entity(const qcvm_t *vm, const qcvm_ent_t ent, bool allow_invalid)
 {
 	if (ent == ENT_INVALID)
 	{
 		if (!allow_invalid)
 			return NULL;
 		else
-			return itoe(MAX_EDICTS);
+			return qcvm_itoe(vm, -1);
 	}
 	else if (ent == ENT_WORLD)
-		return itoe(0);
+		return qcvm_itoe(vm, 0);
 
-	int32_t num = ((uint8_t *)(ent) - (uint8_t *)(globals.edicts)) / globals.edict_size;
+	assert(ent >= -1 && ent < MAX_EDICTS);
 
-	assert(num >= 0 && num < MAX_EDICTS);
-
-	return itoe(num);
+	return qcvm_itoe(vm, ent);
 }
 
-qcvm_ent_t qcvm_entity_to_ent(edict_t *ent)
+qcvm_ent_t qcvm_entity_to_ent(const qcvm_t *vm, const edict_t *ent)
 {
 	if (ent == NULL)
 		return ENT_INVALID;
-	else if (ent->s.number == 0)
-		return ENT_WORLD;
 
-	return (qcvm_ent_t)(ptrdiff_t)ent;
+	assert(ent->s.number == ((uint8_t *)ent - (uint8_t *)vm->edicts) / vm->edict_size);
+
+	return (qcvm_ent_t)ent->s.number;
 }
 
 edict_t *qcvm_argv_entity(const qcvm_t *vm, const uint8_t d)
 {
-	return qcvm_ent_to_entity(*qcvm_get_const_global_typed(qcvm_ent_t, vm, qcvm_global_offset(GLOBAL_PARM0, d * 3)), false);
+	return qcvm_ent_to_entity(vm, *qcvm_get_const_global_typed(qcvm_ent_t, vm, qcvm_global_offset(GLOBAL_PARM0, d * 3)), false);
 }
 
 qcvm_string_t qcvm_argv_string_id(const qcvm_t *vm, const uint8_t d)
@@ -1214,8 +1210,8 @@ void qcvm_return_vector(qcvm_t *vm, const vec3_t value)
 	
 void qcvm_return_entity(qcvm_t *vm, const edict_t *value)
 {
-	const int32_t as_int = (int32_t)value;
-	qcvm_set_global_typed_value(int32_t, vm, GLOBAL_RETURN, as_int);
+	const qcvm_ent_t val = qcvm_entity_to_ent(vm, value);
+	qcvm_set_global_typed_value(int32_t, vm, GLOBAL_RETURN, val);
 }
 	
 void qcvm_return_int32(qcvm_t *vm, const int32_t value)
@@ -1248,7 +1244,7 @@ void qcvm_return_string(qcvm_t *vm, const char *str)
 void qcvm_return_pointer(qcvm_t *vm, const qcvm_pointer_t ptr)
 {
 #ifdef _DEBUG
-	if (!qcvm_pointer_valid(vm, ptr, false, 1))
+	if (!qcvm_pointer_valid(vm, ptr, false, sizeof(qcvm_global_t)))
 		qcvm_debug(vm, "Invalid pointer returned; writes to this will fail");
 #endif
 
@@ -1317,6 +1313,20 @@ qcvm_string_t qcvm_store_or_find_string(qcvm_t *vm, const char *value)
 	copy[len] = 0;
 
 	return qcvm_string_list_store(&vm->dynamic_strings, copy, len);
+}
+
+qcvm_definition_t *qcvm_find_definition(qcvm_t *vm, const char *name)
+{
+	qcvm_definition_hash_t *hashed = vm->definition_hashes[Q_hash_string(name, vm->definitions_size)];
+
+	for (; hashed; hashed = hashed->hash_next)
+		if (!strcmp(qcvm_get_string(vm, hashed->def->name_index), name))
+			break;
+
+	if (hashed)
+		return hashed->def;
+
+	return NULL;
 }
 
 #ifdef ALLOW_DEBUGGING
@@ -1418,7 +1428,7 @@ qcvm_eval_result_t qcvm_evaluate(qcvm_t *vm, const char *variable)
 			if (!field)
 				return (qcvm_eval_result_t) { .type = TYPE_VOID };
 
-			return qcvm_value_from_ptr(field, qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, qcvm_ent_to_entity(ent, false), (int32_t)field->global_index)));
+			return qcvm_value_from_ptr(field, qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, qcvm_ent_to_entity(vm, ent, false), (int32_t)field->global_index)));
 		}
 	}
 
@@ -1617,12 +1627,20 @@ size_t qcvm_get_string_length(const qcvm_t *vm, const qcvm_string_t str)
 	return vm->string_lengths[(size_t)str];
 }
 
+void *qcvm_itoe(const qcvm_t *vm, const int32_t n)
+{
+	if (n == ENT_INVALID)
+		return NULL;
+
+	return (uint8_t *)vm->edicts + (n * vm->edict_size);
+}
+
 qcvm_pointer_t qcvm_get_entity_field_pointer(qcvm_t *vm, edict_t *ent, const int32_t field)
 {
 	const qcvm_pointer_t ptr = qcvm_make_pointer(vm, QCVM_POINTER_ENTITY, (int32_t *)ent + field);
 
 #ifdef _DEBUG
-	if (!qcvm_pointer_valid(vm, ptr, false, 1))
+	if (!qcvm_pointer_valid(vm, ptr, false, sizeof(qcvm_global_t)))
 		qcvm_error(vm, "Returning invalid entity field pointer");
 #endif
 
@@ -1636,9 +1654,9 @@ bool qcvm_pointer_valid(const qcvm_t *vm, const qcvm_pointer_t pointer, const bo
 	case QCVM_POINTER_NULL:
 		return allow_null && !len && !pointer.offset;
 	case QCVM_POINTER_GLOBAL:
-		return (pointer.offset + len) <= vm->global_size;
+		return (pointer.offset + len) <= vm->global_size * sizeof(qcvm_global_t);
 	case QCVM_POINTER_ENTITY:
-		return (pointer.offset + len) <= globals.edict_size * globals.max_edicts;
+		return (pointer.offset + len) <= vm->edict_size * vm->max_edicts * sizeof(qcvm_global_t);
 	case QCVM_POINTER_STACK:
 		return vm->allowed_stack && (pointer.offset + len) <= vm->allowed_stack_size;
 	}
@@ -1651,11 +1669,11 @@ void *qcvm_resolve_pointer(const qcvm_t *vm, const qcvm_pointer_t address)
 	case QCVM_POINTER_NULL:
 		return NULL;
 	case QCVM_POINTER_GLOBAL:
-		return vm->global_data + address.offset;
+		return (uint8_t *)vm->global_data + address.offset;
 	case QCVM_POINTER_ENTITY:
-		return ((int32_t *)globals.edicts) + address.offset;
+		return (uint8_t *)vm->edicts + address.offset;
 	case QCVM_POINTER_STACK:
-		return ((int32_t *)vm->allowed_stack) + address.offset;
+		return (uint8_t *)vm->allowed_stack + address.offset;
 	}
 }
 
@@ -1664,14 +1682,19 @@ qcvm_pointer_t qcvm_make_pointer(const qcvm_t *vm, const qcvm_pointer_type_t typ
 	switch (type)
 	{
 	case QCVM_POINTER_NULL:
-		return (qcvm_pointer_t) { type, 0 };
+		return (qcvm_pointer_t) { 0, type };
 	case QCVM_POINTER_GLOBAL:
-		return (qcvm_pointer_t) { type, (qcvm_global_t *)pointer - vm->global_data };
+		return (qcvm_pointer_t) { (uint8_t *)pointer - (uint8_t *)vm->global_data, type };
 	case QCVM_POINTER_ENTITY:
-		return (qcvm_pointer_t) { type, (int32_t *)pointer - (int32_t *)globals.edicts };
+		return (qcvm_pointer_t) { (uint8_t *)pointer - (uint8_t *)vm->edicts, type };
 	case QCVM_POINTER_STACK:
-		return (qcvm_pointer_t) { type, (int32_t *)pointer - (int32_t *)vm->allowed_stack };
+		return (qcvm_pointer_t) { (uint8_t *)pointer - (uint8_t *)vm->allowed_stack, type };
 	}
+}
+
+qcvm_pointer_t qcvm_offset_pointer(const qcvm_t *vm, const qcvm_pointer_t pointer, const uint32_t offset)
+{
+	return (qcvm_pointer_t) { pointer.offset + offset, pointer.type };
 }
 
 void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
@@ -1879,8 +1902,6 @@ static void VMLoadDefinitions(qcvm_t *vm, FILE *fp, qcvm_definition_t *dst, cons
 
 void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 {
-	gi.dprintf ("==== %s ====\n", __func__);
-
 	qcvm_init(vm);
 
 	vm->engine_name = engine_name;
@@ -2047,8 +2068,12 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 	for (qcvm_function_t *func = vm->functions; func < vm->functions + vm->functions_size; func++)
 	{
 		if (func->id < 0)
-			gi.dprintf("QCVM WARNING: Code contains old-school negative-indexed builtin. Use #0 for all builtins!");
-		else if (func->id == 0 && func->name_index)
+		{
+			vm->warning("QCVM WARNING: Code contains old-school negative-indexed builtin. Use #0 for all builtins!");
+			func->id = 0;
+		}
+		
+		if (func->id == 0 && func->name_index)
 			vm->builtins.count++;
 
 		vm->highest_stack = maxsz(vm->highest_stack, func->num_args_and_locals);
@@ -2080,10 +2105,7 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 		{
 			vm->linenumbers = (int *)qcvm_alloc(vm, sizeof(*vm->linenumbers) * header.sections.statement.size);
 			fread(vm->linenumbers, sizeof(int), header.sections.statement.size, fp);
-			gi.dprintf("progs.lno line numbers loaded\n");
 		}
-		else
-			gi.dprintf("Unsupported/outdated progs.lno file\n");
 
 		fclose(fp);
 	}
@@ -2113,7 +2135,7 @@ void qcvm_check(qcvm_t *vm)
 
 	for (qcvm_function_t *func = vm->functions; func < vm->functions + vm->functions_size; func++)
 		if (func->id == 0 && func->name_index != STRING_EMPTY)
-			gi.dprintf("Missing builtin function: %s\n", qcvm_get_string(vm, func->name_index));
+			vm->warning("Missing builtin function: %s\n", qcvm_get_string(vm, func->name_index));
 }
 
 #ifdef ALLOW_PROFILING

@@ -49,12 +49,12 @@ enum
 typedef int qcvm_string_t;
 
 // NOTE: in QC, the value 0 is used for the world.
-// The value "1" is used to mean a null entity, which is required
+// The value of -1 is used to mean a null entity, which is required
 // to differentiate things like groundentity that can be the world.
 enum
 {
 	ENT_WORLD = 0,
-	ENT_INVALID = 1
+	ENT_INVALID = -1
 };
 
 typedef int qcvm_ent_t;
@@ -239,8 +239,8 @@ typedef enum
 
 typedef struct
 {
-	qcvm_pointer_type_t	type : 4;
 	uint32_t offset : 28;
+	qcvm_pointer_type_t	type : 4;
 } qcvm_pointer_t;
 
 void qcvm_stack_needs_resize(qcvm_stack_t *stack);
@@ -429,6 +429,11 @@ typedef struct qcvm_s
 	const void				*allowed_stack;
 	size_t					allowed_stack_size;
 	qcvm_state_t			state;
+	
+	// set by implementor
+	void					*edicts;
+	size_t					edict_size;
+	size_t					max_edicts;
 
 #ifdef ALLOW_DEBUGGING
 	struct
@@ -447,6 +452,13 @@ typedef struct qcvm_s
 		void (*thread_sleep)(const uint32_t);
 	} debug;
 #endif
+
+	// callbacks set by implementor
+	void					(*error)(const char *str);
+	void					(*warning)(const char *format, ...);
+	void					(*debug_print)(const char *str);
+	void					*(*alloc)(const size_t size);
+	void					(*free)(void *ptr);
 } qcvm_t;
 
 void qcvm_error(const qcvm_t *vm, const char *format, ...);
@@ -511,9 +523,9 @@ void qcvm_copy_globals(qcvm_t *vm, const qcvm_global_t dst, const qcvm_global_t 
 		qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, src_ptr, dst_ptr, span); \
 	}
 
-edict_t *qcvm_ent_to_entity(const qcvm_ent_t ent, bool allow_invalid);
+edict_t *qcvm_ent_to_entity(const qcvm_t *vm, const qcvm_ent_t ent, bool allow_invalid);
 
-qcvm_ent_t qcvm_entity_to_ent(edict_t *ent);
+qcvm_ent_t qcvm_entity_to_ent(const qcvm_t *vm, const edict_t *ent);
 
 edict_t *qcvm_argv_entity(const qcvm_t *vm, const uint8_t d);
 
@@ -551,6 +563,8 @@ bool qcvm_find_string(qcvm_t *vm, const char *value, qcvm_string_t *rstr);
 // Note: currently *copies* value if it's acquired
 qcvm_string_t qcvm_store_or_find_string(qcvm_t *vm, const char *value);
 
+qcvm_definition_t *qcvm_find_definition(qcvm_t *vm, const char *name);
+
 int qcvm_line_number_for(const qcvm_t *vm, const qcvm_statement_t *statement);
 
 qcvm_func_t qcvm_find_function_id(const qcvm_t *vm, const char *name);
@@ -563,11 +577,15 @@ const char *qcvm_get_string(const qcvm_t *vm, const qcvm_string_t str);
 
 size_t qcvm_get_string_length(const qcvm_t *vm, const qcvm_string_t str);
 
+void *qcvm_itoe(const qcvm_t *vm, const int32_t n);
+
 qcvm_pointer_t qcvm_get_entity_field_pointer(qcvm_t *vm, edict_t *ent, const int32_t field);
 
 bool qcvm_pointer_valid(const qcvm_t *vm, const qcvm_pointer_t pointer, const bool allow_null, const size_t len);
 
 qcvm_pointer_t qcvm_make_pointer(const qcvm_t *vm, const qcvm_pointer_type_t type, const void *pointer);
+
+qcvm_pointer_t qcvm_offset_pointer(const qcvm_t *vm, const qcvm_pointer_t pointer, const uint32_t offset);
 
 void *qcvm_resolve_pointer(const qcvm_t *vm, const qcvm_pointer_t pointer);
 
