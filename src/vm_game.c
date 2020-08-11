@@ -19,25 +19,14 @@ static void QC_ClearEntity(qcvm_t *vm)
 	entity->s.number = number;
 
 	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, entity, globals.edict_size / sizeof(qcvm_global_t), true);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, entity, globals.edict_size / sizeof(qcvm_global_t));
 }
 
-void qcvm_sync_player_state(qcvm_t *vm, edict_t *ent)
+static void QC_entitylinked(qcvm_t *vm)
 {
-	if (!ent->client)
-		return;
-
-	for (const qcvm_field_wrapper_t *wrap = vm->field_wraps.wrap_head; wrap; wrap = wrap->next)
-	{
-		const int32_t *src = (int32_t *)qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, ent, wrap->field_offset));
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wcast-align"
-		if (wrap->setter)
-			wrap->setter((uint8_t *)(ent->client) + wrap->client_offset, src);
-		else
-			*(int32_t *)((uint8_t *)(ent->client) + wrap->client_offset) = *src;
-#pragma GCC diagnostic pop
-	}
+	edict_t *entity = qcvm_argv_entity(vm, 0);
+	const int32_t val = !!entity->area.prev;
+	qcvm_return_int32(vm, val);
 }
 
 const char *ParseSlashes(const char *value)
@@ -57,7 +46,7 @@ const char *ParseSlashes(const char *value)
 	char *dst = slashless_string;
 
 	while (*src)
-	{
+	{\
 		const char c = *src;
 
 		if (c == '\\')
@@ -91,9 +80,10 @@ static inline void QC_parse_value_into_ptr(qcvm_t *vm, const qcvm_deftype_t type
 
 	switch (type)
 	{
-	case TYPE_STRING:
-		*(qcvm_string_t *)ptr = qcvm_store_or_find_string(vm, ParseSlashes(value));
-		break;
+	case TYPE_STRING: {
+		value = ParseSlashes(value);
+		*(qcvm_string_t *)ptr = qcvm_store_or_find_string(vm, value, strlen(value), true);
+		break; }
 	case TYPE_FLOAT:
 		*(vec_t *)ptr = strtof(value, NULL);
 		break;
@@ -109,6 +99,7 @@ static inline void QC_parse_value_into_ptr(qcvm_t *vm, const qcvm_deftype_t type
 	}
 	
 	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, ptr, data_span, false);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, ptr, data_span);
 
 	if (type == TYPE_STRING && qcvm_string_list_is_ref_counted(&vm->dynamic_strings, *(qcvm_string_t *)ptr))
 		qcvm_string_list_mark_ref_copy(&vm->dynamic_strings, *(qcvm_string_t *)ptr, ptr);
@@ -166,26 +157,12 @@ static void QC_struct_key_parse(qcvm_t *vm)
 	qcvm_return_int32(vm, 1);
 }
 
-static void QC_itoe(qcvm_t *vm)
-{
-	const int32_t number = qcvm_argv_int32(vm, 0);
-	qcvm_return_entity(vm, qcvm_itoe(vm, number));
-}
-
-static void QC_etoi(qcvm_t *vm)
-{
-	const edict_t *ent = qcvm_argv_entity(vm, 0);
-	qcvm_return_int32(vm, qcvm_entity_to_ent(vm, ent));
-}
-
 void qcvm_init_game_builtins(qcvm_t *vm)
 {
 	qcvm_register_builtin(SetNumEdicts);
 	qcvm_register_builtin(ClearEntity);
+	qcvm_register_builtin(entitylinked);
 	
 	qcvm_register_builtin(entity_key_parse);
 	qcvm_register_builtin(struct_key_parse);
-
-	qcvm_register_builtin(itoe);
-	qcvm_register_builtin(etoi);
 }

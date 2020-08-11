@@ -54,6 +54,7 @@ TIME
 
 // High resolution timer
 uint64_t Q_time(void);
+uint64_t Q_time_adjust(const uint64_t time);
 
 /*
 ==============================================================

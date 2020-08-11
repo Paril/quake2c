@@ -31,14 +31,17 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #elif defined(__APPLE__)
 #  define HAVE_MACH_TIMER
 #  include <mach/mach_time.h>
+static mach_timebase_info_data_t info;
 #elif defined(_WIN32)
 #  define WIN32_LEAN_AND_MEAN
+#  define _WIN32_WINNT 0x0601
 #  include <Windows.h>
+static LARGE_INTEGER win_frequency;
 #endif
-uint64_t Q_time(void) {
+uint64_t Q_time(void)
+{
 	static bool is_init = false;
 #if defined(__APPLE__)
-	static mach_timebase_info_data_t info;
 	if (!is_init)
 	{
 		mach_timebase_info(&info);
@@ -46,8 +49,6 @@ uint64_t Q_time(void) {
 	}
 	uint64_t now;
 	now = mach_absolute_time();
-	now *= info.numer;
-	now /= info.denom;
 	return now;
 #elif defined(__linux)
 	static struct timespec linux_rate;
@@ -62,7 +63,6 @@ uint64_t Q_time(void) {
 	now = spec.tv_sec * 1.0e9 + spec.tv_nsec;
 	return now;
 #elif defined(_WIN32)
-	static LARGE_INTEGER win_frequency;
 	if (!is_init)
 	{
 		QueryPerformanceFrequency(&win_frequency);
@@ -70,7 +70,19 @@ uint64_t Q_time(void) {
 	}
 	static LARGE_INTEGER now;
 	QueryPerformanceCounter(&now);
-	return (uint64_t) ((1e9 * now.QuadPart) / win_frequency.QuadPart);
+	//return (uint64_t) ((1e9 * now.QuadPart) / win_frequency.QuadPart);
+	return now.QuadPart;
+#endif
+}
+
+uint64_t Q_time_adjust(const uint64_t time)
+{
+#if defined(__APPLE__)
+	return (time * info.numer) / info.denom;
+#elif defined(__linux)
+	return time;
+#elif defined(_WIN32)
+	return (uint64_t) ((1e9 * time) / win_frequency.QuadPart);
 #endif
 }
 

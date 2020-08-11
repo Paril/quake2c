@@ -8,6 +8,7 @@
 #include "vm_mem.h"
 #include "vm_string.h"
 #include "vm_ext.h"
+#include "vm_file.h"
 
 #include <time.h>
 
@@ -107,7 +108,7 @@ qcvm_string_t qcvm_string_list_store(qcvm_string_list_t *list, const char *str, 
 			qcvm_debug(list->vm, "Increased ref string storage to %u due to \"%s\"\n", list->strings_allocated, str);
 		}
 
-		index = list->strings_size++;
+		index = (int32_t)list->strings_size++;
 	}
 
 	list->strings[index] = (qcvm_ref_counted_string_t) {
@@ -160,6 +161,7 @@ const char *qcvm_string_list_get(const qcvm_string_list_t *list, const qcvm_stri
 {
 	const int32_t index = (int32_t)(-id) - 1;
 	assert(index >= 0 && index < list->strings_size);
+	assert(list->strings[index].str);
 	return list->strings[index].str;
 }
 
@@ -321,7 +323,7 @@ const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
 {
 	if (ptr >= vm->global_data && ptr < (vm->global_data + vm->global_size))
 	{
-		const qcvm_global_t offset = ptr - vm->global_data;
+		const qcvm_global_t offset = (qcvm_global_t)(ptr - vm->global_data);
 		qcvm_global_t closest = -1;
 		qcvm_definition_t *closest_def = NULL;
 
@@ -356,7 +358,7 @@ const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
 	else if (ptr >= (qcvm_global_t *)vm->edicts && ptr < (qcvm_global_t *)vm->edicts + (vm->edict_size * vm->max_edicts))
 	{
 		const edict_t *ent = qcvm_ent_to_entity(vm, (qcvm_ent_t)ptr, false);
-		const qcvm_global_t field_offset = ptr - (qcvm_global_t *)ent;
+		const qcvm_global_t field_offset = (qcvm_global_t)(ptr - (qcvm_global_t *)ent);
 
 		if (field_offset < vm->field_real_size)
 		{
@@ -382,17 +384,17 @@ const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
 
 void qcvm_string_list_dump_refs(FILE *fp, qcvm_string_list_t *list)
 {
-	fprintf(fp, "strings: %u / %u (%u / %u free indices)\n", list->strings_size, list->strings_allocated, list->free_indices_size, list->free_indices_allocated);
-	fprintf(fp, "ref pointers: %u stored / %u\n", list->ref_storage_stored, list->ref_storage_allocated);
+	fprintf(fp, "strings: %" PRIuPTR " / %" PRIuPTR " (%" PRIuPTR " / %" PRIuPTR " free indices)\n", list->strings_size, list->strings_allocated, list->free_indices_size, list->free_indices_allocated);
+	fprintf(fp, "ref pointers: %" PRIuPTR " stored / %" PRIuPTR "\n", list->ref_storage_stored, list->ref_storage_allocated);
 
 	for (qcvm_ref_counted_string_t *str = list->strings; str < list->strings + list->strings_size; str++)
 	{
 		if (!str->str)
 			continue;
 
-		const qcvm_string_t id = -((str - list->strings) + 1);
+		const qcvm_string_t id = (qcvm_string_t) -((str - list->strings) + 1);
 
-		fprintf(fp, "%i\t%s\t%u\n", id, str->str, str->ref_count);
+		fprintf(fp, "%i\t%s\t%" PRIuPTR "\n", id, str->str, str->ref_count);
 
 		for (qcvm_ref_storage_hash_t *hashed = list->ref_storage_data; hashed < list->ref_storage_data + list->ref_storage_allocated; hashed++)
 		{
@@ -404,7 +406,7 @@ void qcvm_string_list_dump_refs(FILE *fp, qcvm_string_list_t *list)
 			const qcvm_string_t current_id = *(qcvm_string_t *)(hashed->ptr);
 			const bool still_has_string = current_id == hashed->id;
 
-			fprintf(fp, "\t%s\t%s\t%s (%u)\n", qcvm_dump_pointer(list->vm, (const qcvm_global_t *)hashed->ptr), qcvm_stack_entry(list->vm, &hashed->stack), still_has_string ? "valid" : "invalid", current_id);
+			fprintf(fp, "\t%s\t%s\t%s (%u)\n", qcvm_dump_pointer(list->vm, (const qcvm_global_t *)hashed->ptr), qcvm_stack_entry(list->vm, &hashed->stack, false), still_has_string ? "valid" : "invalid", current_id);
 		}
 	}
 }
@@ -687,7 +689,7 @@ static void qcvm_string_list_read_state(qcvm_string_list_t *list, FILE *fp)
 		s[len] = 0;
 
 		// does not acquire, since entity/game state does that itself
-		qcvm_store_or_find_string(list->vm, s);
+		qcvm_store_or_find_string(list->vm, s, len, true);
 	}
 }
 
@@ -719,7 +721,7 @@ void qcvm_builtin_list_register(qcvm_builtin_list_t *list, const char *name, qcv
 			if (list->registered == list->count)
 				qcvm_error(list->vm, "Builtin list overrun");
 
-			const int32_t index = list->registered;
+			const int32_t index = (int32_t) list->registered;
 			func->id = (qcvm_func_t)(-(index + 1));
 			list->list[index] = builtin;
 			list->registered++;
@@ -728,6 +730,37 @@ void qcvm_builtin_list_register(qcvm_builtin_list_t *list, const char *name, qcv
 	}
 
 	qcvm_debug(list->vm, "No builtin to assign to %s\n", name);
+}
+
+void qcvm_register_system_field(qcvm_t *vm, const char *field_name, const size_t field_offset, const size_t field_span)
+{
+	qcvm_definition_t *def = qcvm_find_definition(vm, field_name, TYPE_FIELD);
+
+	if (!def)
+	{
+		qcvm_debug(vm, "field definition not found for mapping: %s\n", field_name);
+		return;
+	}
+
+	qcvm_definition_t *field = qcvm_find_field(vm, field_name);
+
+	if (!field)
+	{
+		qcvm_debug(vm, "field not found for mapping: %s\n", field_name);
+		return;
+	}
+
+	if (vm->system_fields_size == vm->fields_size)
+		qcvm_error(vm, "system fields overrun");
+
+	if ((field_offset + field_span) > vm->system_edict_size)
+		qcvm_error(vm, "system fields overrun");
+
+	qcvm_system_field_t *system_field = &vm->system_fields[vm->system_fields_size++];
+	system_field->def = def;
+	system_field->field = field;
+	system_field->offset = (qcvm_global_t) field_offset;
+	system_field->span = field_span;
 }
 
 const char *qcvm_parse_format(const qcvm_string_t formatid, const qcvm_t *vm, const uint8_t start)
@@ -865,9 +898,10 @@ const char *qcvm_parse_format(const qcvm_string_t formatid, const qcvm_t *vm, co
 static void qcvm_field_wrap_list_init(qcvm_field_wrap_list_t *list, qcvm_t *vm)
 {
 	list->vm = vm;
+	list->wraps = (qcvm_field_wrapper_t *)qcvm_alloc(list->vm, sizeof(qcvm_field_wrapper_t) * vm->field_real_size);
 }
 
-void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *field_name, const size_t field_offset, const size_t client_offset, qcvm_field_setter_t setter)
+void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *field_name, const size_t field_offset, const size_t struct_offset, qcvm_field_setter_t setter)
 {
 	for (qcvm_definition_t *f = list->vm->fields; f < list->vm->fields + list->vm->fields_size; f++)
 	{
@@ -876,23 +910,74 @@ void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *fie
 		else if (strcmp(qcvm_get_string(list->vm, f->name_index), field_name))
 			continue;
 
-		assert((f->global_index + field_offset) >= 0 && (f->global_index + field_offset) < list->vm->fields_size);
+		assert((f->global_index + field_offset) >= 0 && (f->global_index + field_offset) < list->vm->field_real_size);
 
-		qcvm_field_wrapper_t *wrapper = (qcvm_field_wrapper_t *)qcvm_alloc(list->vm, sizeof(qcvm_field_wrapper_t));
+		qcvm_field_wrapper_t *wrapper = &list->wraps[f->global_index + field_offset];
 		*wrapper = (qcvm_field_wrapper_t) {
 			f,
 			f->global_index + field_offset,
-			client_offset,
-			setter,
-			list->wrap_head
+			strncmp(field_name, "client.", 7) == 0,
+			struct_offset,
+			setter
 		};
-		list->wrap_head = wrapper;
-		list->field_range_min = (list->field_range_min == 0) ? wrapper->field_offset : minsz(list->field_range_min, wrapper->field_offset);
-		list->field_range_max = (list->field_range_max == 0) ? (wrapper->field_offset + 1) : maxsz(list->field_range_max, wrapper->field_offset + 1);
 		return;
 	}
 
 	list->vm->warning("QCVM WARNING: can't find field %s in progs\n", field_name);
+}
+
+void qcvm_field_wrap_list_check_set(qcvm_field_wrap_list_t *list, const void *ptr, const size_t span)
+{
+	// FIXME: this shouldn't be required ideally...
+	if (!list->vm)
+		return;
+
+	START_TIMER(list->vm, WrapApply);
+
+	// no entities involved in this wrap check (or no entities to check yet)
+	if (ptr < list->vm->edicts || ptr >= (void *)((uint8_t *)list->vm->edicts + (list->vm->edict_size * list->vm->max_edicts)))
+	{
+		END_TIMER(list->vm, PROFILE_TIMERS);
+		return;
+	}
+
+	// check where we're starting
+	void *start = (void *)((uint8_t *)ptr - (uint8_t *)list->vm->edicts);
+	edict_t *ent = (edict_t *)qcvm_itoe(list->vm, (int32_t)((ptrdiff_t)start / list->vm->edict_size));
+	size_t offset = (const uint32_t *)ptr - (uint32_t *)ent;
+	const int32_t *sptr = (const int32_t *)ptr;
+
+	for (size_t i = 0; i < span; i++, sptr++, offset++)
+	{
+		// we're wrapping over to a new entity
+		if (offset >= list->vm->field_real_size)
+		{
+			ent++;
+			offset = 0;
+		}
+
+		const qcvm_field_wrapper_t *wrap = &list->vm->field_wraps.wraps[offset];
+
+		if (!wrap->field)
+			continue;
+
+		if (wrap->field_offset != offset)
+			continue;
+
+		// client wraps may attempt to write to them on non-clients
+		// during memcpy, etc
+		if (wrap->is_client && !ent->client)
+			continue;
+
+		void *dst = (void *)(((wrap->is_client) ? (uint8_t *)ent->client : (uint8_t *)ent) + wrap->struct_offset);
+			
+		if (wrap->setter)
+			wrap->setter(dst, sptr);
+		else
+			*(int32_t *)dst = *sptr;
+	}
+
+	END_TIMER(list->vm, PROFILE_TIMERS);
 }
 
 static void qcvm_state_init(qcvm_state_t *state, qcvm_t *vm)
@@ -1022,9 +1107,9 @@ void qcvm_set_allowed_stack(qcvm_t *vm, const void *ptr, const size_t length)
 
 qcvm_global_t *qcvm_get_global(qcvm_t *vm, const qcvm_global_t g)
 {
-#ifdef ALLOW_PROFILING
+#ifdef ALLOW_INSTRUMENTING
 	if ((vm->profile_flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
-		vm->state.stack[vm->state.current].profile->fields[NumGlobalsFetched]++;
+		vm->state.stack[vm->state.current].profile->fields[NumGlobalsFetched][vm->profiler_mark]++;
 #endif
 
 	return vm->global_data + g;
@@ -1032,9 +1117,9 @@ qcvm_global_t *qcvm_get_global(qcvm_t *vm, const qcvm_global_t g)
 
 const qcvm_global_t *qcvm_get_const_global(const qcvm_t *vm, const qcvm_global_t g)
 {
-#ifdef ALLOW_PROFILING
+#ifdef ALLOW_INSTRUMENTING
 	if ((vm->profile_flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
-		vm->state.stack[vm->state.current].profile->fields[NumGlobalsFetched]++;
+		vm->state.stack[vm->state.current].profile->fields[NumGlobalsFetched][vm->profiler_mark]++;
 #endif
 
 	return vm->global_data + g;
@@ -1054,9 +1139,9 @@ void *qcvm_get_global_ptr(qcvm_t *vm, const qcvm_global_t global, const size_t v
 
 void qcvm_set_global(qcvm_t *vm, const qcvm_global_t global, const void *value, const size_t value_size)
 {
-#ifdef ALLOW_PROFILING
+#ifdef ALLOW_INSTRUMENTING
 	if ((vm->profile_flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
-		vm->state.stack[vm->state.current].profile->fields[NumGlobalsSet]++;
+		vm->state.stack[vm->state.current].profile->fields[NumGlobalsSet][vm->profiler_mark]++;
 #endif
 
 	if (global == GLOBAL_NULL)
@@ -1067,11 +1152,12 @@ void qcvm_set_global(qcvm_t *vm, const qcvm_global_t global, const void *value, 
 	void *dst = qcvm_get_global(vm, global);
 	memcpy(dst, value, value_size);
 	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, dst, value_size / sizeof(qcvm_global_t), false);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, dst, value_size / sizeof(qcvm_global_t));
 }
 
-qcvm_string_t qcvm_set_global_str(qcvm_t *vm, const qcvm_global_t global, const char *value)
+qcvm_string_t qcvm_set_global_str(qcvm_t *vm, const qcvm_global_t global, const char *value, const size_t len, const bool copy)
 {
-	qcvm_string_t str = qcvm_store_or_find_string(vm, value);
+	qcvm_string_t str = qcvm_store_or_find_string(vm, value, len, copy);
 	qcvm_set_global_typed_value(qcvm_string_t, vm, global, str);
 
 	if (qcvm_string_list_is_ref_counted(&vm->dynamic_strings, str))
@@ -1080,11 +1166,12 @@ qcvm_string_t qcvm_set_global_str(qcvm_t *vm, const qcvm_global_t global, const 
 	return str;
 }
 
-qcvm_string_t qcvm_set_string_ptr(qcvm_t *vm, void *ptr, const char *value)
+qcvm_string_t qcvm_set_string_ptr(qcvm_t *vm, void *ptr, const char *value, const size_t len, const bool copy)
 {
-	qcvm_string_t str = qcvm_store_or_find_string(vm, value);
+	qcvm_string_t str = qcvm_store_or_find_string(vm, value, len, copy);
 	*(qcvm_string_t *)ptr = str;
 	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, ptr, sizeof(qcvm_string_t) / sizeof(qcvm_global_t), false);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, ptr, sizeof(qcvm_string_t) / sizeof(qcvm_global_t));
 
 	if (qcvm_string_list_is_ref_counted(&vm->dynamic_strings, str))
 		qcvm_string_list_mark_ref_copy(&vm->dynamic_strings, str, ptr);
@@ -1095,17 +1182,18 @@ qcvm_string_t qcvm_set_string_ptr(qcvm_t *vm, void *ptr, const char *value)
 // safe way of copying globals between other globals
 void qcvm_copy_globals(qcvm_t *vm, const qcvm_global_t dst, const qcvm_global_t src, const size_t size)
 {
-	const size_t count = size / sizeof(qcvm_global_t);
+	const size_t span = size / sizeof(qcvm_global_t);
 
 	const void *src_ptr = qcvm_get_global(vm, src);
 	void *dst_ptr = qcvm_get_global(vm, dst);
 
 	memcpy(dst_ptr, src_ptr, size);
 
-	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, src_ptr, dst_ptr, count);
+	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, src_ptr, dst_ptr, span);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, dst_ptr, span);
 }
 
-const char *qcvm_stack_entry(const qcvm_t *vm, const qcvm_stack_t *s)
+const char *qcvm_stack_entry(const qcvm_t *vm, const qcvm_stack_t *s, const bool compact)
 {
 	if (!vm->linenumbers)
 		return "dunno:dunno";
@@ -1123,15 +1211,23 @@ const char *qcvm_stack_entry(const qcvm_t *vm, const qcvm_stack_t *s)
 	if (!*file)
 		file = "dunno.qc";
 
+	if (compact)
+		return qcvm_temp_format(vm, "%s:%i", func, qcvm_line_number_for(vm, s->statement));
+
 	return qcvm_temp_format(vm, "%s (%s:%i @ stmt %u)", func, file, qcvm_line_number_for(vm, s->statement), s->statement - vm->statements);
 }
 
-const char *qcvm_stack_trace(const qcvm_t *vm)
+const char *qcvm_stack_trace(const qcvm_t *vm, const bool compact)
 {
-	const char *str = "> ";
+	const char *str = compact ? "" : "> ";
 
-	for (qcvm_stack_t *s = &vm->state.stack[vm->state.current]; s >= vm->state.stack && s->function; s--)
-		str = qcvm_temp_format(vm, "%s%s\n", str, qcvm_stack_entry(vm, s));
+	for (qcvm_stack_t *s = vm->state.stack; s < &vm->state.stack[vm->state.current] && s->function; s++)
+	{
+		if (compact)
+			str = qcvm_temp_format(vm, "%s->%s", str, qcvm_stack_entry(vm, s, compact));
+		else
+			str = qcvm_temp_format(vm, "%s%s\n", str, qcvm_stack_entry(vm, s, compact));
+	}
 
 	return str;
 }
@@ -1198,6 +1294,11 @@ qcvm_pointer_t qcvm_argv_pointer(const qcvm_t *vm, const uint8_t d)
 	return *qcvm_get_const_global_typed(qcvm_pointer_t, vm, qcvm_global_offset(GLOBAL_PARM0, d * 3));
 }
 
+void *qcvm_argv_handle(const qcvm_t *vm, const uint8_t d)
+{
+	return qcvm_handle_to_pointer(qcvm_argv_vector(vm, d));
+}
+
 void qcvm_return_float(qcvm_t *vm, const vec_t value)
 {
 	qcvm_set_global_typed_value(vec_t, vm, GLOBAL_RETURN, value);
@@ -1233,7 +1334,7 @@ void qcvm_return_string(qcvm_t *vm, const char *str)
 {
 	if (!(str >= vm->string_data && str < vm->string_data + vm->string_size))
 	{
-		qcvm_set_global_str(vm, GLOBAL_RETURN, str); // dynamic
+		qcvm_set_global_str(vm, GLOBAL_RETURN, str, strlen(str), true); // dynamic
 		return;
 	}
 
@@ -1249,6 +1350,13 @@ void qcvm_return_pointer(qcvm_t *vm, const qcvm_pointer_t ptr)
 #endif
 
 	qcvm_set_global_typed_value(qcvm_pointer_t, vm, GLOBAL_RETURN, ptr);
+}
+
+void qcvm_return_handle(qcvm_t *vm, const void *value)
+{
+	qcvm_handle_t handle = qcvm_pointer_to_handle(value);
+	assert(qcvm_handle_to_pointer(handle) == value);
+	qcvm_return_vector(vm, handle);
 }
 
 bool qcvm_find_string(qcvm_t *vm, const char *value, qcvm_string_t *rstr)
@@ -1287,7 +1395,7 @@ bool qcvm_find_string(qcvm_t *vm, const char *value, qcvm_string_t *rstr)
 
 		if (str && strcmp(value, str) == 0)
 		{
-			*rstr = -((s - vm->dynamic_strings.strings) + 1);
+			*rstr = (qcvm_string_t) -((s - vm->dynamic_strings.strings) + 1);
 			END_TIMER(vm, PROFILE_TIMERS);
 			return true;
 		}
@@ -1298,8 +1406,7 @@ bool qcvm_find_string(qcvm_t *vm, const char *value, qcvm_string_t *rstr)
 }
 
 // Note: DOES NOT ACQUIRE IF REF COUNTED!!
-// Note: currently *copies* value if it's acquired
-qcvm_string_t qcvm_store_or_find_string(qcvm_t *vm, const char *value)
+qcvm_string_t qcvm_store_or_find_string(qcvm_t *vm, const char *value, const size_t len, const bool copy)
 {
 	// check built-ins
 	qcvm_string_t str;
@@ -1307,17 +1414,34 @@ qcvm_string_t qcvm_store_or_find_string(qcvm_t *vm, const char *value)
 	if (qcvm_find_string(vm, value, &str))
 		return str;
 
-	const size_t len = strlen(value);
-	char *copy = (char *)qcvm_alloc(vm, sizeof(char) * len + 1);
-	memcpy(copy, value, sizeof(char) * strlen(value));
-	copy[len] = 0;
+	if (copy)
+	{
+		char *strcopy = (char *)qcvm_alloc(vm, (sizeof(char) * len) + 1);
+		memcpy(strcopy, value, sizeof(char) * len);
+		strcopy[len] = 0;
+		value = strcopy;
+	}
 
-	return qcvm_string_list_store(&vm->dynamic_strings, copy, len);
+	return qcvm_string_list_store(&vm->dynamic_strings, value, len);
 }
 
-qcvm_definition_t *qcvm_find_definition(qcvm_t *vm, const char *name)
+qcvm_definition_t *qcvm_find_definition(qcvm_t *vm, const char *name, const qcvm_deftype_t type)
 {
 	qcvm_definition_hash_t *hashed = vm->definition_hashes[Q_hash_string(name, vm->definitions_size)];
+
+	for (; hashed; hashed = hashed->hash_next)
+		if ((hashed->def->id & ~TYPE_GLOBAL) == type && !strcmp(qcvm_get_string(vm, hashed->def->name_index), name))
+			break;
+
+	if (hashed)
+		return hashed->def;
+
+	return NULL;
+}
+
+qcvm_definition_t *qcvm_find_field(qcvm_t *vm, const char *name)
+{
+	qcvm_definition_hash_t *hashed = vm->field_hashes[Q_hash_string(name, vm->fields_size)];
 
 	for (; hashed; hashed = hashed->hash_next)
 		if (!strcmp(qcvm_get_string(vm, hashed->def->name_index), name))
@@ -1349,7 +1473,7 @@ static qcvm_eval_result_t qcvm_value_from_ptr(const qcvm_definition_t *def, cons
 	case TYPE_FUNCTION:
 		return (qcvm_eval_result_t) { .type = TYPE_FUNCTION, .funcid = *(const qcvm_func_t *)(ptr) };
 	case TYPE_POINTER:
-		return (qcvm_eval_result_t) { .type = TYPE_POINTER, .ptr = (void *)(*(const int *)(ptr)) };
+		return (qcvm_eval_result_t) { .type = TYPE_POINTER, .ptr = (void *)(*(const int32_t *)(ptr)) };
 	case TYPE_INTEGER:
 		return (qcvm_eval_result_t) { .type = TYPE_INTEGER, .integer = *(const int32_t *)(ptr) };
 	}
@@ -1492,14 +1616,46 @@ int qcvm_line_number_for(const qcvm_t *vm, const qcvm_statement_t *statement)
 	return 0;
 }
 
+const char *qcvm_function_for(const qcvm_t *vm, const qcvm_statement_t *statement)
+{
+	while (statement >= vm->statements)
+	{
+		for (size_t i = 0; i < vm->functions_size; i++)
+		{
+			const qcvm_function_t *func = vm->functions + i;
+
+			if (func->id < 0)
+				continue;
+
+			const qcvm_statement_t *start = vm->statements + (func->id - 1);
+
+			if (statement == start)
+				return qcvm_get_string(vm, func->name_index);
+		}
+
+		--statement;
+	}
+
+	return "???";
+}
+
 void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 {
+#ifdef ALLOW_INSTRUMENTING
+	if (vm->profiler_func && function == vm->profiler_func && !vm->state.profile_mark_depth)
+	{
+		vm->state.profile_mark_backup = vm->profiler_mark;
+		vm->state.profile_mark_depth++;
+		vm->profiler_mark = MARK_CUSTOM;
+	}
+#endif
+
 	qcvm_stack_t *cur_stack = (vm->state.current >= 0) ? &vm->state.stack[vm->state.current] : NULL;
 
 	// save current stack space that will be overwritten by the new function
 	if (cur_stack && function->num_args_and_locals)
 	{
-		for (size_t i = 0, arg = function->first_arg; i < function->num_args_and_locals; i++, arg++)
+		for (qcvm_global_t i = 0, arg = function->first_arg; i < function->num_args_and_locals; i++, arg++)
 		{
 			cur_stack->locals[i] = (qcvm_stack_local_t) { (qcvm_global_t)arg, *qcvm_get_global_typed(int32_t, vm, (qcvm_global_t)arg) };
 
@@ -1509,12 +1665,12 @@ void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 				qcvm_stack_push_ref_string(cur_stack, qcvm_string_list_pop_ref(&vm->dynamic_strings, ptr));
 		}
 
-#ifdef ALLOW_PROFILING
+#ifdef ALLOW_INSTRUMENTING
 		// entering a function call;
 		// add time we spent up till now into self
 		if (vm->profile_flags & PROFILE_FUNCTIONS)
 		{
-			cur_stack->profile->self += Q_time() - cur_stack->caller_start;
+			cur_stack->profile->self[vm->profiler_mark] += Q_time() - cur_stack->caller_start;
 			cur_stack->callee_start = Q_time();
 		}
 #endif
@@ -1527,17 +1683,17 @@ void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 	new_stack->statement = &vm->statements[function->id - 1];
 
 	// copy parameters
-	for (size_t i = 0, arg_id = function->first_arg; i < function->num_args; i++)
-		for (size_t s = 0; s < function->arg_sizes[i]; s++, arg_id++)
+	for (qcvm_global_t i = 0, arg_id = function->first_arg; i < function->num_args; i++)
+		for (qcvm_global_t s = 0; s < function->arg_sizes[i]; s++, arg_id++)
 			qcvm_copy_globals_typed(qcvm_global_t, vm, arg_id, qcvm_global_offset(GLOBAL_PARM0, (i * 3) + s));
 
-#ifdef ALLOW_PROFILING
+#ifdef ALLOW_INSTRUMENTING
 	if (vm->profile_flags & (PROFILE_FUNCTIONS | PROFILE_FIELDS))
 	{
 		new_stack->profile = &vm->profile_data[function - vm->functions];
 
 		if (vm->profile_flags & PROFILE_FIELDS)
-			new_stack->profile->fields[NumSelfCalls]++;
+			new_stack->profile->fields[NumSelfCalls][vm->profiler_mark]++;
 		if (vm->profile_flags & PROFILE_FUNCTIONS)
 			new_stack->caller_start = Q_time();
 	}
@@ -1561,24 +1717,34 @@ void qcvm_leave(qcvm_t *vm)
 
 		prev_stack->ref_strings_size = 0;
 
-#ifdef ALLOW_PROFILING
+#ifdef ALLOW_INSTRUMENTING
 		if (vm->profile_flags & PROFILE_FUNCTIONS)
 		{
 			// we're coming back into prev_stack, so set up its caller_start
 			prev_stack->caller_start = Q_time();
 			// and add up the time we spent in the previous stack
-			prev_stack->profile->ext += Q_time() - prev_stack->callee_start;
+			prev_stack->profile->ext[vm->profiler_mark] += Q_time() - prev_stack->callee_start;
 		}
 #endif
 	}
 		
-#ifdef ALLOW_PROFILING
+#ifdef ALLOW_INSTRUMENTING
 	if (vm->profile_flags & PROFILE_FUNCTIONS)
-		current_stack->profile->self += Q_time() - current_stack->caller_start;
+		current_stack->profile->self[vm->profiler_mark] += Q_time() - current_stack->caller_start;
 #endif
 
 	vm->allowed_stack = 0;
 	vm->allowed_stack_size = 0;
+
+#ifdef ALLOW_INSTRUMENTING
+	if (vm->profiler_func && vm->state.profile_mark_depth)
+	{
+		vm->state.profile_mark_depth--;
+
+		if (!vm->state.profile_mark_depth)
+			vm->profiler_mark = vm->state.profile_mark_backup;
+	}
+#endif
 }
 
 qcvm_func_t qcvm_find_function_id(const qcvm_t *vm, const char *name)
@@ -1684,17 +1850,17 @@ qcvm_pointer_t qcvm_make_pointer(const qcvm_t *vm, const qcvm_pointer_type_t typ
 	case QCVM_POINTER_NULL:
 		return (qcvm_pointer_t) { 0, type };
 	case QCVM_POINTER_GLOBAL:
-		return (qcvm_pointer_t) { (uint8_t *)pointer - (uint8_t *)vm->global_data, type };
+		return (qcvm_pointer_t) { (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->global_data), type };
 	case QCVM_POINTER_ENTITY:
-		return (qcvm_pointer_t) { (uint8_t *)pointer - (uint8_t *)vm->edicts, type };
+		return (qcvm_pointer_t) { (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->edicts), type };
 	case QCVM_POINTER_STACK:
-		return (qcvm_pointer_t) { (uint8_t *)pointer - (uint8_t *)vm->allowed_stack, type };
+		return (qcvm_pointer_t) { (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->allowed_stack), type };
 	}
 }
 
-qcvm_pointer_t qcvm_offset_pointer(const qcvm_t *vm, const qcvm_pointer_t pointer, const uint32_t offset)
+qcvm_pointer_t qcvm_offset_pointer(const qcvm_t *vm, const qcvm_pointer_t pointer, const size_t offset)
 {
-	return (qcvm_pointer_t) { pointer.offset + offset, pointer.type };
+	return (qcvm_pointer_t) { (uint32_t)(pointer.offset + offset), pointer.type };
 }
 
 void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
@@ -1704,11 +1870,11 @@ void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
 	if (!(func = qcvm_builtin_list_get(&vm->builtins, function->id)))
 		qcvm_error(vm, "Bad builtin call number");
 
-#ifdef ALLOW_PROFILING
+#ifdef ALLOW_INSTRUMENTING
 	qcvm_profile_t *profile = &vm->profile_data[function - vm->functions];
 
 	if (vm->profile_flags & PROFILE_FIELDS)
-		profile->fields[NumSelfCalls]++;
+		profile->fields[NumSelfCalls][vm->profiler_mark]++;
 	
 	uint64_t start = 0;
 	qcvm_stack_t *prev_stack = NULL;
@@ -1721,7 +1887,7 @@ void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
 		// moving into builtin; add up what we have so far into prev stack
 		if (prev_stack)
 		{
-			prev_stack->profile->self += Q_time() - prev_stack->caller_start;
+			prev_stack->profile->self[vm->profiler_mark] += Q_time() - prev_stack->caller_start;
 			prev_stack->callee_start = Q_time();
 		}
 	}
@@ -1729,16 +1895,16 @@ void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
 
 	func(vm);
 
-#ifdef ALLOW_PROFILING
+#ifdef ALLOW_INSTRUMENTING
 	if (vm->profile_flags & PROFILE_FUNCTIONS)
 	{
 		// builtins don't have external call time, just internal self time
 		const uint64_t time_spent = Q_time() - start;
-		profile->self += time_spent;
+		profile->self[vm->profiler_mark] += time_spent;
 
 		// add time we spent in this function into the parent's call_into time
 		if (prev_stack)
-			prev_stack->profile->ext += Q_time() - prev_stack->callee_start;
+			prev_stack->profile->ext[vm->profiler_mark] += Q_time() - prev_stack->callee_start;
 	}
 #endif
 }
@@ -1760,11 +1926,10 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 		// get next statement
 		qcvm_stack_t *current = &vm->state.stack[vm->state.current];
 		const qcvm_statement_t *statement = ++current->statement;
-		START_OPCODE_TIMER(vm, (statement->opcode & ~OP_BREAKPOINT));
 
-#ifdef ALLOW_PROFILING
+#ifdef ALLOW_INSTRUMENTING
 		if (vm->profile_flags & PROFILE_FIELDS)
-			current->profile->fields[NumInstructions]++;
+			current->profile->fields[NumInstructions][vm->profiler_mark]++;
 #endif
 
 #ifdef ALLOW_DEBUGGING
@@ -1801,12 +1966,24 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 #else
 		const qcvm_opcode_t code = statement->opcode;
 #endif
-
 		const qcvm_opcode_func_t func = qcvm_code_funcs[code];
+
+		START_OPCODE_TIMER(vm, code);
 
 		func(vm, statement->args, &enter_depth);
 
 		END_TIMER(vm, PROFILE_OPCODES);
+
+#ifdef ALLOW_PROFILING
+		if (vm->profile_flags & PROFILE_SAMPLES)
+		{
+			if (!--vm->sample_id)
+			{
+				vm->sample_data[statement - vm->statements].count[vm->profiler_mark]++;
+				vm->sample_id = vm->sample_rate;
+			}
+		}
+#endif
 
 		if (!enter_depth)
 			return;		// all done
@@ -1928,6 +2105,8 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 	if (header.version != PROGS_Q1 && header.version != PROGS_FTE)
 		qcvm_error(vm, "bad version (only version 6 & 7 progs are supported)");
 
+	vm->global_size = header.sections.globals.size;
+
 	vm->string_size = header.sections.string.size;
 	vm->string_data = (char *)qcvm_alloc(vm, sizeof(char) * vm->string_size);
 	vm->string_lengths = (size_t *)qcvm_alloc(vm, sizeof(size_t) * vm->string_size);
@@ -2011,7 +2190,7 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 	fseek(fp, header.sections.definition.offset, SEEK_SET);
 	VMLoadDefinitions(vm, fp, vm->definitions, &header, vm->definitions_size);
 
-	vm->definition_map_by_id = (qcvm_definition_t **)qcvm_alloc(vm, sizeof(qcvm_definition_t) * vm->definitions_size);
+	vm->definition_map_by_id = (qcvm_definition_t **)qcvm_alloc(vm, sizeof(qcvm_definition_t) * vm->global_size);
 	vm->definition_hashes = (qcvm_definition_hash_t **)qcvm_alloc(vm, sizeof(qcvm_definition_hash_t *) * vm->definitions_size);
 	vm->definition_hashes_data = (qcvm_definition_hash_t *)qcvm_alloc(vm, sizeof(qcvm_definition_hash_t) * vm->definitions_size);
 	
@@ -2031,6 +2210,7 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 
 	vm->fields_size = header.sections.field.size;
 	vm->fields = (qcvm_definition_t *)qcvm_alloc(vm, sizeof(qcvm_definition_t) * vm->fields_size);
+	vm->system_fields = (qcvm_system_field_t *)qcvm_alloc(vm, sizeof(qcvm_system_field_t) * vm->fields_size);
 
 	fseek(fp, header.sections.field.offset, SEEK_SET);
 	VMLoadDefinitions(vm, fp, vm->fields, &header, vm->fields_size);
@@ -2047,19 +2227,12 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 		vm->field_hashes[hashed->hash_value] = hashed;
 	}
 
-	qcvm_field_wrap_list_init(&vm->field_wraps, vm);
-
 	vm->functions_size = header.sections.function.size;
 	vm->functions = (qcvm_function_t *)qcvm_alloc(vm, sizeof(qcvm_function_t) * vm->functions_size);
-
-#ifdef ALLOW_PROFILING
-	vm->profile_data = (qcvm_profile_t *)qcvm_alloc(vm, sizeof(qcvm_profile_t) * vm->functions_size);
-#endif
 
 	fseek(fp, header.sections.function.offset, SEEK_SET);
 	fread(vm->functions, sizeof(qcvm_function_t), vm->functions_size, fp);
 	
-	vm->global_size = header.sections.globals.size;
 	vm->global_data = (qcvm_global_t *)qcvm_alloc(vm, sizeof(qcvm_global_t) * vm->global_size);
 
 	fseek(fp, header.sections.globals.offset, SEEK_SET);
@@ -2109,9 +2282,116 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 
 		fclose(fp);
 	}
+
+#ifdef ALLOW_INSTRUMENTING
+	vm->profile_data = (qcvm_profile_t *)qcvm_alloc(vm, sizeof(qcvm_profile_t) * vm->functions_size);
+#endif
+
+#ifdef ALLOW_PROFILING
+	vm->sample_data = (qcvm_sampling_t *)qcvm_alloc(vm, sizeof(qcvm_sampling_t) * vm->statements_size);
+#endif
+
+#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+	if (vm->profile_flags & PROFILE_CONTINUOUS)
+	{
+		fp = fopen(qcvm_temp_format(vm, "%s%s.perf", vm->path, vm->profile_name), "rb");
+
+		if (fp)
+		{
+#ifdef ALLOW_INSTRUMENTING
+			fread(vm->profile_data, sizeof(qcvm_profile_t), vm->functions_size, fp);
+			fread(vm->opcode_timers, sizeof(qcvm_profile_timer_t), OP_NUMOPS, fp);
+			fread(vm->timers, sizeof(qcvm_profile_timer_t), OP_NUMOPS, fp);
+#endif
+#ifdef ALLOW_PROFILING
+			fread(vm->sample_data, sizeof(qcvm_sampling_t), vm->statements_size, fp);
+#endif
+
+			fclose(fp);
+
+			vm->debug_print(qcvm_temp_format(vm, "QCVM: continuing profile of %s\n", vm->profile_name));
+		}
+	}
+#endif
 }
 
-void qcvm_check(qcvm_t *vm)
+static inline void qcvm_setup_fields(qcvm_t *vm)
+{
+	qcvm_global_t field_offset = (qcvm_global_t)vm->system_edict_size;
+
+	for (qcvm_definition_t *field = vm->fields + 1; field < vm->fields + vm->fields_size; field++)
+	{
+		if (!field->name_index)
+			continue;
+
+		// if we're a vector _x/_y/_z field, we were already set up
+		const char *name = qcvm_get_string(vm, field->name_index);
+		const size_t name_len = qcvm_get_string_length(vm, field->name_index);
+
+		if (name[name_len - 2] == '_' && (name[name_len - 1] == 'x' || name[name_len - 1] == 'y' || name[name_len - 1] == 'z'))
+		{
+			char *parent_name = qcvm_temp_format(vm, "%s", name);
+			parent_name[name_len - 2] = 0;
+
+			if (qcvm_find_field(vm, parent_name))
+				continue;
+		}
+
+		// check if it's a system field
+		qcvm_system_field_t *sysfield = vm->system_fields;
+
+		for (; sysfield < vm->system_fields + vm->system_fields_size; sysfield++)
+			if (sysfield->field == field)
+				break;
+
+		qcvm_global_t real_offset;
+		qcvm_definition_t *fielddef;
+		
+		// system fields have an offset determined by the field.
+		if (sysfield < vm->system_fields + vm->system_fields_size)
+		{
+			real_offset = sysfield->offset;
+			fielddef = sysfield->def;
+		}
+		else
+		{
+			// not a sysfield, so we have to be positioned after them
+			real_offset = field_offset;
+			field_offset += field->id == TYPE_VECTOR ? 3 : 1;
+			fielddef = qcvm_find_definition(vm, name, TYPE_FIELD);
+
+			if (!fielddef)
+				qcvm_error(vm, "field %s has no def", name);
+		}
+
+		// set field data
+		field->global_index = real_offset;
+
+		// set def data
+		qcvm_set_global_typed_value(qcvm_global_t, vm, fielddef->global_index, real_offset);
+
+		// vectors have 3 fields
+		if (field->id == TYPE_VECTOR)
+		{
+			for (qcvm_global_t i = 1, offset = real_offset + i; i < 3; i++, offset++)
+				qcvm_set_global_typed_value(qcvm_global_t, vm, fielddef->global_index + i, offset);
+
+			// find _x/_y/_z fields and re-assign their values as well
+			static const char *vector_field_suffixes[] = { "_x", "_y", "_z" };
+
+			for (qcvm_global_t i = 0; i < 3; i++)
+			{
+				const char *field_name = qcvm_temp_format(vm, "%s%s", name, vector_field_suffixes[i]);
+				qcvm_definition_t *def = qcvm_find_field(vm, field_name);
+
+				if (def)
+					def->global_index = real_offset + i;
+			}
+		}
+	}
+}
+
+static inline void qcvm_init_field_map(qcvm_t *vm)
 {
 	for (qcvm_definition_t *field = vm->fields + 1; field < vm->fields + vm->fields_size; field++)
 		vm->field_real_size = maxsz(vm->field_real_size, field->global_index + (field->id == TYPE_VECTOR ? 3 : 1));
@@ -2121,24 +2401,36 @@ void qcvm_check(qcvm_t *vm)
 	for (qcvm_definition_t *f = vm->fields + 1; f < vm->fields + vm->fields_size; f++)
 	{
 		const char *field_name = qcvm_get_string(vm, f->name_index);
-		qcvm_definition_hash_t *hashed = vm->definition_hashes[Q_hash_string(field_name, vm->definitions_size)];
+		qcvm_definition_t *def = qcvm_find_definition(vm, field_name, TYPE_FIELD);
 
-		for (; hashed; hashed = hashed->hash_next)
-			if ((hashed->def->id & ~TYPE_GLOBAL) == TYPE_FIELD && !strcmp(qcvm_get_string(vm, hashed->def->name_index), field_name))
-				break;
+		if (!def)
+			qcvm_error(vm, "Bad field %s, missing def", field_name);
 
-		if (!hashed)
-			qcvm_error(vm, "Bad field %s", field_name);
+		assert(f->global_index == vm->global_data[def->global_index]);
 
-		vm->field_map_by_id[vm->global_data[hashed->def->global_index]] = f;
+		vm->field_map_by_id[f->global_index] = f;
 	}
+}
 
+static inline void qcvm_check_builtins(qcvm_t *vm)
+{
 	for (qcvm_function_t *func = vm->functions; func < vm->functions + vm->functions_size; func++)
 		if (func->id == 0 && func->name_index != STRING_EMPTY)
 			vm->warning("Missing builtin function: %s\n", qcvm_get_string(vm, func->name_index));
 }
 
-#ifdef ALLOW_PROFILING
+void qcvm_check(qcvm_t *vm)
+{
+	qcvm_setup_fields(vm);
+	
+	qcvm_init_field_map(vm);
+	
+	qcvm_field_wrap_list_init(&vm->field_wraps, vm);
+
+	qcvm_check_builtins(vm);
+}
+
+#ifdef ALLOW_INSTRUMENTING
 static const char *profile_type_names[TotalProfileFields] =
 {
 	"# Calls",
@@ -2161,117 +2453,189 @@ static const char *timer_type_names[TotalTimerFields] =
 	"String StringMarkRefsCopied",
 	"String PopRef",
 	"String PushRef",
-	"String Find"
+	"String Find",
+
+	"Wrap Apply"
+};
+#endif
+
+#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+static const char *mark_names[TOTAL_MARKS] =
+{
+	"init",
+	"shutdown",
+	"spawnentities",
+	"writegame",
+	"readgame",
+	"writelevel",
+	"readlevel",
+	"clientconnect",
+	"clientbegin",
+	"clientuserinfochanged",
+	"clientdisconnect",
+	"clientcommand",
+	"clientthink",
+	"runframe",
+	"servercommand",
+	"qc_profile_func"
 };
 #endif
 
 void qcvm_shutdown(qcvm_t *vm)
 {
+#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+	if (vm->profile_flags & PROFILE_CONTINUOUS)
+	{
+		FILE *fp = fopen(qcvm_temp_format(vm, "%s%s.perf", vm->path, vm->profile_name), "wb");
+
+#ifdef ALLOW_INSTRUMENTING
+		fwrite(vm->profile_data, sizeof(qcvm_profile_t), vm->functions_size, fp);
+		fwrite(vm->opcode_timers, sizeof(vm->opcode_timers), 1, fp);
+		fwrite(vm->timers, sizeof(vm->timers), 1, fp);
+#endif
 #ifdef ALLOW_PROFILING
-	if (vm->profile_flags & (PROFILE_FUNCTIONS | PROFILE_FIELDS))
+		fwrite(vm->sample_data, sizeof(qcvm_sampling_t), vm->statements_size, fp);
+#endif
+
+		fclose(fp);
+	}
+#endif
+
+#ifdef ALLOW_PROFILING
+	if (vm->profile_flags & PROFILE_SAMPLES)
 	{
-		FILE *fp = fopen(qcvm_temp_format(vm, "%sprofile.csv", vm->path), "wb");
-		double all_total = 0;
-		
-		for (size_t i = 0; i < vm->functions_size; i++)
+		for (size_t m = 0; m < TOTAL_MARKS; m++)
 		{
-			const qcvm_profile_t *profile = vm->profile_data + i;
+			const char *mark = mark_names[m];
+			FILE *fp = fopen(qcvm_temp_format(vm, "%sprf_%s_profile.csv", vm->path, mark), "wb");
 
-			if (!profile->fields[NumSelfCalls] && !profile->self && !profile->ext)
-				continue;
+			fprintf(fp, "ID,Path,Count\n");
 
-			const double total = profile->self / 1000000.0;
-			all_total += total;
+			for (size_t i = 0; i < vm->statements_size; i++)
+			{
+				const qcvm_sampling_t *sample = vm->sample_data + i;
+
+				if (!sample->count[m])
+					continue;
+
+				fprintf(fp, "%" PRIuPTR ",%s:%i,%llu\n", i, qcvm_function_for(vm, vm->statements + i), qcvm_line_number_for(vm, vm->statements + i), sample->count[m]);
+			}
+
+			fclose(fp);
 		}
-
-		fprintf(fp, "ID,Name,Total (ms),Self(ms),Funcs(ms),Total (%%),Self (%%)");
+	}
+#endif
 	
-		for (size_t i = 0; i < TotalProfileFields; i++)
-			fprintf(fp, ",%s", profile_type_names[i]);
-	
-		fprintf(fp, "\n");
+#ifdef ALLOW_INSTRUMENTING
+	for (size_t m = 0; m < TOTAL_MARKS; m++)
+	{
+		const char *mark = mark_names[m];
 
-		for (size_t i = 0; i < vm->functions_size; i++)
+		if (vm->profile_flags & (PROFILE_FUNCTIONS | PROFILE_FIELDS))
 		{
-			const qcvm_profile_t *profile = vm->profile_data + i;
-
-			if (!profile->fields[NumSelfCalls] && !profile->self && !profile->ext)
-				continue;
-
-			const qcvm_function_t *ff = vm->functions + i;
-			const char *name = qcvm_get_string(vm, ff->name_index);
+			FILE *fp = fopen(qcvm_temp_format(vm, "%sprf_%s_profile.csv", vm->path, mark), "wb");
+			double all_total = 0;
 		
-			const double self = profile->self / 1000000.0;
-			const double ext = profile->ext / 1000000.0;
-			const double total = self + ext;
+			for (size_t i = 0; i < vm->functions_size; i++)
+			{
+				const qcvm_profile_t *profile = vm->profile_data + i;
 
-			fprintf(fp, "%i,%s,%f,%f,%f,%f,%f", i, name, total, self, ext, (total / all_total) * 100, (self / all_total) * 100);
-		
-			for (qcvm_profiler_field_t f = 0; f < TotalProfileFields; f++)
-				fprintf(fp, ",%i", profile->fields[f]);
+				if (!profile->fields[NumSelfCalls][m] && !profile->self[m] && !profile->ext[m])
+					continue;
 
+				const double total = Q_time_adjust(profile->self[m]) / 1000000.0;
+				all_total += total;
+			}
+
+			fprintf(fp, "ID,Name,Total (ms),Self(ms),Funcs(ms),Total (%%),Self (%%)");
+	
+			for (size_t i = 0; i < TotalProfileFields; i++)
+				fprintf(fp, ",%s", profile_type_names[i]);
+	
 			fprintf(fp, "\n");
-		}
 
-		fclose(fp);
-	}
+			for (size_t i = 0; i < vm->functions_size; i++)
+			{
+				const qcvm_profile_t *profile = vm->profile_data + i;
+
+				if (!profile->fields[NumSelfCalls][m] && !profile->self[m] && !profile->ext[m])
+					continue;
+
+				const qcvm_function_t *ff = vm->functions + i;
+				const char *name = qcvm_get_string(vm, ff->name_index);
+		
+				const double self = Q_time_adjust(profile->self[m]) / 1000000.0;
+				const double ext = Q_time_adjust(profile->ext[m]) / 1000000.0;
+				const double total = self + ext;
+
+				fprintf(fp, "%i,%s,%f,%f,%f,%f,%f", i, name, total, self, ext, (total / all_total) * 100, (self / all_total) * 100);
+		
+				for (qcvm_profiler_field_t f = 0; f < TotalProfileFields; f++)
+					fprintf(fp, ",%i", profile->fields[f][m]);
+
+				fprintf(fp, "\n");
+			}
+
+			fclose(fp);
+		}
 	
-	if (vm->profile_flags & PROFILE_TIMERS)
-	{
-		FILE *fp = fopen(qcvm_temp_format(vm, "%stimers.csv", vm->path), "wb");
-		double all_total = 0;
-
-		for (size_t i = 0; i < TotalTimerFields; i++)
+		if (vm->profile_flags & PROFILE_TIMERS)
 		{
-			const qcvm_profile_timer_t *timer = vm->timers + i;
-			const double total = timer->time / 1000000.0;
-			all_total += total;
+			FILE *fp = fopen(qcvm_temp_format(vm, "%sprf_%s_timers.csv", vm->path, mark), "wb");
+			double all_total = 0;
+
+			for (size_t i = 0; i < TotalTimerFields; i++)
+			{
+				const qcvm_profile_timer_t *timer = &vm->timers[i][m];
+				const double total = Q_time_adjust(timer->time[m]) / 1000000.0;
+				all_total += total;
+			}
+
+			fprintf(fp, "Name,Count,Total (ms),Avg (ns),%%\n");
+
+			for (size_t i = 0; i < TotalTimerFields; i++)
+			{
+				const qcvm_profile_timer_t *timer = &vm->timers[i][m];
+				const double total = Q_time_adjust(timer->time[m]) / 1000000.0;
+
+				fprintf(fp, "%s,%i,%f,%f,%f\n", timer_type_names[i], timer->count[m], total, (total / timer->count[m]) * 1000, (total / all_total) * 100);
+			}
+
+			fclose(fp);
 		}
-
-		fprintf(fp, "Name,Count,Total (ms),Avg (ns),%%\n");
-
-		for (size_t i = 0; i < TotalTimerFields; i++)
-		{
-			const qcvm_profile_timer_t *timer = vm->timers + i;
-			const double total = timer->time / 1000000.0;
-
-			fprintf(fp, "%s,%i,%f,%f,%f\n", timer_type_names[i], timer->count, total, (total / timer->count) * 1000, (total / all_total) * 100);
-		}
-
-		fclose(fp);
-	}
 	
-	if (vm->profile_flags & PROFILE_OPCODES)
-	{
-		FILE *fp = fopen(qcvm_temp_format(vm, "%sopcodes.csv", vm->path), "wb");
-		double all_total = 0;
-
-		for (size_t i = 0; i < OP_NUMOPS; i++)
+		if (vm->profile_flags & PROFILE_OPCODES)
 		{
-			const qcvm_profile_timer_t *timer = vm->opcode_timers + i;
+			FILE *fp = fopen(qcvm_temp_format(vm, "%sprf_%s_opcodes.csv", vm->path, mark), "wb");
+			double all_total = 0;
 
-			if (!timer->count)
-				continue;
+			for (size_t i = 0; i < OP_NUMOPS; i++)
+			{
+				const qcvm_profile_timer_t *timer = &vm->opcode_timers[i][m];
 
-			const double total = timer->time / 1000000.0;
-			all_total += total;
+				if (!timer->count[m])
+					continue;
+
+				const double total = Q_time_adjust(timer->time[m]) / 1000000.0;
+				all_total += total;
+			}
+
+			fprintf(fp, "ID,Count,Total (ms),Avg (ns),%%\n");
+
+			for (size_t i = 0; i < OP_NUMOPS; i++)
+			{
+				const qcvm_profile_timer_t *timer = &vm->opcode_timers[i][m];
+
+				if (!timer->count[m])
+					continue;
+
+				const double total = Q_time_adjust(timer->time[m]) / 1000000.0;
+
+				fprintf(fp, "%i,%i,%f,%f,%f\n", i, timer->count[m], total, (total / timer->count[m]) * 1000, (total / all_total) * 100);
+			}
+
+			fclose(fp);
 		}
-
-		fprintf(fp, "ID,Count,Total (ms),Avg (ns),%%\n");
-
-		for (size_t i = 0; i < OP_NUMOPS; i++)
-		{
-			const qcvm_profile_timer_t *timer = vm->opcode_timers + i;
-
-			if (!timer->count)
-				continue;
-
-			const double total = timer->time / 1000000.0;
-
-			fprintf(fp, "%i,%i,%f,%f,%f\n", i, timer->count, total, (total / timer->count) * 1000, (total / all_total) * 100);
-		}
-
-		fclose(fp);
 	}
 #endif
 
@@ -2286,4 +2650,5 @@ void qcvm_init_all_builtins(qcvm_t *vm)
 	qcvm_init_mem_builtins(vm);
 	qcvm_init_debug_builtins(vm);
 	qcvm_init_math_builtins(vm);
+	qcvm_init_file_builtins(vm);
 }

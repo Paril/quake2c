@@ -17,6 +17,7 @@ static void QC_memcpy(qcvm_t *vm)
 	memcpy(dst_ptr, src_ptr, size);
 
 	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, src_ptr, dst_ptr, span);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, dst_ptr, span);
 }
 
 static void QC_memmove(qcvm_t *vm)
@@ -35,6 +36,7 @@ static void QC_memmove(qcvm_t *vm)
 	memmove(dst_ptr, src_ptr, size);
 
 	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, src_ptr, dst_ptr, span);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, dst_ptr, span);
 }
 
 static void QC_memset(qcvm_t *vm)
@@ -52,6 +54,7 @@ static void QC_memset(qcvm_t *vm)
 	memset(dst_ptr, val, size);
 
 	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, dst_ptr, span, true);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, dst_ptr, span);
 }
 
 static void QC_memcmp(qcvm_t *vm)

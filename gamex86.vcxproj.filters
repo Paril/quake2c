@@ -51,6 +51,12 @@
     <ClCompile Include="src\g_main.c">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="src\vm_file.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\g_file.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\shared\client.h">
@@ -99,6 +105,12 @@
       <Filter>inc</Filter>
     </ClInclude>
     <ClInclude Include="src\vm_gi.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vm_file.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\g_file.h">
       <Filter>inc</Filter>
     </ClInclude>
   </ItemGroup>

@@ -356,7 +356,7 @@ void qcvm_init_math_builtins(qcvm_t *vm)
 	qcvm_register_builtin(signbit);
 
 	// set the FLT_ constants
-	qcvm_definition_t *def = qcvm_find_definition(vm, "FLT_MAX");
+	qcvm_definition_t *def = qcvm_find_definition(vm, "FLT_MAX", TYPE_FLOAT);
 
 	if (def)
 	{
@@ -364,7 +364,7 @@ void qcvm_init_math_builtins(qcvm_t *vm)
 		qcvm_set_global_typed_value(vec_t, vm, def->global_index, val);
 	}
 
-	def = qcvm_find_definition(vm, "FLT_EPSILON");
+	def = qcvm_find_definition(vm, "FLT_EPSILON", TYPE_FLOAT);
 
 	if (def)
 	{
@@ -372,7 +372,7 @@ void qcvm_init_math_builtins(qcvm_t *vm)
 		qcvm_set_global_typed_value(vec_t, vm, def->global_index, val);
 	}
 
-	def = qcvm_find_definition(vm, "FLT_MIN");
+	def = qcvm_find_definition(vm, "FLT_MIN", TYPE_FLOAT);
 
 	if (def)
 	{

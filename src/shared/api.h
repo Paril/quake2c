@@ -18,6 +18,8 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #pragma once
 
+#define BASEDIR	"baseq2"
+
 //
 // game.h -- game dll information visible to server
 //
@@ -30,7 +32,11 @@ typedef struct gclient_s gclient_t;
 // per-level limits
 //
 enum { MAX_CLIENTS		= 256 };	// absolute limit
+#ifdef KMQUAKE2_ENGINE_MOD
+enum { MAX_EDICTS		= 8192 };	// must change protocol to increase more
+#else
 enum { MAX_EDICTS		= 1024 };	// must change protocol to increase more
+#endif
 
 typedef int print_level_t;
 

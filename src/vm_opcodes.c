@@ -289,6 +289,7 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 	TType *field_value = (TType *)qcvm_resolve_pointer(vm, pointer); \
 	qcvm_set_global_typed_ptr(TType, vm, operands.c, field_value); \
 	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), sizeof(TType) / sizeof(qcvm_global_t)); \
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, qcvm_get_global(vm, operands.c), sizeof(TType) / sizeof(qcvm_global_t)); \
 }
 
 F_OP_LOAD(F_OP_LOAD_F, vec_t)
@@ -349,6 +350,7 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 	TResult *address_ptr = (TResult *)qcvm_resolve_pointer(vm, pointer); \
 	*address_ptr = *value; \
 	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, value, address_ptr, span); \
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, address_ptr, span); \
 }
 
 F_OP_STOREP(F_OP_STOREP_F, vec_t, vec_t)
@@ -390,10 +392,10 @@ static void F_OP_NOT_S(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
 }
 
-#ifdef ALLOW_PROFILING
+#ifdef ALLOW_INSTRUMENTING
 #define PROFILE_COND_JUMP \
 	if (vm->profile_flags & PROFILE_FIELDS) \
-		current->profile->fields[NumConditionalJumps]++
+		current->profile->fields[NumConditionalJumps][vm->profiler_mark]++
 #else
 #define PROFILE_COND_JUMP
 #endif
@@ -466,11 +468,11 @@ static inline void F_OP_BASE(const size_t num_args, const bool hexen, qcvm_t *vm
 	if (enter_func <= 0 || enter_func >= vm->functions_size)
 		qcvm_error(vm, "NULL function");
 	
-#ifdef ALLOW_PROFILING
+#ifdef ALLOW_INSTRUMENTING
 	if (vm->profile_flags & PROFILE_FIELDS)
 	{
 		qcvm_stack_t *current = &vm->state.stack[vm->state.current];
-		current->profile->fields[NumFuncCalls]++;
+		current->profile->fields[NumFuncCalls][vm->profiler_mark]++;
 	}
 #endif
 
@@ -520,9 +522,9 @@ static void F_OP_GOTO(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 	qcvm_stack_t *current = &vm->state.stack[vm->state.current];
 	current->statement += (int16_t)current->statement->args.a - 1;
 
-#ifdef ALLOW_PROFILING
+#ifdef ALLOW_INSTRUMENTING
 	if (vm->profile_flags & PROFILE_FIELDS)
-		current->profile->fields[NumUnconditionalJumps]++;
+		current->profile->fields[NumUnconditionalJumps][vm->profiler_mark]++;
 #endif
 }
 
@@ -681,6 +683,7 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 \
 	const size_t span = sizeof(TType) / sizeof(qcvm_global_t); \
 	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), span); \
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, qcvm_get_global(vm, operands.c), span); \
 }
 
 F_OP_LOADA(F_OP_LOADA_F, vec_t)
@@ -705,6 +708,7 @@ static inline void F_OP_LOADP_BASE(qcvm_t *vm, const qcvm_operands_t operands, i
 
 	const size_t span = TType_size / sizeof(qcvm_global_t);
 	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), span);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, qcvm_get_global(vm, operands.c), span);
 }
 
 #define F_OP_LOADP(F_OP, TType) \
@@ -763,6 +767,7 @@ static void F_OP_MULSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *de
 	const vec_t result = (*f) *= a;
 
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, f, sizeof(vec_t) / sizeof(qcvm_global_t));
 }
 
 static void F_OP_MULSTOREP_VF(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
@@ -776,6 +781,7 @@ static void F_OP_MULSTOREP_VF(qcvm_t *vm, const qcvm_operands_t operands, int *d
 	const vec_t a = *qcvm_get_global_typed(vec_t, vm, operands.a);
 	const vec3_t result = (*f) = VectorScaleF(*f, a);
 	qcvm_set_global_typed_value(vec3_t, vm, operands.c, result);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, f, sizeof(vec3_t) / sizeof(qcvm_global_t));
 }
 
 static void F_OP_DIVSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
@@ -789,6 +795,7 @@ static void F_OP_DIVSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *de
 	const vec_t a = *qcvm_get_global_typed(vec_t, vm, operands.a);
 	const vec_t result = (*f) /= a;
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, f, sizeof(vec_t) / sizeof(qcvm_global_t));
 }
 
 static void F_OP_ADDSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
@@ -802,6 +809,7 @@ static void F_OP_ADDSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *de
 	const vec_t a = *qcvm_get_global_typed(vec_t, vm, operands.a);
 	const vec_t result = (*f) += a;
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, f, sizeof(vec_t) / sizeof(qcvm_global_t));
 }
 
 static void F_OP_ADDSTOREP_V(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
@@ -815,6 +823,7 @@ static void F_OP_ADDSTOREP_V(qcvm_t *vm, const qcvm_operands_t operands, int *de
 	const vec3_t a = *qcvm_get_global_typed(vec3_t, vm, operands.a);
 	const vec3_t result = (*f) = VectorAdd(*f, a);
 	qcvm_set_global_typed_value(vec3_t, vm, operands.c, result);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, f, sizeof(vec3_t) / sizeof(qcvm_global_t));
 }
 
 static void F_OP_SUBSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
@@ -828,6 +837,7 @@ static void F_OP_SUBSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *de
 	const vec_t a = *qcvm_get_global_typed(vec_t, vm, operands.a);
 	const vec_t result = (*f) -= a;
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, f, sizeof(vec_t) / sizeof(qcvm_global_t));
 }
 
 static void F_OP_SUBSTOREP_V(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
@@ -841,6 +851,7 @@ static void F_OP_SUBSTOREP_V(qcvm_t *vm, const qcvm_operands_t operands, int *de
 	const vec3_t a = *qcvm_get_global_typed(vec3_t, vm, operands.a);
 	const vec3_t result = (*f) = VectorSubtract(*f, a);
 	qcvm_set_global_typed_value(vec3_t, vm, operands.c, result);
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, f, sizeof(vec3_t) / sizeof(qcvm_global_t));
 }
 
 static void F_OP_RAND0(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
@@ -895,6 +906,7 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 	*field_value = *value; \
 \
 	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, value, field_value, span); \
+	qcvm_field_wrap_list_check_set(&vm->field_wraps, field_value, span); \
 }
 
 F_OP_STOREF(F_OP_STOREF_F, vec_t)

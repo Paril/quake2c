@@ -10,9 +10,14 @@ extern game_export_t globals;
 typedef struct
 {
 	gclient_t	*clients;
-	size_t		num_clients;
+	uint32_t	num_clients;
 
 	void		*client_load_data;
+
+	struct {
+		uint32_t	is_client;
+		uint32_t	owner;
+	} fields;
 } game_t;
 
 extern game_t game;

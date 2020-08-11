@@ -95,7 +95,7 @@ static void QC_strncmp(qcvm_t *vm)
 static void QC_strlen(qcvm_t *vm)
 {
 	const qcvm_string_t a = qcvm_argv_string_id(vm, 0);
-	qcvm_return_int32(vm, qcvm_get_string_length(vm, a));
+	qcvm_return_int32(vm, (int32_t)qcvm_get_string_length(vm, a));
 }
 
 static void QC_substr(qcvm_t *vm)
@@ -146,7 +146,7 @@ static void QC_strstr(qcvm_t *vm)
 	const char *b = qcvm_argv_string(vm, 1);
 	const char *c = strstr(a, b);
 
-	qcvm_return_int32(vm, c == NULL ? -1 : (c - a));
+	qcvm_return_int32(vm, c == NULL ? -1 : (int32_t)(c - a));
 }
 
 static void QC_strchr(qcvm_t *vm)
@@ -155,7 +155,7 @@ static void QC_strchr(qcvm_t *vm)
 	const int32_t b = qcvm_argv_int32(vm, 1);
 	const char *c = strchr(a, b);
 	
-	qcvm_return_int32(vm, c == NULL ? -1 : (c - a));
+	qcvm_return_int32(vm, c == NULL ? -1 : (int32_t)(c - a));
 }
 
 #include <time.h>

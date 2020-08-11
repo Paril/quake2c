@@ -6,7 +6,7 @@
 
 static void QC_stacktrace(qcvm_t *vm)
 {
-	vm->debug_print(qcvm_stack_trace(vm));
+	qcvm_return_string(vm, qcvm_stack_trace(vm, qcvm_argv_int32(vm, 0)));
 }
 
 static void QC_debugbreak(qcvm_t *vm)
@@ -140,7 +140,7 @@ void qcvm_send_debugger_command(const qcvm_t *vm, const char *cmd)
 
 static const char *strtok_emulate(qcvm_t *vm, qcvm_function_t *func, const char *string, int *start)
 {
-	qcvm_set_global_str(vm, GLOBAL_PARM0, string);
+	qcvm_set_global_str(vm, GLOBAL_PARM0, string, strlen(string), true);
 	qcvm_set_global_typed_ptr(int32_t, vm, GLOBAL_PARM1, start);
 	qcvm_execute(vm, func);
 
