@@ -1591,7 +1591,7 @@ void qcvm_break_on_current_statement(qcvm_t *vm)
 	vm->debug.state = DEBUG_BROKE;
 	vm->debug.step_function = current->function;
 	vm->debug.step_statement = current->statement;
-	vm->debug.step_depth = vm->state.stack_size;
+	vm->debug.step_depth = vm->state.current;
 	qcvm_wait_for_debugger_commands(vm);
 }
 #endif
@@ -1898,14 +1898,14 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 				// I lied, step out is the easiest
 				else if (vm->debug.state == DEBUG_STEP_OUT)
 				{
-					if (vm->debug.step_depth > vm->state.stack_size)
+					if (vm->debug.step_depth > vm->state.current)
 						qcvm_break_on_current_statement(vm);
 				}
 				// step over: either step out, or the next step that is in the same function + stack depth + not on same line
 				else if (vm->debug.state == DEBUG_STEP_OVER)
 				{
-					if (vm->debug.step_depth > vm->state.stack_size ||
-						(vm->debug.step_depth == vm->state.stack_size && vm->debug.step_function == current->function && qcvm_line_number_for(vm, vm->debug.step_statement) != qcvm_line_number_for(vm, current->statement)))
+					if (vm->debug.step_depth > vm->state.current ||
+						(vm->debug.step_depth == vm->state.current && vm->debug.step_function == current->function && qcvm_line_number_for(vm, vm->debug.step_statement) != qcvm_line_number_for(vm, current->statement)))
 						qcvm_break_on_current_statement(vm);
 				}
 			}
@@ -1937,6 +1937,11 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 		if (!enter_depth)
 			return;		// all done
 	}
+
+	vm->debug_print(qcvm_temp_format(vm, "Infinite loop broken @ %s\n", qcvm_stack_trace(vm, true)));
+	
+	while (vm->state.current != -1)
+		qcvm_leave(vm);
 }
 
 static const uint32_t QCVM_VERSION	= 1;

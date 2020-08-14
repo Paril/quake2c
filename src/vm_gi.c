@@ -353,8 +353,13 @@ static void entity_set_clear(entity_set_t *set)
 {
 	set->count = 0;
 
-	for (entity_set_link_t *link = set->head; link; link = link->next)
+	for (entity_set_link_t *link = set->head; link; )
+	{
+		entity_set_link_t *next = link->next;
 		link->entity = NULL;
+		link->next = NULL;
+		link = next;
+	}
 }
 
 static void QC_entity_set_alloc(qcvm_t *vm)

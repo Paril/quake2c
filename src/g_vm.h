@@ -2,7 +2,7 @@
 
 typedef struct qcvm_s qcvm_t;
 
-//#define ALLOW_DEBUGGING
+#define ALLOW_DEBUGGING
 //#define ALLOW_INSTRUMENTING
 #define ALLOW_PROFILING
 
@@ -399,7 +399,7 @@ typedef struct
 {
 	qcvm_t *vm;
 	qcvm_stack_t *stack;
-	size_t stack_size, stack_allocated;
+	size_t stack_allocated;
 	uint8_t	argc;
 	int32_t current;
 
