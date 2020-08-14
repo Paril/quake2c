@@ -142,5 +142,15 @@ uint32_t Q_hash_pointer(uint32_t a, const size_t hash_size)
     a = a ^ (a >> 4);
     a = a * 0x27d4eb2d;
     a = a ^ (a >> 15);
-    return a % hash_size;
+    return a & (hash_size - 1);
+}
+
+/*
+================
+Q_next_pow2
+================
+*/
+uint64_t Q_next_pow2(const uint64_t x)
+{
+	return x == 1 ? 1 : 1 << (64 - __builtin_clzl((uint32_t)(x - 1)));
 }

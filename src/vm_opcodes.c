@@ -175,8 +175,10 @@ static void F_OP_EQ_S(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 
 	if (a == b)
 		result = 1;
-	else
+	else if (qcvm_strings_case_sensitive(vm))
 		result = !strcmp(qcvm_get_string(vm, a), qcvm_get_string(vm, b));
+	else
+		result = !stricmp(qcvm_get_string(vm, a), qcvm_get_string(vm, b));
 	
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
 }
@@ -214,8 +216,10 @@ static void F_OP_NE_S(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 
 	if (a == b)
 		result = 0;
-	else
+	else if (qcvm_strings_case_sensitive(vm))
 		result = !!strcmp(qcvm_get_string(vm, a), qcvm_get_string(vm, b));
+	else
+		result = !!stricmp(qcvm_get_string(vm, a), qcvm_get_string(vm, b));
 
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
 }
@@ -454,17 +458,10 @@ static void F_OP_IFNOT_S(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 	}
 }
 
-static inline void F_OP_BASE(const size_t num_args, const bool hexen, qcvm_t *vm, const qcvm_operands_t operands, int *depth)
+__attribute__((always_inline)) static inline void F_OP_CALL_BASE(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
-	if (num_args >= 2 && hexen)
-		qcvm_copy_globals_typed(qcvm_global_t[3], vm, GLOBAL_PARM1, operands.c);
-
-	if (num_args >= 1 && hexen)
-		qcvm_copy_globals_typed(qcvm_global_t[3], vm, GLOBAL_PARM0, operands.b);
-
 	const int32_t enter_func = *qcvm_get_global_typed(int32_t, vm, operands.a);
 
-	vm->state.argc = num_args;
 	if (enter_func <= 0 || enter_func >= vm->functions_size)
 		qcvm_error(vm, "NULL function");
 	
@@ -491,31 +488,51 @@ static inline void F_OP_BASE(const size_t num_args, const bool hexen, qcvm_t *vm
 	qcvm_enter(vm, call);
 }
 
-#define F_OP_CALL(F_OP, num_args, hexen) \
+#define F_OP_CALL(F_OP, num_args) \
 static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 { \
-	F_OP_BASE(num_args, hexen, vm, operands, depth); \
+	vm->state.argc = num_args; \
+	F_OP_CALL_BASE(vm, operands, depth); \
 }
 
-F_OP_CALL(F_OP_CALL0, 0, false)
-F_OP_CALL(F_OP_CALL1, 1, false)
-F_OP_CALL(F_OP_CALL2, 2, false)
-F_OP_CALL(F_OP_CALL3, 3, false)
-F_OP_CALL(F_OP_CALL4, 4, false)
-F_OP_CALL(F_OP_CALL5, 5, false)
-F_OP_CALL(F_OP_CALL6, 6, false)
-F_OP_CALL(F_OP_CALL7, 7, false)
-F_OP_CALL(F_OP_CALL8, 8, false)
+#define F_OP_CALLH1(F_OP, num_args) \
+static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
+{ \
+	vm->state.argc = num_args; \
+	qcvm_copy_globals_typed(qcvm_global_t[3], vm, GLOBAL_PARM0, operands.b); \
+	F_OP_CALL_BASE(vm, operands, depth); \
+}
 
-F_OP_CALL(F_OP_CALL1H, 1, true)
-F_OP_CALL(F_OP_CALL2H, 2, true)
-F_OP_CALL(F_OP_CALL3H, 3, true)
-F_OP_CALL(F_OP_CALL4H, 4, true)
-F_OP_CALL(F_OP_CALL5H, 5, true)
-F_OP_CALL(F_OP_CALL6H, 6, true)
-F_OP_CALL(F_OP_CALL7H, 7, true)
-F_OP_CALL(F_OP_CALL8H, 8, true)
+#define F_OP_CALLH2(F_OP, num_args) \
+static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
+{ \
+	vm->state.argc = num_args; \
+	qcvm_copy_globals_typed(qcvm_global_t[3], vm, GLOBAL_PARM0, operands.b); \
+	qcvm_copy_globals_typed(qcvm_global_t[3], vm, GLOBAL_PARM1, operands.c); \
+	F_OP_CALL_BASE(vm, operands, depth); \
+}
+
+F_OP_CALL(F_OP_CALL0, 0)
+F_OP_CALL(F_OP_CALL1, 1)
+F_OP_CALL(F_OP_CALL2, 2)
+F_OP_CALL(F_OP_CALL3, 3)
+F_OP_CALL(F_OP_CALL4, 4)
+F_OP_CALL(F_OP_CALL5, 5)
+F_OP_CALL(F_OP_CALL6, 6)
+F_OP_CALL(F_OP_CALL7, 7)
+F_OP_CALL(F_OP_CALL8, 8)
+
+F_OP_CALLH1(F_OP_CALL1H, 1)
+F_OP_CALLH2(F_OP_CALL2H, 2)
+F_OP_CALLH2(F_OP_CALL3H, 3)
+F_OP_CALLH2(F_OP_CALL4H, 4)
+F_OP_CALLH2(F_OP_CALL5H, 5)
+F_OP_CALLH2(F_OP_CALL6H, 6)
+F_OP_CALLH2(F_OP_CALL7H, 7)
+F_OP_CALLH2(F_OP_CALL8H, 8)
 #undef F_OP_CALL
+#undef F_OP_CALLH1
+#undef F_OP_CALLH2
 
 static void F_OP_GOTO(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {

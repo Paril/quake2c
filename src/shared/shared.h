@@ -181,6 +181,8 @@ uint32_t Q_hash_string(const char *string, const size_t hash_size);
 
 uint32_t Q_hash_pointer(uint32_t a, const size_t hash_size);
 
+uint64_t Q_next_pow2(const uint64_t x);
+
 /*
 ==========================================================
 

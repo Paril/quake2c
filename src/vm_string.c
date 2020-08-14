@@ -76,11 +76,11 @@ static void QC_stof(qcvm_t *vm)
 	qcvm_return_float(vm, strtof(a, NULL));
 }
 
-static void QC_stricmp(qcvm_t *vm)
+static void QC_strcmp(qcvm_t *vm)
 {
 	const char *a = qcvm_argv_string(vm, 0);
 	const char *b = qcvm_argv_string(vm, 1);
-	qcvm_return_int32(vm, stricmp(a, b));
+	qcvm_return_int32(vm, qcvm_strings_case_sensitive(vm) ? strcmp(a, b) : stricmp(a, b));
 }
 
 static void QC_strncmp(qcvm_t *vm)
@@ -89,7 +89,7 @@ static void QC_strncmp(qcvm_t *vm)
 	const char *b = qcvm_argv_string(vm, 1);
 	const int32_t c = qcvm_argv_int32(vm, 2);
 
-	qcvm_return_int32(vm, strncmp(a, b, c));
+	qcvm_return_int32(vm, qcvm_strings_case_sensitive(vm) ? strncmp(a, b, c) : strnicmp(a, b, c));
 }
 
 static void QC_strlen(qcvm_t *vm)
@@ -179,7 +179,7 @@ void qcvm_init_string_builtins(qcvm_t *vm)
 	qcvm_register_builtin(stoi);
 	qcvm_register_builtin(stof);
 
-	qcvm_register_builtin(stricmp);
+	qcvm_register_builtin(strcmp);
 	qcvm_register_builtin(strlen);
 	qcvm_register_builtin(substr);
 	qcvm_register_builtin(strncmp);

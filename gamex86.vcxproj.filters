@@ -57,6 +57,9 @@
     <ClCompile Include="src\g_file.cpp">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="src\g_save.c">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\shared\client.h">
@@ -111,6 +114,12 @@
       <Filter>inc</Filter>
     </ClInclude>
     <ClInclude Include="src\g_file.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\g_save.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\g_main.h">
       <Filter>inc</Filter>
     </ClInclude>
   </ItemGroup>

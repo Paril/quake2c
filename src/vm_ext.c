@@ -17,8 +17,15 @@ static void QC_func_get(qcvm_t *vm)
 	qcvm_return_func(vm, func);
 }
 
+static void QC_handle_free(qcvm_t *vm)
+{
+	const int32_t id = qcvm_argv_int32(vm, 0);
+	qcvm_handle_free(vm, qcvm_fetch_handle(vm, id));
+}
+
 void qcvm_init_ext_builtins(qcvm_t *vm)
 {
 	qcvm_register_builtin(ModInt);
 	qcvm_register_builtin(func_get);
+	qcvm_register_builtin(handle_free);
 }

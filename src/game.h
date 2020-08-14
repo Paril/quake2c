@@ -18,6 +18,19 @@ typedef struct
 		uint32_t	is_client;
 		uint32_t	owner;
 	} fields;
+
+	struct {
+		qcvm_function_t		*ClientConnect;
+		qcvm_function_t		*ClientBegin;
+		qcvm_function_t		*ClientUserinfoChanged;
+		qcvm_function_t		*ClientDisconnect;
+		qcvm_function_t		*ClientCommand;
+		qcvm_function_t		*ClientThink;
+
+		qcvm_function_t		*RunFrame;
+
+		qcvm_function_t		*ServerCommand;
+	} funcs;
 } game_t;
 
 extern game_t game;

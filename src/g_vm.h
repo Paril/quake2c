@@ -2,9 +2,9 @@
 
 typedef struct qcvm_s qcvm_t;
 
-#define ALLOW_DEBUGGING
+//#define ALLOW_DEBUGGING
 //#define ALLOW_INSTRUMENTING
-//#define ALLOW_PROFILING
+#define ALLOW_PROFILING
 
 #ifdef ALLOW_DEBUGGING
 typedef enum
@@ -86,30 +86,6 @@ enum
 };
 
 typedef uint32_t qcvm_deftype_t;
-
-typedef vec3_t qcvm_handle_t;
-
-inline void *qcvm_handle_to_pointer(const qcvm_handle_t handle)
-{
-	union
-	{
-		qcvm_handle_t	hnd;
-		void			*ptr;
-	} u = { 0 };
-	u.hnd = handle;
-	return u.ptr;
-}
-
-inline qcvm_handle_t qcvm_pointer_to_handle(const void *ptr)
-{
-	union
-	{
-		const void		*ptr;
-		qcvm_handle_t	hnd;
-	} u = { 0 };
-	u.ptr = ptr;
-	return u.hnd;
-}
 
 typedef struct
 {
@@ -264,12 +240,6 @@ typedef struct
 	qcvm_string_t	id;
 } qcvm_string_backup_t;
 
-typedef struct
-{
-	qcvm_global_t	global;
-	int32_t			value;
-} qcvm_stack_local_t;
-
 enum { STACK_STRINGS_RESERVE = 64 };
 
 typedef struct
@@ -277,7 +247,7 @@ typedef struct
 	qcvm_t					*vm;
 	qcvm_function_t			*function;
 	const qcvm_statement_t	*statement;
-	qcvm_stack_local_t		*locals;
+	qcvm_global_t			*locals;
 	qcvm_string_backup_t	*ref_strings;
 	size_t					ref_strings_size, ref_strings_allocated;
 
@@ -287,21 +257,22 @@ typedef struct
 #endif
 } qcvm_stack_t;
 
-typedef enum
+enum
 {
 	QCVM_POINTER_NULL,
 	QCVM_POINTER_GLOBAL,
 	QCVM_POINTER_ENTITY,
 	QCVM_POINTER_STACK
-} qcvm_pointer_type_t;
+};
+
+typedef uint32_t qcvm_pointer_type_t;
 
 typedef struct
 {
-	uint32_t			offset : 28;
-	qcvm_pointer_type_t	type : 4;
+	uint32_t			offset : 30;
+	qcvm_pointer_type_t	type : 2;
 } qcvm_pointer_t;
 
-void qcvm_stack_needs_resize(qcvm_stack_t *stack);
 void qcvm_stack_push_ref_string(qcvm_stack_t *stack, const qcvm_string_backup_t ref_string);
 
 typedef void (*qcvm_builtin_t) (qcvm_t *vm);
@@ -470,6 +441,33 @@ typedef struct
 } qcvm_sampling_t;
 #endif
 
+typedef struct
+{
+	void	(*free)		(qcvm_t *vm, void *handle);
+	void	(*write)	(qcvm_t *vm, void *handle, FILE *fp);
+	void	*(*read)	(qcvm_t *vm, FILE *fp);
+} qcvm_handle_descriptor_t;
+
+typedef int32_t qcvm_handle_id_t;
+
+typedef struct
+{
+	qcvm_handle_id_t				id;
+	const qcvm_handle_descriptor_t	*descriptor;
+	void							*handle;
+} qcvm_handle_t;
+
+static const size_t HANDLES_RESERVE = 128;
+
+int32_t qcvm_handle_alloc(qcvm_t *vm, void *ptr, const qcvm_handle_descriptor_t *descriptor);
+
+void *qcvm_fetch_handle(qcvm_t *vm, const int32_t id);
+
+void qcvm_handle_free(qcvm_t *vm, qcvm_handle_t *handle);
+
+#define qcvm_argv_handle(type, vm, d) \
+	(type *)qcvm_fetch_handle(vm, qcvm_argv_int32(vm, d))
+
 typedef struct qcvm_s
 {
 	// loaded from progs.dat
@@ -510,6 +508,7 @@ typedef struct qcvm_s
 	size_t					*string_lengths;
 	size_t					string_size;
 	qcvm_string_hash_t		**string_hashes, *string_hashes_data;
+	qcvm_global_t			*string_case_sensitive;
 	qcvm_string_list_t		dynamic_strings;
 	qcvm_builtin_list_t		builtins;
 	qcvm_field_wrap_list_t	field_wraps;
@@ -525,6 +524,13 @@ typedef struct qcvm_s
 	size_t					system_edict_size;
 	size_t					edict_size;
 	size_t					max_edicts;
+
+	struct {
+		qcvm_handle_t	*data;
+		size_t			size, allocated;
+		int32_t			*free;
+		size_t			free_size;
+	} handles;
 
 #ifdef ALLOW_DEBUGGING
 	struct
@@ -615,6 +621,11 @@ void qcvm_copy_globals(qcvm_t *vm, const qcvm_global_t dst, const qcvm_global_t 
 		qcvm_field_wrap_list_check_set(&vm->field_wraps, dst_ptr, span); \
 	}
 
+inline bool qcvm_strings_case_sensitive(const qcvm_t *vm)
+{
+	return *vm->string_case_sensitive;
+}
+
 edict_t *qcvm_ent_to_entity(const qcvm_t *vm, const qcvm_ent_t ent, bool allow_invalid);
 
 qcvm_ent_t qcvm_entity_to_ent(const qcvm_t *vm, const edict_t *ent);
@@ -633,8 +644,6 @@ vec3_t qcvm_argv_vector(const qcvm_t *vm, const uint8_t d);
 
 qcvm_pointer_t qcvm_argv_pointer(const qcvm_t *vm, const uint8_t d);
 
-void *qcvm_argv_handle(const qcvm_t *vm, const uint8_t d);
-
 void qcvm_return_float(qcvm_t *vm, const vec_t value);
 
 void qcvm_return_vector(qcvm_t *vm, const vec3_t value);
@@ -651,13 +660,13 @@ void qcvm_return_string(qcvm_t *vm, const char *str);
 
 void qcvm_return_pointer(qcvm_t *vm, const qcvm_pointer_t ptr);
 
-void qcvm_return_handle(qcvm_t *vm, const void *value);
-
 bool qcvm_find_string(qcvm_t *vm, const char *value, qcvm_string_t *rstr);
 
 // Note: DOES NOT ACQUIRE IF REF COUNTED!!
 // Note: currently *copies* value if it's acquired
 qcvm_string_t qcvm_store_or_find_string(qcvm_t *vm, const char *value, const size_t len, const bool copy);
+
+qcvm_string_t *qcvm_string_list_has_ref(qcvm_string_list_t *list, const void *ptr, qcvm_ref_storage_hash_t **hashed_ptr);
 
 qcvm_definition_t *qcvm_find_definition(qcvm_t *vm, const char *name, const qcvm_deftype_t type);
 
@@ -696,6 +705,7 @@ void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function);
 void qcvm_execute(qcvm_t *vm, qcvm_function_t *function);
 	
 void qcvm_write_state(qcvm_t *vm, FILE *fp);
+
 void qcvm_read_state(qcvm_t *vm, FILE *fp);
 
 const char *qcvm_parse_format(const qcvm_string_t formatid, const qcvm_t *vm, const uint8_t start);
@@ -713,6 +723,110 @@ void qcvm_shutdown(qcvm_t *vm);
 void qcvm_init_all_builtins(qcvm_t *vm);
 
 #ifdef QCVM_INTERNAL
-void qcvm_enter(qcvm_t *vm, qcvm_function_t *function);
-void qcvm_leave(qcvm_t *vm);
+__attribute__((always_inline)) inline void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
+{
+#ifdef ALLOW_INSTRUMENTING
+	if (vm->profiler_func && function == vm->profiler_func && !vm->state.profile_mark_depth)
+	{
+		vm->state.profile_mark_backup = vm->profiler_mark;
+		vm->state.profile_mark_depth++;
+		vm->profiler_mark = MARK_CUSTOM;
+	}
+#endif
+
+	qcvm_stack_t *cur_stack = (vm->state.current >= 0) ? &vm->state.stack[vm->state.current] : NULL;
+
+	// save current stack space that will be overwritten by the new function
+	if (cur_stack && function->num_args_and_locals)
+	{
+		memcpy(cur_stack->locals, qcvm_get_global(vm, function->first_arg), sizeof(qcvm_global_t) * function->num_args_and_locals);
+		
+		for (qcvm_global_t i = 0, arg = function->first_arg; i < function->num_args_and_locals; i++, arg++)
+		{
+			const void *ptr = qcvm_get_global(vm, (qcvm_global_t)arg);
+
+			if (qcvm_string_list_has_ref(&vm->dynamic_strings, ptr, NULL))
+				qcvm_stack_push_ref_string(cur_stack, qcvm_string_list_pop_ref(&vm->dynamic_strings, ptr));
+		}
+
+#ifdef ALLOW_INSTRUMENTING
+		// entering a function call;
+		// add time we spent up till now into self
+		if (vm->profile_flags & PROFILE_FUNCTIONS)
+		{
+			cur_stack->profile->self[vm->profiler_mark] += Q_time() - cur_stack->caller_start;
+			cur_stack->callee_start = Q_time();
+		}
+#endif
+	}
+
+	qcvm_stack_t *new_stack = qcvm_state_stack_push(&vm->state);
+
+	// set up current stack
+	new_stack->function = function;
+	new_stack->statement = &vm->statements[function->id - 1];
+
+	// copy parameters
+	for (qcvm_global_t i = 0, arg_id = function->first_arg; i < function->num_args; i++)
+		for (qcvm_global_t s = 0; s < function->arg_sizes[i]; s++, arg_id++)
+			qcvm_copy_globals_typed(qcvm_global_t, vm, arg_id, qcvm_global_offset(GLOBAL_PARM0, (i * 3) + s));
+
+#ifdef ALLOW_INSTRUMENTING
+	if (vm->profile_flags & (PROFILE_FUNCTIONS | PROFILE_FIELDS))
+	{
+		new_stack->profile = &vm->profile_data[function - vm->functions];
+
+		if (vm->profile_flags & PROFILE_FIELDS)
+			new_stack->profile->fields[NumSelfCalls][vm->profiler_mark]++;
+		if (vm->profile_flags & PROFILE_FUNCTIONS)
+			new_stack->caller_start = Q_time();
+	}
+#endif
+}
+
+__attribute__((always_inline)) inline void qcvm_leave(qcvm_t *vm)
+{
+	// restore stack
+	qcvm_stack_t *current_stack = &vm->state.stack[vm->state.current];
+	qcvm_state_stack_pop(&vm->state);
+	qcvm_stack_t *prev_stack = (vm->state.current == -1) ? NULL : &vm->state.stack[vm->state.current];
+
+	if (prev_stack && current_stack->function->num_args_and_locals)
+	{
+		memcpy(qcvm_get_global(vm, current_stack->function->first_arg), prev_stack->locals, sizeof(qcvm_global_t) * current_stack->function->num_args_and_locals);
+
+		for (const qcvm_string_backup_t *str = prev_stack->ref_strings; str < prev_stack->ref_strings + prev_stack->ref_strings_size; str++)
+			qcvm_string_list_push_ref(&vm->dynamic_strings, str);
+
+		prev_stack->ref_strings_size = 0;
+
+#ifdef ALLOW_INSTRUMENTING
+		if (vm->profile_flags & PROFILE_FUNCTIONS)
+		{
+			// we're coming back into prev_stack, so set up its caller_start
+			prev_stack->caller_start = Q_time();
+			// and add up the time we spent in the previous stack
+			prev_stack->profile->ext[vm->profiler_mark] += Q_time() - prev_stack->callee_start;
+		}
+#endif
+	}
+		
+#ifdef ALLOW_INSTRUMENTING
+	if (vm->profile_flags & PROFILE_FUNCTIONS)
+		current_stack->profile->self[vm->profiler_mark] += Q_time() - current_stack->caller_start;
+#endif
+
+	vm->allowed_stack = 0;
+	vm->allowed_stack_size = 0;
+
+#ifdef ALLOW_INSTRUMENTING
+	if (vm->profiler_func && vm->state.profile_mark_depth)
+	{
+		vm->state.profile_mark_depth--;
+
+		if (!vm->state.profile_mark_depth)
+			vm->profiler_mark = vm->state.profile_mark_backup;
+	}
+#endif
+}
 #endif

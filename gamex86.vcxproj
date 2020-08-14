@@ -387,6 +387,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
+    <ClCompile Include="src\g_save.c" />
     <ClCompile Include="src\g_thread.cpp" />
     <ClCompile Include="src\g_vm.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
@@ -582,6 +583,8 @@
   <ItemGroup>
     <ClInclude Include="src\game.h" />
     <ClInclude Include="src\g_file.h" />
+    <ClInclude Include="src\g_main.h" />
+    <ClInclude Include="src\g_save.h" />
     <ClInclude Include="src\g_thread.h" />
     <ClInclude Include="src\g_vm.h" />
     <ClInclude Include="src\shared\client.h" />

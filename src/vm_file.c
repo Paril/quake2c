@@ -1,9 +1,10 @@
 #include "shared/shared.h"
-#include "game.h"
 #include "g_vm.h"
 #include "vm_string.h"
 #include "vm_file.h"
 #include "g_file.h"
+
+#include "game.h"
 
 #ifndef KMQUAKE2_ENGINE_MOD
 typedef size_t fileHandle_t;
@@ -15,9 +16,9 @@ typedef enum
 	FS_APPEND
 } fsMode_t;
 
-static fileHandle_t OpenFile(qcvm_t *vm, const char *name, const fsMode_t mode)
+static FILE *OpenFile(qcvm_t *vm, const char *name, const fsMode_t mode)
 {
-	return (fileHandle_t)(fopen(qcvm_temp_format(vm, "%s%s", vm->path, name), mode == FS_READ ? "rb" : mode == FS_APPEND ? "ab" : "wb"));
+	return fopen(qcvm_temp_format(vm, "%s%s", vm->path, name), mode == FS_READ ? "rb" : mode == FS_APPEND ? "ab" : "wb");
 }
 #endif
 
@@ -30,16 +31,16 @@ static void QC_LoadFile(qcvm_t *vm)
 #ifdef KMQUAKE2_ENGINE_MOD
 	len = gi.LoadFile((char *)name, &buffer);
 #else
-	fileHandle_t handle = OpenFile(vm, name, FS_READ);
+	FILE *handle = OpenFile(vm, name, FS_READ);
 
 	if (handle)
 	{
-		fseek((FILE *)handle, 0, SEEK_END);
-		len = ftell((FILE *)handle);
-		fseek((FILE *)handle, 0, SEEK_SET);
+		fseek(handle, 0, SEEK_END);
+		len = ftell(handle);
+		fseek(handle, 0, SEEK_SET);
 		buffer = qcvm_alloc(vm, len);
-		fread(buffer, sizeof(char), len, (FILE *)handle);
-		fclose((FILE *)handle);
+		fread(buffer, sizeof(char), len, handle);
+		fclose(handle);
 	}
 	else
 		len = -1;
@@ -60,30 +61,49 @@ static void QC_LoadFile(qcvm_t *vm)
 #endif
 }
 
+static void CloseFile(qcvm_t *vm, void *ptr)
+{
+#ifdef KMQUAKE2_ENGINE_MOD
+	gi.CloseFile((fileHandle_t)ptr);
+#else
+	fclose((FILE *)ptr);
+#endif
+}
+
+static qcvm_handle_descriptor_t fileHandle_descriptor =
+{
+	.free = CloseFile
+};
+
 static void QC_OpenFile(qcvm_t *vm)
 {
 	const char *name = qcvm_argv_string(vm, 0);
 	const fsMode_t mode = qcvm_argv_int32(vm, 2);
 	int32_t len;
-	fileHandle_t handle;
+	int32_t qhandle;
 
 #ifdef KMQUAKE2_ENGINE_MOD
+	fileHandle_t handle;
 	len = gi.OpenFile(name, &handle, mode);
+
+	if (len != -1)
+		qhandle = qcvm_handle_alloc(vm, (void *)handle, &fileHandle_descriptor);
 #else
-	handle = OpenFile(vm, name, mode);
+	FILE *handle = OpenFile(vm, name, mode);
 
 	if (handle)
 	{
-		fseek((FILE *)handle, 0, SEEK_END);
-		len = ftell((FILE *)handle);
-		fseek((FILE *)handle, 0, SEEK_SET);
+		fseek(handle, 0, SEEK_END);
+		len = ftell(handle);
+		fseek(handle, 0, SEEK_SET);
+		qhandle = qcvm_handle_alloc(vm, handle, &fileHandle_descriptor);
 	}
 	else
 		len = -1;
 #endif
 
 	if (len != -1)
-		qcvm_set_global_typed_value(fileHandle_t, vm, GLOBAL_PARM1, handle);
+		qcvm_set_global_typed_value(int32_t, vm, GLOBAL_PARM1, qhandle);
 	qcvm_return_int32(vm, len);
 }
 
@@ -99,7 +119,10 @@ static void QC_OpenCompressedFile(qcvm_t *vm)
 	len = gi.OpenCompressedFile(zipName, name, &handle, mode);
 
 	if (len != -1)
-		qcvm_set_global_typed_value(fileHandle_t, vm, GLOBAL_PARM1, handle);
+	{
+		int32_t qhandle = qcvm_handle_alloc(vm, (void *)handle, &fileHandle_descriptor);
+		qcvm_set_global_typed_value(fileHandle_t, vm, GLOBAL_PARM1, qhandle);
+	}
 
 	qcvm_return_int32(vm, len);
 #else
@@ -107,29 +130,18 @@ static void QC_OpenCompressedFile(qcvm_t *vm)
 #endif
 }
 
-static void QC_CloseFile(qcvm_t *vm)
-{
-	const fileHandle_t handle = qcvm_argv_int32(vm, 0);
-
-#ifdef KMQUAKE2_ENGINE_MOD
-	gi.CloseFile(handle);
-#else
-	fclose((FILE *)handle);
-#endif
-}
-
 static void QC_FRead(qcvm_t *vm)
 {
 	const qcvm_pointer_t pointer = qcvm_argv_pointer(vm, 0);
 	const int32_t size = qcvm_argv_int32(vm, 1);
-	const fileHandle_t handle = (fileHandle_t)(qcvm_argv_handle(vm, 2));
+	const fileHandle_t *handle = qcvm_argv_handle(fileHandle_t, vm, 2);
 	int32_t written;
 
 	if (!qcvm_pointer_valid(vm, pointer, false, size))
 		qcvm_error(vm, "bad pointer");
 
 #ifdef KMQUAKE2_ENGINE_MOD
-	written = gi.FRead(qcvm_resolve_pointer(vm, pointer), size, handle);
+	written = gi.FRead(qcvm_resolve_pointer(vm, pointer), size, (fileHandle_t)handle);
 #else
 	written = fread(qcvm_resolve_pointer(vm, pointer), size, 1, (FILE *)handle);
 #endif
@@ -141,14 +153,14 @@ static void QC_FWrite(qcvm_t *vm)
 {
 	const qcvm_pointer_t pointer = qcvm_argv_pointer(vm, 0);
 	const int32_t size = qcvm_argv_int32(vm, 1);
-	const fileHandle_t handle = (fileHandle_t)(qcvm_argv_handle(vm, 2));
+	const fileHandle_t *handle = qcvm_argv_handle(fileHandle_t, vm, 2);
 	int32_t written;
 
 	if (!qcvm_pointer_valid(vm, pointer, false, size))
 		qcvm_error(vm, "bad pointer");
 
 #ifdef KMQUAKE2_ENGINE_MOD
-	written = gi.FWrite(qcvm_resolve_pointer(vm, pointer), size, handle);
+	written = gi.FWrite(qcvm_resolve_pointer(vm, pointer), size, (fileHandle_t)handle);
 #else
 	written = fwrite(qcvm_resolve_pointer(vm, pointer), size, 1, (FILE *)handle);
 #endif
@@ -196,7 +208,7 @@ typedef struct
 
 static void QC_file_list_get(qcvm_t *vm)
 {
-	const qc_file_list_t *list = (qc_file_list_t *)(qcvm_argv_handle(vm, 0));
+	const qc_file_list_t *list = qcvm_argv_handle(qc_file_list_t, vm, 0);
 	const int32_t index = qcvm_argv_int32(vm, 1);
 	
 	if (index < 0 || index >= list->num)
@@ -207,13 +219,13 @@ static void QC_file_list_get(qcvm_t *vm)
 
 static void QC_file_list_length(qcvm_t *vm)
 {
-	const qc_file_list_t *list = (qc_file_list_t *)(qcvm_argv_handle(vm, 0));
+	const qc_file_list_t *list = qcvm_argv_handle(qc_file_list_t, vm, 0);
 	qcvm_return_int32(vm, list->num);
 }
 
-static void QC_file_list_free(qcvm_t *vm)
+static void QC_file_list_free(qcvm_t *vm, void *ptr)
 {
-	qc_file_list_t *list = (qc_file_list_t *)(qcvm_argv_handle(vm, 0));
+	qc_file_list_t *list = (qc_file_list_t *)ptr;
 
 #ifdef KMQUAKE2_ENGINE_MOD
 	gi.FreeFileList(list->entries, list->num);
@@ -224,6 +236,11 @@ static void QC_file_list_free(qcvm_t *vm)
 
 	qcvm_mem_free(vm, list);
 }
+
+static qcvm_handle_descriptor_t file_list_descriptor =
+{
+	.free = QC_file_list_free
+};
 
 static void QC_GetFileList(qcvm_t *vm)
 {
@@ -237,7 +254,9 @@ static void QC_GetFileList(qcvm_t *vm)
 	list->entries = qcvm_get_file_list(vm, path, ext, &list->num);
 #endif
 
-	qcvm_return_handle(vm, list);
+	int32_t handle = qcvm_handle_alloc(vm, list, &file_list_descriptor);
+
+	qcvm_return_int32(vm, handle);
 }
 
 void qcvm_init_file_builtins(qcvm_t *vm)
@@ -245,7 +264,6 @@ void qcvm_init_file_builtins(qcvm_t *vm)
 	qcvm_register_builtin(LoadFile);
 	qcvm_register_builtin(OpenFile);
 	qcvm_register_builtin(OpenCompressedFile);
-	qcvm_register_builtin(CloseFile);
 	qcvm_register_builtin(FRead);
 	qcvm_register_builtin(FWrite);
 	qcvm_register_builtin(CreatePath);
@@ -254,5 +272,4 @@ void qcvm_init_file_builtins(qcvm_t *vm)
 	qcvm_register_builtin(GetFileList);
 	qcvm_register_builtin(file_list_get);
 	qcvm_register_builtin(file_list_length);
-	qcvm_register_builtin(file_list_free);
 }

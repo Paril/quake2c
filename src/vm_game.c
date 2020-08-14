@@ -1,8 +1,9 @@
 #include "shared/shared.h"
-#include "game.h"
 #include "g_vm.h"
-#include "vm_game.h"
 #include "vm_string.h"
+
+#include "game.h"
+#include "vm_game.h"
 
 static void QC_SetNumEdicts(qcvm_t *vm)
 {

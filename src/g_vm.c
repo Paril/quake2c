@@ -56,7 +56,7 @@ typedef struct
 	progs_version_t	secondary_version;
 } qcvm_header_t;
 
-void qcvm_stack_needs_resize(qcvm_stack_t *stack)
+static inline void qcvm_stack_needs_resize(qcvm_stack_t *stack)
 {
 	qcvm_string_backup_t *old_ref_strings = stack->ref_strings;
 	stack->ref_strings_allocated += STACK_STRINGS_RESERVE;
@@ -204,7 +204,7 @@ static void qcvm_string_list_ref_link(qcvm_string_list_t *list, uint32_t hash, c
 	if (!list->ref_storage_free)
 	{
 		const size_t old_size = list->ref_storage_allocated;
-		list->ref_storage_allocated += REF_STRING_RESERVE * 2;
+		list->ref_storage_allocated = Q_next_pow2(list->ref_storage_allocated + (REF_STRING_RESERVE * 2));
 
 		qcvm_debug(list->vm, "Increased ref string pointer storage to %u due to \"%s\"\n", list->ref_storage_allocated, qcvm_get_string(list->vm, id));
 
@@ -1013,7 +1013,7 @@ void qcvm_state_needs_resize(qcvm_state_t *state)
 	{
 		qcvm_stack_t *new_stack = state->stack + i;
 		new_stack->vm = state->vm;
-		new_stack->locals = (qcvm_stack_local_t *)qcvm_alloc(state->vm, sizeof(qcvm_stack_local_t) * state->vm->highest_stack);
+		new_stack->locals = (qcvm_global_t *)qcvm_alloc(state->vm, sizeof(qcvm_global_t) * state->vm->highest_stack);
 		qcvm_stack_needs_resize(new_stack);
 	}
 
@@ -1294,11 +1294,6 @@ qcvm_pointer_t qcvm_argv_pointer(const qcvm_t *vm, const uint8_t d)
 	return *qcvm_get_const_global_typed(qcvm_pointer_t, vm, qcvm_global_offset(GLOBAL_PARM0, d * 3));
 }
 
-void *qcvm_argv_handle(const qcvm_t *vm, const uint8_t d)
-{
-	return qcvm_handle_to_pointer(qcvm_argv_vector(vm, d));
-}
-
 void qcvm_return_float(qcvm_t *vm, const vec_t value)
 {
 	qcvm_set_global_typed_value(vec_t, vm, GLOBAL_RETURN, value);
@@ -1350,13 +1345,6 @@ void qcvm_return_pointer(qcvm_t *vm, const qcvm_pointer_t ptr)
 #endif
 
 	qcvm_set_global_typed_value(qcvm_pointer_t, vm, GLOBAL_RETURN, ptr);
-}
-
-void qcvm_return_handle(qcvm_t *vm, const void *value)
-{
-	qcvm_handle_t handle = qcvm_pointer_to_handle(value);
-	assert(qcvm_handle_to_pointer(handle) == value);
-	qcvm_return_vector(vm, handle);
 }
 
 bool qcvm_find_string(qcvm_t *vm, const char *value, qcvm_string_t *rstr)
@@ -1639,114 +1627,6 @@ const char *qcvm_function_for(const qcvm_t *vm, const qcvm_statement_t *statemen
 	return "???";
 }
 
-void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
-{
-#ifdef ALLOW_INSTRUMENTING
-	if (vm->profiler_func && function == vm->profiler_func && !vm->state.profile_mark_depth)
-	{
-		vm->state.profile_mark_backup = vm->profiler_mark;
-		vm->state.profile_mark_depth++;
-		vm->profiler_mark = MARK_CUSTOM;
-	}
-#endif
-
-	qcvm_stack_t *cur_stack = (vm->state.current >= 0) ? &vm->state.stack[vm->state.current] : NULL;
-
-	// save current stack space that will be overwritten by the new function
-	if (cur_stack && function->num_args_and_locals)
-	{
-		for (qcvm_global_t i = 0, arg = function->first_arg; i < function->num_args_and_locals; i++, arg++)
-		{
-			cur_stack->locals[i] = (qcvm_stack_local_t) { (qcvm_global_t)arg, *qcvm_get_global_typed(int32_t, vm, (qcvm_global_t)arg) };
-
-			const void *ptr = qcvm_get_global(vm, (qcvm_global_t)arg);
-
-			if (qcvm_string_list_has_ref(&vm->dynamic_strings, ptr, NULL))
-				qcvm_stack_push_ref_string(cur_stack, qcvm_string_list_pop_ref(&vm->dynamic_strings, ptr));
-		}
-
-#ifdef ALLOW_INSTRUMENTING
-		// entering a function call;
-		// add time we spent up till now into self
-		if (vm->profile_flags & PROFILE_FUNCTIONS)
-		{
-			cur_stack->profile->self[vm->profiler_mark] += Q_time() - cur_stack->caller_start;
-			cur_stack->callee_start = Q_time();
-		}
-#endif
-	}
-
-	qcvm_stack_t *new_stack = qcvm_state_stack_push(&vm->state);
-
-	// set up current stack
-	new_stack->function = function;
-	new_stack->statement = &vm->statements[function->id - 1];
-
-	// copy parameters
-	for (qcvm_global_t i = 0, arg_id = function->first_arg; i < function->num_args; i++)
-		for (qcvm_global_t s = 0; s < function->arg_sizes[i]; s++, arg_id++)
-			qcvm_copy_globals_typed(qcvm_global_t, vm, arg_id, qcvm_global_offset(GLOBAL_PARM0, (i * 3) + s));
-
-#ifdef ALLOW_INSTRUMENTING
-	if (vm->profile_flags & (PROFILE_FUNCTIONS | PROFILE_FIELDS))
-	{
-		new_stack->profile = &vm->profile_data[function - vm->functions];
-
-		if (vm->profile_flags & PROFILE_FIELDS)
-			new_stack->profile->fields[NumSelfCalls][vm->profiler_mark]++;
-		if (vm->profile_flags & PROFILE_FUNCTIONS)
-			new_stack->caller_start = Q_time();
-	}
-#endif
-}
-
-void qcvm_leave(qcvm_t *vm)
-{
-	// restore stack
-	qcvm_stack_t *current_stack = &vm->state.stack[vm->state.current];
-	qcvm_state_stack_pop(&vm->state);
-	qcvm_stack_t *prev_stack = (vm->state.current == -1) ? NULL : &vm->state.stack[vm->state.current];
-
-	if (prev_stack && current_stack->function->num_args_and_locals)
-	{
-		for (const qcvm_stack_local_t *local = prev_stack->locals; local < prev_stack->locals + current_stack->function->num_args_and_locals; local++)
-			qcvm_set_global_typed_value(qcvm_global_t, vm, local->global, local->value);
-
-		for (const qcvm_string_backup_t *str = prev_stack->ref_strings; str < prev_stack->ref_strings + prev_stack->ref_strings_size; str++)
-			qcvm_string_list_push_ref(&vm->dynamic_strings, str);
-
-		prev_stack->ref_strings_size = 0;
-
-#ifdef ALLOW_INSTRUMENTING
-		if (vm->profile_flags & PROFILE_FUNCTIONS)
-		{
-			// we're coming back into prev_stack, so set up its caller_start
-			prev_stack->caller_start = Q_time();
-			// and add up the time we spent in the previous stack
-			prev_stack->profile->ext[vm->profiler_mark] += Q_time() - prev_stack->callee_start;
-		}
-#endif
-	}
-		
-#ifdef ALLOW_INSTRUMENTING
-	if (vm->profile_flags & PROFILE_FUNCTIONS)
-		current_stack->profile->self[vm->profiler_mark] += Q_time() - current_stack->caller_start;
-#endif
-
-	vm->allowed_stack = 0;
-	vm->allowed_stack_size = 0;
-
-#ifdef ALLOW_INSTRUMENTING
-	if (vm->profiler_func && vm->state.profile_mark_depth)
-	{
-		vm->state.profile_mark_depth--;
-
-		if (!vm->state.profile_mark_depth)
-			vm->profiler_mark = vm->state.profile_mark_backup;
-	}
-#endif
-}
-
 qcvm_func_t qcvm_find_function_id(const qcvm_t *vm, const char *name)
 {
 	size_t i = 0;
@@ -1793,6 +1673,69 @@ size_t qcvm_get_string_length(const qcvm_t *vm, const qcvm_string_t str)
 	return vm->string_lengths[(size_t)str];
 }
 
+int32_t qcvm_handle_alloc(qcvm_t *vm, void *ptr, const qcvm_handle_descriptor_t *descriptor)
+{
+	qcvm_handle_t *handle;
+
+	if (vm->handles.free_size)
+		handle = &vm->handles.data[vm->handles.free[--vm->handles.free_size]];
+	else
+	{
+		if (vm->handles.size == vm->handles.allocated)
+		{
+			vm->handles.allocated += HANDLES_RESERVE;
+			qcvm_handle_t *old_handles = vm->handles.data;
+			vm->handles.data = (qcvm_handle_t *)qcvm_alloc(vm, sizeof(qcvm_handle_t) * vm->handles.allocated);
+			if (old_handles)
+			{
+				memcpy(vm->handles.data, old_handles, sizeof(qcvm_handle_t) * vm->handles.size);
+				qcvm_mem_free(vm, old_handles);
+			}
+
+			if (vm->handles.free)
+				qcvm_mem_free(vm, vm->handles.free);
+
+			vm->handles.free = (int32_t *)qcvm_alloc(vm, sizeof(int32_t) * vm->handles.allocated);
+
+			qcvm_debug(vm, "Increased handle storage to %u\n", vm->handles.allocated);
+		}
+
+		handle = &vm->handles.data[(int32_t)vm->handles.size++];
+	}
+
+	handle->id = (int32_t)(handle - vm->handles.data) + 1;
+	handle->descriptor = descriptor;
+	handle->handle = ptr;
+
+	return handle->id;
+}
+
+void *qcvm_fetch_handle(qcvm_t *vm, const int32_t id)
+{
+	if (id <= 0 || id > vm->handles.size)
+		qcvm_error(vm, "invalid handle ID");
+
+	void *handle = vm->handles.data[id - 1].handle;
+
+	if (!handle)
+		qcvm_error(vm, "invalid handle ID");
+
+	return handle;
+}
+
+void qcvm_handle_free(qcvm_t *vm, qcvm_handle_t *handle)
+{
+	if (!handle || !handle->handle || handle < vm->handles.data || handle >= (vm->handles.data + vm->handles.size))
+		qcvm_error(vm, "invalid handle");
+
+	if (handle->descriptor && handle->descriptor->free)
+		handle->descriptor->free(vm, handle->handle);
+
+	vm->handles.free[vm->handles.free_size++] = handle->id - 1;
+	handle->descriptor = NULL;
+	handle->handle = NULL;
+}
+
 void *qcvm_itoe(const qcvm_t *vm, const int32_t n)
 {
 	if (n == ENT_INVALID)
@@ -1818,6 +1761,7 @@ bool qcvm_pointer_valid(const qcvm_t *vm, const qcvm_pointer_t pointer, const bo
 	switch (pointer.type)
 	{
 	case QCVM_POINTER_NULL:
+	default:
 		return allow_null && !len && !pointer.offset;
 	case QCVM_POINTER_GLOBAL:
 		return (pointer.offset + len) <= vm->global_size * sizeof(qcvm_global_t);
@@ -1833,6 +1777,7 @@ void *qcvm_resolve_pointer(const qcvm_t *vm, const qcvm_pointer_t address)
 	switch (address.type)
 	{
 	case QCVM_POINTER_NULL:
+	default:
 		return NULL;
 	case QCVM_POINTER_GLOBAL:
 		return (uint8_t *)vm->global_data + address.offset;
@@ -1848,6 +1793,7 @@ qcvm_pointer_t qcvm_make_pointer(const qcvm_t *vm, const qcvm_pointer_type_t typ
 	switch (type)
 	{
 	case QCVM_POINTER_NULL:
+	default:
 		return (qcvm_pointer_t) { 0, type };
 	case QCVM_POINTER_GLOBAL:
 		return (qcvm_pointer_t) { (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->global_data), type };
@@ -1911,6 +1857,9 @@ void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
 
 void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 {
+	if (!function || function->id == 0)
+		qcvm_error(vm, "bad function");
+
 	if (function->id < 0)
 	{
 		qcvm_call_builtin(vm, function);
@@ -2313,6 +2262,13 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 		}
 	}
 #endif
+
+	const qcvm_definition_t *def = qcvm_find_definition(vm, "strcasesensitive", TYPE_INTEGER);
+
+	if (!def)
+		qcvm_error(vm, "can't find required definition \"strcasesensitive\"");
+	
+	vm->string_case_sensitive = vm->global_data + def->global_index;
 }
 
 static inline void qcvm_setup_fields(qcvm_t *vm)
@@ -2568,10 +2524,10 @@ void qcvm_shutdown(qcvm_t *vm)
 				const double ext = Q_time_adjust(profile->ext[m]) / 1000000.0;
 				const double total = self + ext;
 
-				fprintf(fp, "%i,%s,%f,%f,%f,%f,%f", i, name, total, self, ext, (total / all_total) * 100, (self / all_total) * 100);
+				fprintf(fp, "%" PRIuPTR ",%s,%f,%f,%f,%f,%f", i, name, total, self, ext, (total / all_total) * 100, (self / all_total) * 100);
 		
 				for (qcvm_profiler_field_t f = 0; f < TotalProfileFields; f++)
-					fprintf(fp, ",%i", profile->fields[f][m]);
+					fprintf(fp, ",%" PRIuPTR "", profile->fields[f][m]);
 
 				fprintf(fp, "\n");
 			}
@@ -2598,7 +2554,7 @@ void qcvm_shutdown(qcvm_t *vm)
 				const qcvm_profile_timer_t *timer = &vm->timers[i][m];
 				const double total = Q_time_adjust(timer->time[m]) / 1000000.0;
 
-				fprintf(fp, "%s,%i,%f,%f,%f\n", timer_type_names[i], timer->count[m], total, (total / timer->count[m]) * 1000, (total / all_total) * 100);
+				fprintf(fp, "%s,%" PRIuPTR ",%f,%f,%f\n", timer_type_names[i], timer->count[m], total, (total / timer->count[m]) * 1000, (total / all_total) * 100);
 			}
 
 			fclose(fp);
@@ -2631,7 +2587,7 @@ void qcvm_shutdown(qcvm_t *vm)
 
 				const double total = Q_time_adjust(timer->time[m]) / 1000000.0;
 
-				fprintf(fp, "%i,%i,%f,%f,%f\n", i, timer->count[m], total, (total / timer->count[m]) * 1000, (total / all_total) * 100);
+				fprintf(fp, "%" PRIuPTR ",%" PRIuPTR ",%f,%f,%f\n", i, timer->count[m], total, (total / timer->count[m]) * 1000, (total / all_total) * 100);
 			}
 
 			fclose(fp);
