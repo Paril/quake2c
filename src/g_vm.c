@@ -1221,7 +1221,7 @@ const char *qcvm_stack_trace(const qcvm_t *vm, const bool compact)
 {
 	const char *str = compact ? "" : "> ";
 
-	for (qcvm_stack_t *s = vm->state.stack; s < &vm->state.stack[vm->state.current] && s->function; s++)
+	for (qcvm_stack_t *s = vm->state.stack; s <= &vm->state.stack[vm->state.current] && s->function; s++)
 	{
 		if (compact)
 			str = qcvm_temp_format(vm, "%s->%s", str, qcvm_stack_entry(vm, s, compact));

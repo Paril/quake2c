@@ -291,3 +291,7 @@ __pycache__/
 /*.exe
 /KMQuake2 Debug
 /KMQuake2 Release
+/Vanilla Debug
+/Vanilla Release
+/Lexilla.dll
+/SciLexer.dll
