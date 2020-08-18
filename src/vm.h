@@ -2,9 +2,9 @@
 
 typedef struct qcvm_s qcvm_t;
 
-#define ALLOW_DEBUGGING
+//#define ALLOW_DEBUGGING
 //#define ALLOW_INSTRUMENTING
-#define ALLOW_PROFILING
+//#define ALLOW_PROFILING
 
 #ifdef ALLOW_DEBUGGING
 typedef enum
@@ -350,7 +350,7 @@ void qcvm_string_list_write_state(qcvm_t *vm, FILE *fp);
 #endif
 
 #ifdef _DEBUG
-void qcvm_string_list_dump_refs(FILE *fp, qcvm_string_list_t *list);
+void qcvm_string_list_dump_refs(FILE *fp, qcvm_t *vm);
 #endif
 
 typedef void (*qcvm_builtin_t) (qcvm_t *vm);
@@ -510,8 +510,6 @@ void qcvm_set_global(qcvm_t *vm, const qcvm_global_t global, const void *value, 
 	qcvm_set_global(vm, global, value_ptr, sizeof(type))
 
 // VM
-
-
 qcvm_definition_t *qcvm_find_definition(qcvm_t *vm, const char *name, const qcvm_deftype_t type);
 
 qcvm_definition_t *qcvm_find_field(qcvm_t *vm, const char *name);

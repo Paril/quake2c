@@ -116,7 +116,7 @@ void qcvm_builtin_list_register(qcvm_t *vm, const char *name, qcvm_builtin_t bui
 		}
 	}
 
-	qcvm_debug(list->vm, "No builtin to assign to %s\n", name);
+	qcvm_debug(vm, "No builtin to assign to %s\n", name);
 }
 
 void qcvm_register_system_field(qcvm_t *vm, const char *field_name, const size_t field_offset, const size_t field_span)
