@@ -45,9 +45,6 @@
     <ClCompile Include="src\shared\shared.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\g_vm.c">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="src\g_main.c">
       <Filter>src</Filter>
     </ClCompile>
@@ -58,6 +55,15 @@
       <Filter>src</Filter>
     </ClCompile>
     <ClCompile Include="src\g_save.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_hash.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_string_list.c">
       <Filter>src</Filter>
     </ClCompile>
   </ItemGroup>
@@ -76,9 +82,6 @@
     </ClInclude>
     <ClInclude Include="src\shared\shared.h">
       <Filter>inc\shared</Filter>
-    </ClInclude>
-    <ClInclude Include="src\g_vm.h">
-      <Filter>inc</Filter>
     </ClInclude>
     <ClInclude Include="src\game.h">
       <Filter>inc</Filter>
@@ -120,6 +123,12 @@
       <Filter>inc</Filter>
     </ClInclude>
     <ClInclude Include="src\g_main.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vm_hash.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="src\vm.h">
       <Filter>inc</Filter>
     </ClInclude>
   </ItemGroup>

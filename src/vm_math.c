@@ -1,5 +1,5 @@
 #include "shared/shared.h"
-#include "g_vm.h"
+#include "vm.h"
 #include "vm_math.h"
 #include <float.h>
 

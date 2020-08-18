@@ -18,7 +18,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 #include "shared/shared.h"
-#include "g_vm.h"
+#include "vm.h"
 #include "vm_debug.h"
 #include "vm_string.h"
 #include "vm_gi.h"
@@ -426,7 +426,7 @@ void BackupClientData(void)
 
 	game.client_load_data = (uint8_t *)gi.TagMalloc(globals.edict_size * game.num_clients, TAG_GAME);
 	memcpy(game.client_load_data, first_player, globals.edict_size * game.num_clients);
-	qcvm_string_list_mark_refs_copied(&qvm->dynamic_strings, first_player, game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
+	qcvm_string_list_mark_refs_copied(qvm, first_player, game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
 }
 
 void RestoreClientData(void)
@@ -459,9 +459,9 @@ void RestoreClientData(void)
 		}
 	}
 	
-	qcvm_string_list_mark_refs_copied(&qvm->dynamic_strings, game.client_load_data, qcvm_itoe(qvm, 1), (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
+	qcvm_string_list_mark_refs_copied(qvm, game.client_load_data, qcvm_itoe(qvm, 1), (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
 	qcvm_field_wrap_list_check_set(&qvm->field_wraps, qcvm_itoe(qvm, 1), (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
-	qcvm_string_list_check_ref_unset(&qvm->dynamic_strings, game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t), true);
+	qcvm_string_list_check_ref_unset(qvm, game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t), true);
 
 	gi.TagFree(game.client_load_data);
 	game.client_load_data = NULL;
@@ -641,7 +641,7 @@ static void ServerCommand()
 	if (strcmp(cmd, "qc_dump_strings") == 0)
 	{
 		FILE *fp = fopen(qcvm_temp_format(qvm, "%sstrings.txt", qvm->path), "w");
-		qcvm_string_list_dump_refs(fp, &qvm->dynamic_strings);
+		qcvm_string_list_dump_refs(fp, qvm);
 		fclose(fp);
 		return;
 	}

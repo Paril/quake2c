@@ -208,7 +208,7 @@
       <ErrorReporting>Send</ErrorReporting>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi  -Wno-vla </AdditionalOptions>
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
@@ -228,7 +228,7 @@
       <ErrorReporting>Send</ErrorReporting>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi  -Wno-vla </AdditionalOptions>
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
@@ -248,7 +248,7 @@
       <ErrorReporting>Send</ErrorReporting>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi  -Wno-vla </AdditionalOptions>
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
@@ -268,7 +268,7 @@
       <ErrorReporting>Send</ErrorReporting>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi  -Wno-vla </AdditionalOptions>
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
@@ -289,7 +289,7 @@
       <ErrorReporting>Send</ErrorReporting>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi  -Wno-vla </AdditionalOptions>
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
@@ -311,7 +311,7 @@
       <ErrorReporting>Send</ErrorReporting>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi  -Wno-vla </AdditionalOptions>
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
@@ -333,7 +333,7 @@
       <ErrorReporting>Send</ErrorReporting>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi  %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi  -Wno-vla </AdditionalOptions>
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
@@ -355,7 +355,7 @@
       <ErrorReporting>Send</ErrorReporting>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi  %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi  -Wno-vla </AdditionalOptions>
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
@@ -387,9 +387,26 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClCompile Include="src\g_save.c" />
+    <ClCompile Include="src\g_save.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|x64'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|x64'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
+      </LanguageStandard>
+    </ClCompile>
     <ClCompile Include="src\g_thread.cpp" />
-    <ClCompile Include="src\g_vm.c">
+    <ClCompile Include="src\vm.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
@@ -462,14 +479,22 @@
       </LanguageStandard>
     </ClCompile>
     <ClCompile Include="src\vm_file.c">
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">Default</LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|x64'">Default</LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">Default</LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">Default</LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">Default</LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|x64'">Default</LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">Default</LanguageStandard>
-      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">Default</LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|x64'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|x64'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
+      </LanguageStandard>
     </ClCompile>
     <ClCompile Include="src\vm_game.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
@@ -503,6 +528,24 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|x64'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
+      </LanguageStandard>
+    </ClCompile>
+    <ClCompile Include="src\vm_hash.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|x64'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|x64'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
@@ -579,6 +622,24 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
+    <ClCompile Include="src\vm_string_list.c">
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|x64'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|x64'">
+      </LanguageStandard>
+      <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
+      </LanguageStandard>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\game.h" />
@@ -586,7 +647,7 @@
     <ClInclude Include="src\g_main.h" />
     <ClInclude Include="src\g_save.h" />
     <ClInclude Include="src\g_thread.h" />
-    <ClInclude Include="src\g_vm.h" />
+    <ClInclude Include="src\vm.h" />
     <ClInclude Include="src\shared\client.h" />
     <ClInclude Include="src\shared\entity.h" />
     <ClInclude Include="src\shared\api.h" />
@@ -597,6 +658,7 @@
     <ClInclude Include="src\vm_file.h" />
     <ClInclude Include="src\vm_game.h" />
     <ClInclude Include="src\vm_gi.h" />
+    <ClInclude Include="src\vm_hash.h" />
     <ClInclude Include="src\vm_math.h" />
     <ClInclude Include="src\vm_mem.h" />
     <ClInclude Include="src\vm_opcodes.h" />

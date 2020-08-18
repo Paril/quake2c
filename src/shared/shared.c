@@ -34,7 +34,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 static mach_timebase_info_data_t info;
 #elif defined(_WIN32)
 #  define WIN32_LEAN_AND_MEAN
-#  define _WIN32_WINNT 0x0601
 #  include <Windows.h>
 static LARGE_INTEGER win_frequency;
 #endif
@@ -70,7 +69,6 @@ uint64_t Q_time(void)
 	}
 	static LARGE_INTEGER now;
 	QueryPerformanceCounter(&now);
-	//return (uint64_t) ((1e9 * now.QuadPart) / win_frequency.QuadPart);
 	return now.QuadPart;
 #endif
 }

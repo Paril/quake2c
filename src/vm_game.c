@@ -1,5 +1,5 @@
 #include "shared/shared.h"
-#include "g_vm.h"
+#include "vm.h"
 #include "vm_string.h"
 
 #include "game.h"
@@ -19,7 +19,7 @@ static void QC_ClearEntity(qcvm_t *vm)
 	
 	entity->s.number = number;
 
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, entity, globals.edict_size / sizeof(qcvm_global_t), true);
+	qcvm_string_list_check_ref_unset(vm, entity, globals.edict_size / sizeof(qcvm_global_t), true);
 	qcvm_field_wrap_list_check_set(&vm->field_wraps, entity, globals.edict_size / sizeof(qcvm_global_t));
 }
 
@@ -99,11 +99,11 @@ static inline void QC_parse_value_into_ptr(qcvm_t *vm, const qcvm_deftype_t type
 		qcvm_error(vm, "Couldn't parse field, bad type %i", type);
 	}
 	
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, ptr, data_span, false);
+	qcvm_string_list_check_ref_unset(vm, ptr, data_span, false);
 	qcvm_field_wrap_list_check_set(&vm->field_wraps, ptr, data_span);
 
-	if (type == TYPE_STRING && qcvm_string_list_is_ref_counted(&vm->dynamic_strings, *(qcvm_string_t *)ptr))
-		qcvm_string_list_mark_ref_copy(&vm->dynamic_strings, *(qcvm_string_t *)ptr, ptr);
+	if (type == TYPE_STRING && qcvm_string_list_is_ref_counted(vm, *(qcvm_string_t *)ptr))
+		qcvm_string_list_mark_ref_copy(vm, *(qcvm_string_t *)ptr, ptr);
 }
 
 static void QC_entity_key_parse(qcvm_t *vm)

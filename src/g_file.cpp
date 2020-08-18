@@ -2,7 +2,7 @@ extern "C"
 {
 	#define QCVM_INTERNAL
 	#include "shared/shared.h"
-	#include "g_vm.h"
+	#include "vm.h"
 	#include "g_file.h"
 	#include "vm_string.h"
 }

@@ -1,5 +1,5 @@
 #include "shared/shared.h"
-#include "g_vm.h"
+#include "vm.h"
 #include "vm_ext.h"
 
 static void QC_ModInt(qcvm_t *vm)

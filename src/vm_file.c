@@ -1,5 +1,5 @@
 #include "shared/shared.h"
-#include "g_vm.h"
+#include "vm.h"
 #include "vm_string.h"
 #include "vm_file.h"
 #include "g_file.h"
@@ -87,7 +87,7 @@ static void QC_OpenFile(qcvm_t *vm)
 	len = gi.OpenFile(name, &handle, mode);
 
 	if (len != -1)
-		qhandle = qcvm_handle_alloc(vm, (void *)handle, &fileHandle_descriptor);
+		qhandle = qcvm_handle_alloc(vm, (void *)(size_t)handle, &fileHandle_descriptor);
 #else
 	FILE *handle = OpenFile(vm, name, mode);
 
@@ -120,7 +120,7 @@ static void QC_OpenCompressedFile(qcvm_t *vm)
 
 	if (len != -1)
 	{
-		int32_t qhandle = qcvm_handle_alloc(vm, (void *)handle, &fileHandle_descriptor);
+		int32_t qhandle = qcvm_handle_alloc(vm, (void *)(size_t)handle, &fileHandle_descriptor);
 		qcvm_set_global_typed_value(fileHandle_t, vm, GLOBAL_PARM1, qhandle);
 	}
 
@@ -254,9 +254,7 @@ static void QC_GetFileList(qcvm_t *vm)
 	list->entries = qcvm_get_file_list(vm, path, ext, &list->num);
 #endif
 
-	int32_t handle = qcvm_handle_alloc(vm, list, &file_list_descriptor);
-
-	qcvm_return_int32(vm, handle);
+	qcvm_return_handle(vm, list, &file_list_descriptor);
 }
 
 void qcvm_init_file_builtins(qcvm_t *vm)

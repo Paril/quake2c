@@ -1,6 +1,6 @@
 #define QCVM_INTERNAL
 #include "shared/shared.h"
-#include "g_vm.h"
+#include "vm.h"
 #include "vm_game.h"
 #include "vm_opcodes.h"
 #include "vm_math.h"
@@ -9,6 +9,7 @@
 #include "vm_string.h"
 #include "vm_ext.h"
 #include "vm_file.h"
+#include "vm_hash.h"
 
 #include <time.h>
 
@@ -82,644 +83,30 @@ void qcvm_stack_push_ref_string(qcvm_stack_t *stack, const qcvm_string_backup_t 
 	stack->ref_strings[stack->ref_strings_size++] = ref_string;
 }
 
-static void qcvm_string_list_init(qcvm_string_list_t *list, qcvm_t *vm)
-{
-	list->vm = vm;
-}
-
-qcvm_string_t qcvm_string_list_store(qcvm_string_list_t *list, const char *str, const size_t len)
-{
-	int32_t index;
-
-	if (list->free_indices_size)
-		index = (-list->free_indices[--list->free_indices_size]) - 1;
-	else
-	{
-		if (list->strings_size == list->strings_allocated)
-		{
-			list->strings_allocated += REF_STRING_RESERVE;
-			qcvm_ref_counted_string_t *old_strings = list->strings;
-			list->strings = (qcvm_ref_counted_string_t *)qcvm_alloc(list->vm, sizeof(qcvm_ref_counted_string_t) * list->strings_allocated);
-			if (old_strings)
-			{
-				memcpy(list->strings, old_strings, sizeof(qcvm_ref_counted_string_t) * list->strings_size);
-				qcvm_mem_free(list->vm, old_strings);
-			}
-			qcvm_debug(list->vm, "Increased ref string storage to %u due to \"%s\"\n", list->strings_allocated, str);
-		}
-
-		index = (int32_t)list->strings_size++;
-	}
-
-	list->strings[index] = (qcvm_ref_counted_string_t) {
-		str,
-		len,
-		0
-	};
-
-	return (qcvm_string_t)(-(index + 1));
-}
-
-void qcvm_string_list_unstore(qcvm_string_list_t *list, const qcvm_string_t id)
-{
-	const int32_t index = (int32_t)(-id) - 1;
-
-	assert(index >= 0 && index < list->strings_size);
-
-	qcvm_ref_counted_string_t *str = &list->strings[index];
-
-	assert(!str->ref_count);
-
-	qcvm_mem_free(list->vm, (void *)str->str);
-
-	*str = (qcvm_ref_counted_string_t) { NULL, 0, 0 };
-
-	if (list->free_indices_size == list->free_indices_allocated)
-	{
-		list->free_indices_allocated += FREE_STRING_RESERVE;
-		qcvm_string_t *old_free_indices = list->free_indices;
-		list->free_indices = (qcvm_string_t *)qcvm_alloc(list->vm, sizeof(qcvm_string_t) * list->free_indices_allocated);
-		if (old_free_indices)
-		{
-			memcpy(list->free_indices, old_free_indices, sizeof(qcvm_string_t) * list->free_indices_size);
-			qcvm_mem_free(list->vm, old_free_indices);
-		}
-		qcvm_debug(list->vm, "Increased free string storage to %u\n", list->free_indices_allocated);
-	}
-
-	list->free_indices[list->free_indices_size++] = id;
-}
-
-size_t qcvm_string_list_get_length(const qcvm_string_list_t *list, const qcvm_string_t id)
-{
-	const int32_t index = (int32_t)(-id) - 1;
-	assert(index >= 0 && index < list->strings_size);
-	return list->strings[index].length;
-}
-
-const char *qcvm_string_list_get(const qcvm_string_list_t *list, const qcvm_string_t id)
-{
-	const int32_t index = (int32_t)(-id) - 1;
-	assert(index >= 0 && index < list->strings_size);
-	assert(list->strings[index].str);
-	return list->strings[index].str;
-}
-
-void qcvm_string_list_acquire(qcvm_string_list_t *list, const qcvm_string_t id)
-{
-	START_TIMER(list->vm, StringAcquire);
-	
-	const int32_t index = (int32_t)(-id) - 1;
-
-	assert(index >= 0 && index < list->strings_size);
-
-	list->strings[index].ref_count++;
-
-	END_TIMER(list->vm, PROFILE_TIMERS);
-}
-
-void qcvm_string_list_release(qcvm_string_list_t *list, const qcvm_string_t id)
-{
-	START_TIMER(list->vm, StringRelease);
-	
-	const int32_t index = (int32_t)(-id) - 1;
-
-	assert(index >= 0 && index < list->strings_size);
-
-	qcvm_ref_counted_string_t *str = &list->strings[index];
-
-	assert(str->ref_count);
-		
-	str->ref_count--;
-
-	if (!str->ref_count)
-		qcvm_string_list_unstore(list, id);
-
-	END_TIMER(list->vm, PROFILE_TIMERS);
-}
-
-static void qcvm_string_list_ref_link(qcvm_string_list_t *list, uint32_t hash, const qcvm_string_t id, const void *ptr)
-{
-	// see if we need to expand the hashes list
-	if (!list->ref_storage_free)
-	{
-		const size_t old_size = list->ref_storage_allocated;
-		list->ref_storage_allocated = Q_next_pow2(list->ref_storage_allocated + (REF_STRING_RESERVE * 2));
-
-		qcvm_debug(list->vm, "Increased ref string pointer storage to %u due to \"%s\"\n", list->ref_storage_allocated, qcvm_get_string(list->vm, id));
-
-		qcvm_ref_storage_hash_t	*old_ref_storage_data = list->ref_storage_data;
-		list->ref_storage_data = (qcvm_ref_storage_hash_t*)qcvm_alloc(list->vm, sizeof(qcvm_ref_storage_hash_t) * list->ref_storage_allocated);
-
-		list->ref_storage_free = NULL;
-
-		if (old_ref_storage_data)
-		{
-			memcpy(list->ref_storage_data, old_ref_storage_data, sizeof(qcvm_ref_storage_hash_t) * old_size);
-			qcvm_mem_free(list->vm, old_ref_storage_data);
-		}
-
-		if (list->ref_storage_hashes)
-			qcvm_mem_free(list->vm, list->ref_storage_hashes);
-
-		list->ref_storage_hashes = (qcvm_ref_storage_hash_t**)qcvm_alloc(list->vm, sizeof(qcvm_ref_storage_hash_t*) * list->ref_storage_allocated);
-
-		// re-hash since hashs changed
-		for (qcvm_ref_storage_hash_t *h = list->ref_storage_data; h < list->ref_storage_data + list->ref_storage_allocated; h++)
-		{
-			// this is a free pointer, so link us into the free ptr list
-			if (!h->ptr)
-			{
-				h->hash_next = list->ref_storage_free;
-
-				if (list->ref_storage_free)
-					list->ref_storage_free->hash_prev = h;
-
-				list->ref_storage_free = h;
-				continue;
-			}
-
-			h->hash_value = Q_hash_pointer((uint32_t)h->ptr, list->ref_storage_allocated);
-
-			// we have to set these up next pass since we can't really tell if
-			// the pointer is good or not
-			h->hash_next = h->hash_prev = NULL;
-		}
-
-		// re-link hash buckets
-		for (qcvm_ref_storage_hash_t *h = list->ref_storage_data; h < list->ref_storage_data + list->ref_storage_allocated; h++)
-		{
-			if (!h->ptr)
-				continue;
-
-			h->hash_next = list->ref_storage_hashes[h->hash_value];
-
-			if (h->hash_next)
-				h->hash_next->hash_prev = h;
-
-			list->ref_storage_hashes[h->hash_value] = h;
-		}
-
-		// re-hash, because wrap changes
-		hash = Q_hash_pointer((uint32_t)ptr, list->ref_storage_allocated);
-	}
-
-	// pop a free pointer off the free list
-	qcvm_ref_storage_hash_t *hashed = list->ref_storage_free;
-
-	list->ref_storage_free = list->ref_storage_free->hash_next;
-
-	if (list->ref_storage_free)
-		list->ref_storage_free->hash_prev = NULL;
-
-	hashed->hash_next = hashed->hash_prev = NULL;
-
-	// hash us in
-	hashed->ptr = ptr;
-	hashed->id = id;
-#ifdef _DEBUG
-	if (list->vm->state.current >= 0)
-		hashed->stack = list->vm->state.stack[list->vm->state.current];
-#endif
-	hashed->hash_value = hash;
-	qcvm_ref_storage_hash_t *old_head = list->ref_storage_hashes[hash];
-	hashed->hash_next = old_head;
-	if (old_head)
-		old_head->hash_prev = hashed;
-	list->ref_storage_hashes[hash] = hashed;
-
-	list->ref_storage_stored++;
-}
-
-#ifdef _DEBUG
-static const char *qcvm_function_for_local(qcvm_t *vm, const qcvm_global_t local)
-{
-	qcvm_global_t closest = -1;
-	qcvm_function_t *closest_func = NULL;
-
-	for (qcvm_function_t *func = vm->functions; func < vm->functions + vm->functions_size; func++)
-	{
-		if (local < func->first_arg)
-			continue;
-		else if (local == func->first_arg)
-		{
-			closest_func = func;
-			break;
-		}
-		else if ((local - func->first_arg) < closest)
-		{
-			closest = (local - func->first_arg);
-			closest_func = func;
-		}
-	}
-
-	if (closest_func && closest_func->name_index)
-		return qcvm_get_string(vm, closest_func->name_index);
-
-	return NULL;
-}
-
-const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
-{
-	if (ptr >= vm->global_data && ptr < (vm->global_data + vm->global_size))
-	{
-		const qcvm_global_t offset = (qcvm_global_t)(ptr - vm->global_data);
-		qcvm_global_t closest = -1;
-		qcvm_definition_t *closest_def = NULL;
-
-		for (qcvm_definition_t *def = vm->definitions; def < vm->definitions + vm->definitions_size; def++)
-		{
-			if (def->global_index == offset)
-			{
-				closest = def->global_index;
-				closest_def = def;
-				break;
-			}
-			else if (def->global_index < offset)
-			{
-				if ((offset - def->global_index) < closest)
-				{
-					closest = offset - def->global_index;
-					closest_def = def;
-				}
-			}
-		}
-
-		if (closest == -1 || !closest_def || !closest_def->name_index)
-			return qcvm_temp_format(vm, "global %u", offset);
-
-		const char *func = qcvm_function_for_local(vm, offset);
-
-		if (func)
-			return qcvm_temp_format(vm, "global %s::%s + %u[%u]", func, qcvm_get_string(vm, closest_def->name_index), closest, offset);
-
-		return qcvm_temp_format(vm, "global %s + %u[%u]", qcvm_get_string(vm, closest_def->name_index), closest, offset);
-	}
-	else if (ptr >= (qcvm_global_t *)vm->edicts && ptr < (qcvm_global_t *)vm->edicts + (vm->edict_size * vm->max_edicts))
-	{
-		const edict_t *ent = qcvm_ent_to_entity(vm, (qcvm_ent_t)ptr, false);
-		const qcvm_global_t field_offset = (qcvm_global_t)(ptr - (qcvm_global_t *)ent);
-
-		if (field_offset < vm->field_real_size)
-		{
-			const qcvm_definition_t *def = vm->field_map_by_id[field_offset];
-			size_t offset;
-
-			for (offset = 0; !def; def = vm->field_map_by_id[field_offset - (++offset)]) ;
-
-			if (def)
-			{
-				if (offset)
-					return qcvm_temp_format(vm, "field %u::%s + %u[%u]", ent->s.number, qcvm_get_string(vm, def->name_index), offset, field_offset);
-				
-				return qcvm_temp_format(vm, "field %u::%s[%u]", ent->s.number, qcvm_get_string(vm, def->name_index), field_offset);
-			}
-		}
-
-		return qcvm_temp_format(vm, "field %u::%u ???", ent->s.number, field_offset);
-	}
-
-	return "???";
-}
-
-void qcvm_string_list_dump_refs(FILE *fp, qcvm_string_list_t *list)
-{
-	fprintf(fp, "strings: %" PRIuPTR " / %" PRIuPTR " (%" PRIuPTR " / %" PRIuPTR " free indices)\n", list->strings_size, list->strings_allocated, list->free_indices_size, list->free_indices_allocated);
-	fprintf(fp, "ref pointers: %" PRIuPTR " stored / %" PRIuPTR "\n", list->ref_storage_stored, list->ref_storage_allocated);
-
-	for (qcvm_ref_counted_string_t *str = list->strings; str < list->strings + list->strings_size; str++)
-	{
-		if (!str->str)
-			continue;
-
-		const qcvm_string_t id = (qcvm_string_t) -((str - list->strings) + 1);
-
-		fprintf(fp, "%i\t%s\t%" PRIuPTR "\n", id, str->str, str->ref_count);
-
-		for (qcvm_ref_storage_hash_t *hashed = list->ref_storage_data; hashed < list->ref_storage_data + list->ref_storage_allocated; hashed++)
-		{
-			if (!hashed->ptr)
-				continue;
-			else if (hashed->id != id)
-				continue;
-
-			const qcvm_string_t current_id = *(qcvm_string_t *)(hashed->ptr);
-			const bool still_has_string = current_id == hashed->id;
-
-			fprintf(fp, "\t%s\t%s\t%s (%u)\n", qcvm_dump_pointer(list->vm, (const qcvm_global_t *)hashed->ptr), qcvm_stack_entry(list->vm, &hashed->stack, false), still_has_string ? "valid" : "invalid", current_id);
-		}
-	}
-}
-#endif
-
-static void qcvm_string_list_ref_unlink(qcvm_string_list_t *list, qcvm_ref_storage_hash_t *hashed)
-{
-	// if we were the head, swap us out first
-	if (list->ref_storage_hashes[hashed->hash_value] == hashed)
-		list->ref_storage_hashes[hashed->hash_value] = hashed->hash_next;
-
-	// unlink hashed
-	if (hashed->hash_prev)
-		hashed->hash_prev->hash_next = hashed->hash_next;
-
-	if (hashed->hash_next)
-		hashed->hash_next->hash_prev = hashed->hash_prev;
-
-	// put into free list
-	hashed->ptr = NULL;
-	hashed->id = 0;
-	hashed->hash_next = list->ref_storage_free;
-	hashed->hash_prev = NULL;
-	if (list->ref_storage_free)
-		list->ref_storage_free->hash_prev = hashed;
-	list->ref_storage_free = hashed;
-
-	list->ref_storage_stored--;
-}
-
-static inline qcvm_ref_storage_hash_t *qcvm_string_list_get_storage_hash(qcvm_string_list_t *list, const uint32_t hash)
-{
-	if (!list->ref_storage_stored)
-		return NULL;
-
-	return list->ref_storage_hashes[hash];
-}
-
-void qcvm_string_list_mark_ref_copy(qcvm_string_list_t *list, const qcvm_string_t id, const void *ptr)
-{
-	START_TIMER(list->vm, StringMark);
-
-	uint32_t hash = Q_hash_pointer((uint32_t)ptr, list->ref_storage_allocated);
-	qcvm_ref_storage_hash_t *hashed = qcvm_string_list_get_storage_hash(list, hash);
-
-	for (; hashed; hashed = hashed->hash_next)
-	{
-		if (hashed->ptr == ptr)
-		{
-			// it's *possible* for a seemingly no-op to occur in some cases
-			// (for instance, a call into function which copies PARM0 into locals+0, then
-			// copies locals+0 back into PARM0 for calling a function). because PARM0
-			// doesn't release its ref until its value changes, we treat this as a no-op.
-			// if we released every time the value changes (even to the same value it already
-			// had) this would effectively be the same behavior.
-			if (id == hashed->id)
-			{
-				END_TIMER(list->vm, PROFILE_TIMERS);
-				return;
-			}
-			
-			// we're stomping over another string, so unlink us
-			qcvm_string_list_ref_unlink(list, hashed);
-			break;
-		}
-	}
-
-	// increase ref count
-	qcvm_string_list_acquire(list, id);
-
-	// link!
-	qcvm_string_list_ref_link(list, hash, id, ptr);
-
-	END_TIMER(list->vm, PROFILE_TIMERS);
-}
-
-bool qcvm_string_list_check_ref_unset(qcvm_string_list_t *list, const void *ptr, const size_t span, const bool assume_changed)
-{
-	START_TIMER(list->vm, StringCheckUnset);
-
-	bool any_unset = false;
-
-	for (size_t i = 0; i < span; i++)
-	{
-		const qcvm_global_t *gptr = (const qcvm_global_t *)ptr + i;
-
-		qcvm_ref_storage_hash_t *hashed = qcvm_string_list_get_storage_hash(list, Q_hash_pointer((uint32_t)gptr, list->ref_storage_allocated));
-
-		for (; hashed; hashed = hashed->hash_next)
-			if (hashed->ptr == gptr)
-				break;
-
-		if (!hashed)
-			continue;
-
-		const qcvm_string_t old = hashed->id;
-
-		if (!assume_changed)
-		{
-			const qcvm_string_t newstr = *(const qcvm_string_t *)gptr;
-
-			// still here, so we probably just copied to ourselves or something
-			if (newstr == old)
-				continue;
-		}
-
-		// not here! release and unmark
-		qcvm_string_list_release(list, old);
-
-		// unlink
-		qcvm_string_list_ref_unlink(list, hashed);
-
-		any_unset = true;
-	}
-
-	END_TIMER(list->vm, PROFILE_TIMERS);
-
-	return any_unset;
-}
-
-qcvm_string_t *qcvm_string_list_has_ref(qcvm_string_list_t *list, const void *ptr, qcvm_ref_storage_hash_t **hashed_ptr)
-{
-	START_TIMER(list->vm, StringHasRef);
-
-	qcvm_ref_storage_hash_t *hashed = qcvm_string_list_get_storage_hash(list, Q_hash_pointer((uint32_t)ptr, list->ref_storage_allocated)), *next;
-
-	for (; hashed; hashed = next)
-	{
-		next = hashed->hash_next;
-
-		if (hashed->ptr == ptr)
-		{
-			qcvm_string_t *rv = &hashed->id;
-
-			END_TIMER(list->vm, PROFILE_TIMERS);
-
-			if (hashed_ptr)
-				*hashed_ptr = hashed;
-
-			return rv;
-		}
-	}
-	
-	END_TIMER(list->vm, PROFILE_TIMERS);
-	return NULL;
-}
-
-void qcvm_string_list_mark_refs_copied(qcvm_string_list_t *list, const void *src, const void *dst, const size_t span)
-{
-	START_TIMER(list->vm, StringMarkRefsCopied);
-
-	// grab list of fields that have strings
-	for (size_t i = 0; i < span; i++)
-	{
-		const qcvm_global_t *sptr = (const qcvm_global_t *)src + i;
-		qcvm_string_t *sstr = qcvm_string_list_has_ref(list, sptr, NULL);
-
-		const qcvm_global_t *dptr = (const qcvm_global_t *)dst + i;
-		qcvm_ref_storage_hash_t *hashed;
-		qcvm_string_t *dstr = qcvm_string_list_has_ref(list, dptr, &hashed);
-
-		// dst already has a string, check if it's the same ID
-		if (dstr)
-		{
-			// we're copying same string, so just skip
-			if (sstr && *sstr == *dstr)
-				continue;
-
-			// different strings, unref us
-			qcvm_string_list_release(list, *dstr);
-			qcvm_string_list_ref_unlink(list, hashed);
-		}
-
-		// no new string, so keep going
-		if (!sstr)
-			continue;
-		
-		// mark them as being inside of src as well now
-		qcvm_string_list_mark_ref_copy(list, *sstr, dptr);
-	}
-
-	END_TIMER(list->vm, PROFILE_TIMERS);
-}
-
-bool qcvm_string_list_is_ref_counted(qcvm_string_list_t *list, const qcvm_string_t id)
-{
-	const int32_t index = (int32_t)(-id) - 1;
-	return index < list->strings_size && list->strings[index].str;
-}
-
-qcvm_string_backup_t qcvm_string_list_pop_ref(qcvm_string_list_t *list, const void *ptr)
-{
-	START_TIMER(list->vm, StringPopRef);
-
-	qcvm_ref_storage_hash_t *hashed = qcvm_string_list_get_storage_hash(list, Q_hash_pointer((uint32_t)ptr, list->ref_storage_allocated));
-
-	for (; hashed; hashed = hashed->hash_next)
-		if (hashed->ptr == ptr)
-			break;
-
-	assert(hashed);
-
-	const qcvm_string_t id = hashed->id;
-
-	const qcvm_string_backup_t popped_ref = (qcvm_string_backup_t) { ptr, id };
-
-	qcvm_string_list_ref_unlink(list, hashed);
-
-	END_TIMER(list->vm, PROFILE_TIMERS);
-
-	return popped_ref;
-}
-
-void qcvm_string_list_push_ref(qcvm_string_list_t *list, const qcvm_string_backup_t *backup)
-{
-	START_TIMER(list->vm, StringPushRef);
-
-	const uint32_t hash = Q_hash_pointer((uint32_t)backup->ptr, list->ref_storage_allocated);
-	qcvm_ref_storage_hash_t *hashed = qcvm_string_list_get_storage_hash(list, hash);
-
-	for (; hashed; hashed = hashed->hash_next)
-	{
-		if (hashed->ptr == backup->ptr)
-		{
-			// somebody stole our ptr >:(
-			if (backup->id == hashed->id)
-			{
-				// ..oh maybe it was us. no-op!
-				END_TIMER(list->vm, PROFILE_TIMERS);
-				return;
-			}
-
-			qcvm_string_list_release(list, hashed->id);
-			qcvm_string_list_ref_unlink(list, hashed);
-			break;
-		}
-	}
-
-	const int32_t index = (int32_t)(-backup->id) - 1;
-
-	// simple restore
-	if ((index >= 0 && index < list->strings_size) && list->strings[index].str)
-	{
-		qcvm_string_list_ref_link(list, hash, backup->id, backup->ptr);
-		END_TIMER(list->vm, PROFILE_TIMERS);
-		return;
-	}
-
-	qcvm_error(list->vm, "unable to push string backup");
-}
-
-static void qcvm_string_list_write_state(qcvm_string_list_t *list, FILE *fp)
-{
-	for (qcvm_ref_counted_string_t *s = list->strings; s < list->strings + list->strings_size; s++)
-	{
-		if (!s->str)
-			continue;
-
-		fwrite(&s->length, sizeof(s->length), 1, fp);
-		fwrite(s->str, sizeof(char), s->length, fp);
-	}
-
-	const size_t len = 0;
-	fwrite(&len, sizeof(len), 1, fp);
-}
-
-static void qcvm_string_list_read_state(qcvm_string_list_t *list, FILE *fp)
-{
-	while (true)
-	{
-		size_t len;
-
-		fread(&len, sizeof(len), 1, fp);
-
-		if (!len)
-			break;
-
-		char *s = qcvm_temp_buffer(list->vm, len);
-		fread(s, sizeof(char), len, fp);
-		s[len] = 0;
-
-		// does not acquire, since entity/game state does that itself
-		qcvm_store_or_find_string(list->vm, s, len, true);
-	}
-}
-
-static void qcvm_builtin_list_init(qcvm_builtin_list_t *list, qcvm_t *vm)
-{
-	list->vm = vm;
-}
-
-qcvm_builtin_t qcvm_builtin_list_get(qcvm_builtin_list_t *list, const qcvm_func_t func)
+qcvm_builtin_t qcvm_builtin_list_get(qcvm_t *vm, const qcvm_func_t func)
 {
 	assert(func < 0);
 
 	const int32_t index = (-func) - 1;
 
-	assert(index < list->count);
+	assert(index < vm->builtins.count);
 
-	return list->list[index];
+	return vm->builtins.list[index];
 }
 
-void qcvm_builtin_list_register(qcvm_builtin_list_t *list, const char *name, qcvm_builtin_t builtin)
+void qcvm_builtin_list_register(qcvm_t *vm, const char *name, qcvm_builtin_t builtin)
 {
-	for (qcvm_function_t *func = list->vm->functions; func < list->vm->functions + list->vm->functions_size; func++)
+	qcvm_builtin_list_t *list = &vm->builtins;
+
+	for (qcvm_function_t *func = vm->functions; func < vm->functions + vm->functions_size; func++)
 	{
 		if (func->id || func->name_index == STRING_EMPTY)
 			continue;
 
-		if (strcmp(qcvm_get_string(list->vm, func->name_index), name) == 0)
+		if (strcmp(qcvm_get_string(vm, func->name_index), name) == 0)
 		{
 			if (list->registered == list->count)
-				qcvm_error(list->vm, "Builtin list overrun");
+				qcvm_error(vm, "Builtin list overrun");
 
 			const int32_t index = (int32_t) list->registered;
 			func->id = (qcvm_func_t)(-(index + 1));
@@ -1040,8 +427,6 @@ void qcvm_state_stack_pop(qcvm_state_t *state)
 
 static void qcvm_init(qcvm_t *vm)
 {
-	qcvm_string_list_init(&vm->dynamic_strings, vm);
-	qcvm_builtin_list_init(&vm->builtins, vm);
 	qcvm_state_init(&vm->state, vm);
 	Q_srand((uint32_t)time(NULL));
 }
@@ -1084,17 +469,101 @@ void qcvm_debug(const qcvm_t *vm, const char *format, ...)
 
 	vm->debug_print(buffer);
 }
+
+
+
+#ifdef _DEBUG
+static const char *qcvm_function_for_local(qcvm_t *vm, const qcvm_global_t local)
+{
+	qcvm_global_t closest = -1;
+	qcvm_function_t *closest_func = NULL;
+
+	for (qcvm_function_t *func = vm->functions; func < vm->functions + vm->functions_size; func++)
+	{
+		if (local < func->first_arg)
+			continue;
+		else if (local == func->first_arg)
+		{
+			closest_func = func;
+			break;
+		}
+		else if ((local - func->first_arg) < closest)
+		{
+			closest = (local - func->first_arg);
+			closest_func = func;
+		}
+	}
+
+	if (closest_func && closest_func->name_index)
+		return qcvm_get_string(vm, closest_func->name_index);
+
+	return NULL;
+}
+
+const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
+{
+	if (ptr >= vm->global_data && ptr < (vm->global_data + vm->global_size))
+	{
+		const qcvm_global_t offset = (qcvm_global_t)(ptr - vm->global_data);
+		qcvm_global_t closest = -1;
+		qcvm_definition_t *closest_def = NULL;
+
+		for (qcvm_definition_t *def = vm->definitions; def < vm->definitions + vm->definitions_size; def++)
+		{
+			if (def->global_index == offset)
+			{
+				closest = def->global_index;
+				closest_def = def;
+				break;
+			}
+			else if (def->global_index < offset)
+			{
+				if ((offset - def->global_index) < closest)
+				{
+					closest = offset - def->global_index;
+					closest_def = def;
+				}
+			}
+		}
+
+		if (closest == -1 || !closest_def || !closest_def->name_index)
+			return qcvm_temp_format(vm, "global %u", offset);
+
+		const char *func = qcvm_function_for_local(vm, offset);
+
+		if (func)
+			return qcvm_temp_format(vm, "global %s::%s + %u[%u]", func, qcvm_get_string(vm, closest_def->name_index), closest, offset);
+
+		return qcvm_temp_format(vm, "global %s + %u[%u]", qcvm_get_string(vm, closest_def->name_index), closest, offset);
+	}
+	else if (ptr >= (qcvm_global_t *)vm->edicts && ptr < (qcvm_global_t *)vm->edicts + (vm->edict_size * vm->max_edicts))
+	{
+		const edict_t *ent = qcvm_ent_to_entity(vm, (qcvm_ent_t)ptr, false);
+		const qcvm_global_t field_offset = (qcvm_global_t)(ptr - (qcvm_global_t *)ent);
+
+		if (field_offset < vm->field_real_size)
+		{
+			const qcvm_definition_t *def = vm->field_map_by_id[field_offset];
+			size_t offset;
+
+			for (offset = 0; !def; def = vm->field_map_by_id[field_offset - (++offset)]) ;
+
+			if (def)
+			{
+				if (offset)
+					return qcvm_temp_format(vm, "field %u::%s + %u[%u]", ent->s.number, qcvm_get_string(vm, def->name_index), offset, field_offset);
+				
+				return qcvm_temp_format(vm, "field %u::%s[%u]", ent->s.number, qcvm_get_string(vm, def->name_index), field_offset);
+			}
+		}
+
+		return qcvm_temp_format(vm, "field %u::%u ???", ent->s.number, field_offset);
+	}
+
+	return "???";
+}
 #endif
-
-void *qcvm_alloc(const qcvm_t *vm, size_t size)
-{
-	return vm->alloc(size);
-}
-
-void qcvm_mem_free(const qcvm_t *vm, void *ptr)
-{
-	vm->free(ptr);
-}
+#endif
 
 void qcvm_set_allowed_stack(qcvm_t *vm, const void *ptr, const size_t length)
 {
@@ -1151,32 +620,8 @@ void qcvm_set_global(qcvm_t *vm, const qcvm_global_t global, const void *value, 
 
 	void *dst = qcvm_get_global(vm, global);
 	memcpy(dst, value, value_size);
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, dst, value_size / sizeof(qcvm_global_t), false);
+	qcvm_string_list_check_ref_unset(vm, dst, value_size / sizeof(qcvm_global_t), false);
 	qcvm_field_wrap_list_check_set(&vm->field_wraps, dst, value_size / sizeof(qcvm_global_t));
-}
-
-qcvm_string_t qcvm_set_global_str(qcvm_t *vm, const qcvm_global_t global, const char *value, const size_t len, const bool copy)
-{
-	qcvm_string_t str = qcvm_store_or_find_string(vm, value, len, copy);
-	qcvm_set_global_typed_value(qcvm_string_t, vm, global, str);
-
-	if (qcvm_string_list_is_ref_counted(&vm->dynamic_strings, str))
-		qcvm_string_list_mark_ref_copy(&vm->dynamic_strings, str, qcvm_get_global(vm, global));
-
-	return str;
-}
-
-qcvm_string_t qcvm_set_string_ptr(qcvm_t *vm, void *ptr, const char *value, const size_t len, const bool copy)
-{
-	qcvm_string_t str = qcvm_store_or_find_string(vm, value, len, copy);
-	*(qcvm_string_t *)ptr = str;
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, ptr, sizeof(qcvm_string_t) / sizeof(qcvm_global_t), false);
-	qcvm_field_wrap_list_check_set(&vm->field_wraps, ptr, sizeof(qcvm_string_t) / sizeof(qcvm_global_t));
-
-	if (qcvm_string_list_is_ref_counted(&vm->dynamic_strings, str))
-		qcvm_string_list_mark_ref_copy(&vm->dynamic_strings, str, ptr);
-
-	return str;
 }
 
 // safe way of copying globals between other globals
@@ -1189,7 +634,7 @@ void qcvm_copy_globals(qcvm_t *vm, const qcvm_global_t dst, const qcvm_global_t 
 
 	memcpy(dst_ptr, src_ptr, size);
 
-	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, src_ptr, dst_ptr, span);
+	qcvm_string_list_mark_refs_copied(vm, src_ptr, dst_ptr, span);
 	qcvm_field_wrap_list_check_set(&vm->field_wraps, dst_ptr, span);
 }
 
@@ -1230,187 +675,6 @@ const char *qcvm_stack_trace(const qcvm_t *vm, const bool compact)
 	}
 
 	return str;
-}
-
-edict_t *qcvm_ent_to_entity(const qcvm_t *vm, const qcvm_ent_t ent, bool allow_invalid)
-{
-	if (ent == ENT_INVALID)
-	{
-		if (!allow_invalid)
-			return NULL;
-		else
-			return qcvm_itoe(vm, -1);
-	}
-	else if (ent == ENT_WORLD)
-		return qcvm_itoe(vm, 0);
-
-	assert(ent >= -1 && ent < MAX_EDICTS);
-
-	return qcvm_itoe(vm, ent);
-}
-
-qcvm_ent_t qcvm_entity_to_ent(const qcvm_t *vm, const edict_t *ent)
-{
-	if (ent == NULL)
-		return ENT_INVALID;
-
-	assert(ent->s.number == ((uint8_t *)ent - (uint8_t *)vm->edicts) / vm->edict_size);
-
-	return (qcvm_ent_t)ent->s.number;
-}
-
-edict_t *qcvm_argv_entity(const qcvm_t *vm, const uint8_t d)
-{
-	return qcvm_ent_to_entity(vm, *qcvm_get_const_global_typed(qcvm_ent_t, vm, qcvm_global_offset(GLOBAL_PARM0, d * 3)), false);
-}
-
-qcvm_string_t qcvm_argv_string_id(const qcvm_t *vm, const uint8_t d)
-{
-	return *qcvm_get_const_global_typed(qcvm_string_t, vm, qcvm_global_offset(GLOBAL_PARM0, d * 3));
-}
-
-const char *qcvm_argv_string(const qcvm_t *vm, const uint8_t d)
-{
-	return qcvm_get_string(vm, qcvm_argv_string_id(vm, d));
-}
-
-int32_t qcvm_argv_int32(const qcvm_t *vm, const uint8_t d)
-{
-	return *qcvm_get_const_global_typed(int32_t, vm, qcvm_global_offset(GLOBAL_PARM0, d * 3));
-}
-
-vec_t qcvm_argv_float(const qcvm_t *vm, const uint8_t d)
-{
-	return *qcvm_get_const_global_typed(vec_t, vm, qcvm_global_offset(GLOBAL_PARM0, d * 3));
-}
-
-vec3_t qcvm_argv_vector(const qcvm_t *vm, const uint8_t d)
-{
-	return *qcvm_get_const_global_typed(vec3_t, vm, qcvm_global_offset(GLOBAL_PARM0, d * 3));
-}
-
-qcvm_pointer_t qcvm_argv_pointer(const qcvm_t *vm, const uint8_t d)
-{
-	return *qcvm_get_const_global_typed(qcvm_pointer_t, vm, qcvm_global_offset(GLOBAL_PARM0, d * 3));
-}
-
-void qcvm_return_float(qcvm_t *vm, const vec_t value)
-{
-	qcvm_set_global_typed_value(vec_t, vm, GLOBAL_RETURN, value);
-}
-
-void qcvm_return_vector(qcvm_t *vm, const vec3_t value)
-{
-	qcvm_set_global_typed_value(vec3_t, vm, GLOBAL_RETURN, value);
-}
-	
-void qcvm_return_entity(qcvm_t *vm, const edict_t *value)
-{
-	const qcvm_ent_t val = qcvm_entity_to_ent(vm, value);
-	qcvm_set_global_typed_value(int32_t, vm, GLOBAL_RETURN, val);
-}
-	
-void qcvm_return_int32(qcvm_t *vm, const int32_t value)
-{
-	qcvm_set_global_typed_value(int32_t, vm, GLOBAL_RETURN, value);
-}
-
-void qcvm_return_func(qcvm_t *vm, const qcvm_func_t func)
-{
-	qcvm_set_global_typed_value(qcvm_func_t, vm, GLOBAL_RETURN, func);
-}
-
-void qcvm_return_string_id(qcvm_t *vm, const qcvm_string_t str)
-{
-	qcvm_set_global_typed_value(qcvm_func_t, vm, GLOBAL_RETURN, str);
-}
-
-void qcvm_return_string(qcvm_t *vm, const char *str)
-{
-	if (!(str >= vm->string_data && str < vm->string_data + vm->string_size))
-	{
-		qcvm_set_global_str(vm, GLOBAL_RETURN, str, strlen(str), true); // dynamic
-		return;
-	}
-
-	const qcvm_string_t s = (str == NULL || *str == 0) ? STRING_EMPTY : (qcvm_string_t)(str - vm->string_data);
-	qcvm_set_global_typed_value(qcvm_string_t, vm, GLOBAL_RETURN, s);
-}
-
-void qcvm_return_pointer(qcvm_t *vm, const qcvm_pointer_t ptr)
-{
-#ifdef _DEBUG
-	if (!qcvm_pointer_valid(vm, ptr, false, sizeof(qcvm_global_t)))
-		qcvm_debug(vm, "Invalid pointer returned; writes to this will fail");
-#endif
-
-	qcvm_set_global_typed_value(qcvm_pointer_t, vm, GLOBAL_RETURN, ptr);
-}
-
-bool qcvm_find_string(qcvm_t *vm, const char *value, qcvm_string_t *rstr)
-{
-	START_TIMER(vm, StringFind);
-
-	*rstr = STRING_EMPTY;
-
-	if (!value || !*value)
-	{
-		END_TIMER(vm, PROFILE_TIMERS);
-		return true;
-	}
-
-	// check built-ins
-	const uint32_t hash = Q_hash_string(value, vm->string_size);
-
-	for (qcvm_string_hash_t *hashed = vm->string_hashes[hash]; hashed; hashed = hashed->hash_next)
-	{
-		if (!strcmp(hashed->str, value))
-		{
-			*rstr = (qcvm_string_t)(hashed->str - vm->string_data);
-			END_TIMER(vm, PROFILE_TIMERS);
-			return true;
-		}
-	}
-
-	// check temp strings
-	// TODO: hash these too
-	for (qcvm_ref_counted_string_t *s = vm->dynamic_strings.strings; s < vm->dynamic_strings.strings + vm->dynamic_strings.strings_size; s++)
-	{
-		if (!s->str)
-			continue;
-
-		const char *str = s->str;
-
-		if (str && strcmp(value, str) == 0)
-		{
-			*rstr = (qcvm_string_t) -((s - vm->dynamic_strings.strings) + 1);
-			END_TIMER(vm, PROFILE_TIMERS);
-			return true;
-		}
-	}
-	
-	END_TIMER(vm, PROFILE_TIMERS);
-	return false;
-}
-
-// Note: DOES NOT ACQUIRE IF REF COUNTED!!
-qcvm_string_t qcvm_store_or_find_string(qcvm_t *vm, const char *value, const size_t len, const bool copy)
-{
-	// check built-ins
-	qcvm_string_t str;
-
-	if (qcvm_find_string(vm, value, &str))
-		return str;
-
-	if (copy)
-	{
-		char *strcopy = (char *)qcvm_alloc(vm, (sizeof(char) * len) + 1);
-		memcpy(strcopy, value, sizeof(char) * len);
-		strcopy[len] = 0;
-		value = strcopy;
-	}
-
-	return qcvm_string_list_store(&vm->dynamic_strings, value, len);
 }
 
 qcvm_definition_t *qcvm_find_definition(qcvm_t *vm, const char *name, const qcvm_deftype_t type)
@@ -1461,7 +725,7 @@ static qcvm_eval_result_t qcvm_value_from_ptr(const qcvm_definition_t *def, cons
 	case TYPE_FUNCTION:
 		return (qcvm_eval_result_t) { .type = TYPE_FUNCTION, .funcid = *(const qcvm_func_t *)(ptr) };
 	case TYPE_POINTER:
-		return (qcvm_eval_result_t) { .type = TYPE_POINTER, .ptr = (void *)(*(const int32_t *)(ptr)) };
+		return (qcvm_eval_result_t) { .type = TYPE_POINTER, .ptr = *(const qcvm_pointer_t *)(ptr) };
 	case TYPE_INTEGER:
 		return (qcvm_eval_result_t) { .type = TYPE_INTEGER, .integer = *(const int32_t *)(ptr) };
 	}
@@ -1652,26 +916,6 @@ qcvm_function_t *qcvm_find_function(const qcvm_t *vm, const char *name)
 
 	return qcvm_get_function(vm, id);
 }
-	
-const char *qcvm_get_string(const qcvm_t *vm, const qcvm_string_t str)
-{
-	if (str < 0)
-		return qcvm_string_list_get(&vm->dynamic_strings, str);
-	else if ((size_t)str >= vm->string_size)
-		qcvm_error(vm, "bad string");
-
-	return vm->string_data + (size_t)str;
-}
-
-size_t qcvm_get_string_length(const qcvm_t *vm, const qcvm_string_t str)
-{
-	if (str < 0)
-		return qcvm_string_list_get_length(&vm->dynamic_strings, str);
-	else if ((size_t)str >= vm->string_size)
-		qcvm_error(vm, "bad string");
-
-	return vm->string_lengths[(size_t)str];
-}
 
 int32_t qcvm_handle_alloc(qcvm_t *vm, void *ptr, const qcvm_handle_descriptor_t *descriptor)
 {
@@ -1710,14 +954,14 @@ int32_t qcvm_handle_alloc(qcvm_t *vm, void *ptr, const qcvm_handle_descriptor_t 
 	return handle->id;
 }
 
-void *qcvm_fetch_handle(qcvm_t *vm, const int32_t id)
+qcvm_handle_t *qcvm_fetch_handle(qcvm_t *vm, const int32_t id)
 {
 	if (id <= 0 || id > vm->handles.size)
 		qcvm_error(vm, "invalid handle ID");
 
-	void *handle = vm->handles.data[id - 1].handle;
+	qcvm_handle_t *handle = &vm->handles.data[id - 1];
 
-	if (!handle)
+	if (!handle->handle)
 		qcvm_error(vm, "invalid handle ID");
 
 	return handle;
@@ -1736,14 +980,6 @@ void qcvm_handle_free(qcvm_t *vm, qcvm_handle_t *handle)
 	handle->handle = NULL;
 }
 
-void *qcvm_itoe(const qcvm_t *vm, const int32_t n)
-{
-	if (n == ENT_INVALID)
-		return NULL;
-
-	return (uint8_t *)vm->edicts + (n * vm->edict_size);
-}
-
 qcvm_pointer_t qcvm_get_entity_field_pointer(qcvm_t *vm, edict_t *ent, const int32_t field)
 {
 	const qcvm_pointer_t ptr = qcvm_make_pointer(vm, QCVM_POINTER_ENTITY, (int32_t *)ent + field);
@@ -1754,105 +990,6 @@ qcvm_pointer_t qcvm_get_entity_field_pointer(qcvm_t *vm, edict_t *ent, const int
 #endif
 
 	return ptr;
-}
-
-bool qcvm_pointer_valid(const qcvm_t *vm, const qcvm_pointer_t pointer, const bool allow_null, const size_t len)
-{
-	switch (pointer.type)
-	{
-	case QCVM_POINTER_NULL:
-	default:
-		return allow_null && !len && !pointer.offset;
-	case QCVM_POINTER_GLOBAL:
-		return (pointer.offset + len) <= vm->global_size * sizeof(qcvm_global_t);
-	case QCVM_POINTER_ENTITY:
-		return (pointer.offset + len) <= vm->edict_size * vm->max_edicts * sizeof(qcvm_global_t);
-	case QCVM_POINTER_STACK:
-		return vm->allowed_stack && (pointer.offset + len) <= vm->allowed_stack_size;
-	}
-}
-
-void *qcvm_resolve_pointer(const qcvm_t *vm, const qcvm_pointer_t address)
-{
-	switch (address.type)
-	{
-	case QCVM_POINTER_NULL:
-	default:
-		return NULL;
-	case QCVM_POINTER_GLOBAL:
-		return (uint8_t *)vm->global_data + address.offset;
-	case QCVM_POINTER_ENTITY:
-		return (uint8_t *)vm->edicts + address.offset;
-	case QCVM_POINTER_STACK:
-		return (uint8_t *)vm->allowed_stack + address.offset;
-	}
-}
-
-qcvm_pointer_t qcvm_make_pointer(const qcvm_t *vm, const qcvm_pointer_type_t type, const void *pointer)
-{
-	switch (type)
-	{
-	case QCVM_POINTER_NULL:
-	default:
-		return (qcvm_pointer_t) { 0, type };
-	case QCVM_POINTER_GLOBAL:
-		return (qcvm_pointer_t) { (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->global_data), type };
-	case QCVM_POINTER_ENTITY:
-		return (qcvm_pointer_t) { (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->edicts), type };
-	case QCVM_POINTER_STACK:
-		return (qcvm_pointer_t) { (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->allowed_stack), type };
-	}
-}
-
-qcvm_pointer_t qcvm_offset_pointer(const qcvm_t *vm, const qcvm_pointer_t pointer, const size_t offset)
-{
-	return (qcvm_pointer_t) { (uint32_t)(pointer.offset + offset), pointer.type };
-}
-
-void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
-{
-	qcvm_builtin_t func;
-
-	if (!(func = qcvm_builtin_list_get(&vm->builtins, function->id)))
-		qcvm_error(vm, "Bad builtin call number");
-
-#ifdef ALLOW_INSTRUMENTING
-	qcvm_profile_t *profile = &vm->profile_data[function - vm->functions];
-
-	if (vm->profile_flags & PROFILE_FIELDS)
-		profile->fields[NumSelfCalls][vm->profiler_mark]++;
-	
-	uint64_t start = 0;
-	qcvm_stack_t *prev_stack = NULL;
-	
-	if (vm->profile_flags & PROFILE_FUNCTIONS)
-	{
-		start = Q_time();
-		prev_stack = (vm->state.current >= 0 && vm->state.stack[vm->state.current].profile) ? &vm->state.stack[vm->state.current] : NULL;
-
-		// moving into builtin; add up what we have so far into prev stack
-		if (prev_stack)
-		{
-			prev_stack->profile->self[vm->profiler_mark] += Q_time() - prev_stack->caller_start;
-			prev_stack->callee_start = Q_time();
-		}
-	}
-#endif
-
-	func(vm);
-
-#ifdef ALLOW_INSTRUMENTING
-	if (vm->profile_flags & PROFILE_FUNCTIONS)
-	{
-		// builtins don't have external call time, just internal self time
-		const uint64_t time_spent = Q_time() - start;
-		profile->self[vm->profiler_mark] += time_spent;
-
-		// add time we spent in this function into the parent's call_into time
-		if (prev_stack)
-			prev_stack->profile->ext[vm->profiler_mark] += Q_time() - prev_stack->callee_start;
-	}
-#endif
 }
 
 void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
@@ -1938,10 +1075,10 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 			return;		// all done
 	}
 
-	vm->debug_print(qcvm_temp_format(vm, "Infinite loop broken @ %s\n", qcvm_stack_trace(vm, true)));
+	/*vm->debug_print(qcvm_temp_format(vm, "Infinite loop broken @ %s\n", qcvm_stack_trace(vm, true)));
 	
 	while (vm->state.current != -1)
-		qcvm_leave(vm);
+		qcvm_leave(vm);*/
 }
 
 static const uint32_t QCVM_VERSION	= 1;
@@ -1951,7 +1088,7 @@ void qcvm_write_state(qcvm_t *vm, FILE *fp)
 	fwrite(&QCVM_VERSION, sizeof(QCVM_VERSION), 1, fp);
 
 	// write dynamic strings
-	qcvm_string_list_write_state(&vm->dynamic_strings, fp);
+	qcvm_string_list_write_state(vm, fp);
 }
 
 void qcvm_read_state(qcvm_t *vm, FILE *fp)
@@ -1964,7 +1101,7 @@ void qcvm_read_state(qcvm_t *vm, FILE *fp)
 		qcvm_error(vm, "bad VM version");
 
 	// read dynamic strings
-	qcvm_string_list_read_state(&vm->dynamic_strings, fp);
+	qcvm_string_list_read_state(vm, fp);
 }
 
 static void VMLoadStatements(qcvm_t *vm, FILE *fp, qcvm_statement_t *dst, const qcvm_header_t *header)
@@ -2612,4 +1749,5 @@ void qcvm_init_all_builtins(qcvm_t *vm)
 	qcvm_init_debug_builtins(vm);
 	qcvm_init_math_builtins(vm);
 	qcvm_init_file_builtins(vm);
+	qcvm_init_hash_builtins(vm);
 }

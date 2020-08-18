@@ -1,6 +1,6 @@
 #define QCVM_INTERNAL
 #include "shared/shared.h"
-#include "g_vm.h"
+#include "vm.h"
 #include "vm_math.h"
 
 static void F_OP_DONE(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
@@ -292,7 +292,7 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 	const qcvm_pointer_t pointer = qcvm_get_entity_field_pointer(vm, ent, field); \
 	TType *field_value = (TType *)qcvm_resolve_pointer(vm, pointer); \
 	qcvm_set_global_typed_ptr(TType, vm, operands.c, field_value); \
-	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), sizeof(TType) / sizeof(qcvm_global_t)); \
+	qcvm_string_list_mark_refs_copied(vm, field_value, qcvm_get_global(vm, operands.c), sizeof(TType) / sizeof(qcvm_global_t)); \
 	qcvm_field_wrap_list_check_set(&vm->field_wraps, qcvm_get_global(vm, operands.c), sizeof(TType) / sizeof(qcvm_global_t)); \
 }
 
@@ -353,7 +353,7 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 \
 	TResult *address_ptr = (TResult *)qcvm_resolve_pointer(vm, pointer); \
 	*address_ptr = *value; \
-	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, value, address_ptr, span); \
+	qcvm_string_list_mark_refs_copied(vm, value, address_ptr, span); \
 	qcvm_field_wrap_list_check_set(&vm->field_wraps, address_ptr, span); \
 }
 
@@ -699,7 +699,7 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 	qcvm_set_global_typed_ptr(TType, vm, operands.c, field_value); \
 \
 	const size_t span = sizeof(TType) / sizeof(qcvm_global_t); \
-	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), span); \
+	qcvm_string_list_mark_refs_copied(vm, field_value, qcvm_get_global(vm, operands.c), span); \
 	qcvm_field_wrap_list_check_set(&vm->field_wraps, qcvm_get_global(vm, operands.c), span); \
 }
 
@@ -724,7 +724,7 @@ static inline void F_OP_LOADP_BASE(qcvm_t *vm, const qcvm_operands_t operands, i
 	qcvm_set_global(vm, operands.c, field_value, TType_size);
 
 	const size_t span = TType_size / sizeof(qcvm_global_t);
-	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, field_value, qcvm_get_global(vm, operands.c), span);
+	qcvm_string_list_mark_refs_copied(vm, field_value, qcvm_get_global(vm, operands.c), span);
 	qcvm_field_wrap_list_check_set(&vm->field_wraps, qcvm_get_global(vm, operands.c), span);
 }
 
@@ -922,7 +922,7 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 \
 	*field_value = *value; \
 \
-	qcvm_string_list_mark_refs_copied(&vm->dynamic_strings, value, field_value, span); \
+	qcvm_string_list_mark_refs_copied(vm, value, field_value, span); \
 	qcvm_field_wrap_list_check_set(&vm->field_wraps, field_value, span); \
 }
 

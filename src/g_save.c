@@ -18,7 +18,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
 #include "shared/shared.h"
-#include "g_vm.h"
+#include "vm.h"
 #include "game.h"
 #include "g_main.h"
 #include "vm_string.h"
@@ -245,7 +245,7 @@ void ReadGame(const char *filename)
 	WipeEntities();
 	
 	// free any string refs inside of the entity structure
-	qcvm_string_list_check_ref_unset(&qvm->dynamic_strings, globals.edicts, (globals.edict_size * globals.max_edicts) / sizeof(qcvm_global_t), false);
+	qcvm_string_list_check_ref_unset(qvm, globals.edicts, (globals.edict_size * globals.max_edicts) / sizeof(qcvm_global_t), false);
 
 	// load game globals
 	size_t len;
@@ -291,7 +291,7 @@ void ReadGame(const char *filename)
 
 		qcvm_string_t str;
 		
-		if (!qcvm_find_string(qvm, def_name, &str) || qcvm_string_list_is_ref_counted(&qvm->dynamic_strings, str))
+		if (!qcvm_find_string(qvm, def_name, &str) || qcvm_string_list_is_ref_counted(qvm, str))
 			qcvm_error(qvm, "Bad string in save file");
 
 		qcvm_definition_hash_t *hashed = qvm->field_hashes[Q_hash_string(def_name, qvm->fields_size)];
@@ -458,7 +458,7 @@ void ReadLevel(const char *filename)
 	globals.num_edicts = game.num_clients + 1;
 	
 	// free any string refs inside of the entity structure
-	qcvm_string_list_check_ref_unset(&qvm->dynamic_strings, globals.edicts, (globals.edict_size * globals.max_edicts) / sizeof(qcvm_global_t), false);
+	qcvm_string_list_check_ref_unset(qvm, globals.edicts, (globals.edict_size * globals.max_edicts) / sizeof(qcvm_global_t), false);
 
 	// load level globals
 	while (true)
@@ -501,7 +501,7 @@ void ReadLevel(const char *filename)
 
 		qcvm_string_t str;
 		
-		if (!qcvm_find_string(qvm, def_name, &str) || qcvm_string_list_is_ref_counted(&qvm->dynamic_strings, str))
+		if (!qcvm_find_string(qvm, def_name, &str) || qcvm_string_list_is_ref_counted(qvm, str))
 			qcvm_error(qvm, "Bad string in save file");
 
 		qcvm_definition_hash_t *hashed = qvm->field_hashes[Q_hash_string(def_name, qvm->fields_size)];

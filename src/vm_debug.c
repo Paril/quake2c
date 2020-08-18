@@ -1,5 +1,5 @@
 #include "shared/shared.h"
-#include "g_vm.h"
+#include "vm.h"
 #include "vm_game.h"
 #include "vm_debug.h"
 #include "vm_string.h"

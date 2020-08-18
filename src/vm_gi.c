@@ -1,9 +1,10 @@
 #include "shared/shared.h"
-#include "g_vm.h"
+#include "vm.h"
 #include "vm_gi.h"
 
 #include "game.h"
 #include "vm_game.h"
+#include "vm_hash.h"
 
 static void QC_sound(qcvm_t *vm)
 {
@@ -85,9 +86,7 @@ static void QC_cvar(qcvm_t *vm)
 	const char *value = qcvm_argv_string(vm, 1);
 	const cvar_flags_t flags = qcvm_argv_int32(vm, 2);
 
-	cvar_t *cvar = gi.cvar(name, value, flags);
-	int32_t handle = qcvm_handle_alloc(vm, cvar, NULL);
-	qcvm_return_int32(vm, handle);
+	qcvm_return_handle(vm, gi.cvar(name, value, flags), NULL);
 }
 
 static void QC_cvar_set(qcvm_t *vm)
@@ -182,12 +181,12 @@ static void QC_trace(qcvm_t *vm)
 	trace->surface.value = trace_result.surface->value;
 	trace->surface.name = qcvm_store_or_find_string(vm, trace_result.surface->name, strlen(trace_result.surface->name), true);
 
-	if (qcvm_string_list_is_ref_counted(&vm->dynamic_strings, trace->surface.name))
-		qcvm_string_list_mark_ref_copy(&vm->dynamic_strings, trace->surface.name, &trace->surface.name);
+	if (qcvm_string_list_is_ref_counted(vm, trace->surface.name))
+		qcvm_string_list_mark_ref_copy(vm, trace->surface.name, &trace->surface.name);
 
 	trace->contents = trace_result.contents;
 	trace->ent = qcvm_entity_to_ent(vm, trace_result.ent);
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, trace, sizeof(*trace) / sizeof(qcvm_global_t), false);
+	qcvm_string_list_check_ref_unset(vm, trace, sizeof(*trace) / sizeof(qcvm_global_t), false);
 }
 
 static void QC_pointcontents(qcvm_t *vm)
@@ -237,175 +236,9 @@ static void QC_unlinkentity(qcvm_t *vm)
 	gi.unlinkentity(ent);
 }
 
-typedef struct entity_set_link_s
-{
-	edict_t						*entity;
-	struct entity_set_link_s	*next;
-} entity_set_link_t;
-
-typedef struct
-{
-	entity_set_link_t	*head;
-	size_t				count, allocated;
-} entity_set_t;
-
-static void entity_set_free(qcvm_t *vm, void *ptr)
-{
-	entity_set_t *set = (entity_set_t *)ptr;
-
-	for (entity_set_link_t *link = set->head; link; )
-	{
-		entity_set_link_t *next = link->next;
-		gi.TagFree(link);
-		link = next;
-	}
-
-	gi.TagFree(set);
-}
-
-static qcvm_handle_descriptor_t entity_set_descriptor =
-{
-	.free = entity_set_free
-};
-
-static entity_set_t *entity_set_alloc(const size_t reserved)
-{
-	entity_set_t *set = (entity_set_t *)gi.TagMalloc(sizeof(entity_set_t), TAG_GAME);
-
-	if (!reserved)
-		return set;
-
-	set->allocated = reserved;
-
-	entity_set_link_t **tail = &set->head;
-
-	for (size_t i = 0; i < reserved; i++)
-	{
-		*tail = (entity_set_link_t *)gi.TagMalloc(sizeof(entity_set_link_t), TAG_GAME);
-		tail = &(*tail)->next;
-	}
-
-	return set;
-}
-
-static edict_t *entity_set_get(const entity_set_t *set, size_t index)
-{
-	if (index >= set->count)
-		gi.error("Out of bounds access");
-
-	entity_set_link_t *link;
-	
-	for (link = set->head; index && link; index--, link = link->next) ;
-	
-#ifdef _DEBUG
-	if (index || !link->entity)
-		gi.error("Out of bounds access");
-#endif
-
-	return link->entity;
-}
-
-static void entity_set_add(entity_set_t *set, edict_t *ent)
-{
-	for (entity_set_link_t **link = &set->head; ; link = &(*link)->next)
-	{
-		if (!(*link))
-		{
-			*link = (entity_set_link_t *)gi.TagMalloc(sizeof(entity_set_link_t), TAG_GAME);
-			set->allocated++;
-		}
-
-		if (!(*link)->entity)
-		{
-			(*link)->entity = ent;
-			set->count++;
-			return;
-		}
-		else if ((*link)->entity == ent)
-			return;
-	}
-}
-
-static void entity_set_remove(entity_set_t *set, edict_t *ent)
-{
-	for (entity_set_link_t **link = &set->head; (*link) && (*link)->entity; link = &(*link)->next)
-	{
-		if ((*link)->entity != ent)
-			continue;
-
-		(*link)->entity = NULL;
-
-		entity_set_link_t *removed_link = *link;
-		*link = (*link)->next;
-
-		while ((*link)->next) link = &(*link)->next;
-
-		(*link)->next = removed_link;
-		set->count--;
-		set->allocated--;
-		return;
-	}
-
-	gi.error("Remove entity not in list");
-}
-
-static void entity_set_clear(entity_set_t *set)
-{
-	set->count = 0;
-
-	for (entity_set_link_t *link = set->head; link; )
-	{
-		entity_set_link_t *next = link->next;
-		link->entity = NULL;
-		link->next = NULL;
-		link = next;
-	}
-}
-
-static void QC_entity_set_alloc(qcvm_t *vm)
-{
-	entity_set_t *set = entity_set_alloc((vm->state.argc && qcvm_argv_int32(vm, 0) > 1) ? (size_t)qcvm_argv_int32(vm, 0) : 0);
-	int32_t handle = qcvm_handle_alloc(vm, set, &entity_set_descriptor);
-	qcvm_return_int32(vm, handle);
-}
-
-static void QC_entity_set_get(qcvm_t *vm)
-{
-	const entity_set_t *set = qcvm_argv_handle(entity_set_t, vm, 0);
-	const int32_t index = qcvm_argv_int32(vm, 1);
-
-	qcvm_return_entity(vm, entity_set_get(set, index));
-}
-
-static void QC_entity_set_add(qcvm_t *vm)
-{
-	entity_set_t *set = qcvm_argv_handle(entity_set_t, vm, 0);
-	edict_t *ent = qcvm_argv_entity(vm, 1);
-	entity_set_add(set, ent);
-}
-
-static void QC_entity_set_remove(qcvm_t *vm)
-{
-	entity_set_t *set = qcvm_argv_handle(entity_set_t, vm, 0);
-	edict_t *ent = qcvm_argv_entity(vm, 1);
-	entity_set_remove(set, ent);
-}
-
-static void QC_entity_set_length(qcvm_t *vm)
-{
-	entity_set_t *set = qcvm_argv_handle(entity_set_t, vm, 0);
-	qcvm_return_int32(vm, (int32_t)set->count);
-}
-
-static void QC_entity_set_clear(qcvm_t *vm)
-{
-	entity_set_t *set = qcvm_argv_handle(entity_set_t, vm, 0);
-	entity_set_clear(set);
-}
-
 static void QC_BoxEdicts(qcvm_t *vm)
 {
-	entity_set_t *set = qcvm_argv_handle(entity_set_t, vm, 0);
+	qcvm_hashset_t *set = qcvm_argv_handle(qcvm_hashset_t, vm, 0);
 	const vec3_t mins = qcvm_argv_vector(vm, 1);
 	const vec3_t maxs = qcvm_argv_vector(vm, 2);
 	const int32_t maxcount = qcvm_argv_int32(vm, 3);
@@ -414,10 +247,12 @@ static void QC_BoxEdicts(qcvm_t *vm)
 
 	const int32_t count = gi.BoxEdicts(&mins, &maxs, raw_entities, maxcount, areatype);
 
-	entity_set_clear(set);
+	hashset_clear(vm, set);
 
 	for (int32_t i = 0; i < count; i++)
-		entity_set_add(set, raw_entities[i]);
+		hashset_add(vm, set, (const qcvm_variant_t) { .type = TYPE_ENTITY, .value.ent = qcvm_entity_to_ent(vm, raw_entities[i]) });
+
+	qcvm_return_int32(vm, (int32_t)set->size);
 }
 
 typedef struct
@@ -461,7 +296,7 @@ typedef struct
 	qcvm_func_t pointcontents;
 } QC_pmove_t;
 
-static entity_set_t touchents_memory;
+static qcvm_hashset_t touchents_memory;
 static int32_t touchents_handle = 0;
 
 static qcvm_func_t QC_pm_pointcontents_func;
@@ -576,13 +411,13 @@ static void QC_Pmove(qcvm_t *vm)
 	qc_pm->s.gravity = pm.s.gravity;
 
 	if (!touchents_handle)
-		touchents_handle = qcvm_handle_alloc(vm, &touchents_memory, &entity_set_descriptor);
+		touchents_handle = qcvm_handle_alloc(vm, &touchents_memory, &hashset_descriptor);
 
 	qc_pm->touchents = touchents_handle;
-	entity_set_clear(&touchents_memory);
+	hashset_clear(vm, &touchents_memory);
 
 	for (int32_t i = 0; i < pm.numtouch; i++)
-		entity_set_add(&touchents_memory, pm.touchents[i]);
+		hashset_add(vm, &touchents_memory, (const qcvm_variant_t) { .type = TYPE_ENTITY, .value.ent = qcvm_entity_to_ent(vm, pm.touchents[i]) });
 
 	qc_pm->viewangles = pm.viewangles;
 	qc_pm->viewheight = pm.viewheight;
@@ -593,7 +428,7 @@ static void QC_Pmove(qcvm_t *vm)
 	qc_pm->groundentity = qcvm_entity_to_ent(vm, pm.groundentity);
 	qc_pm->watertype = pm.watertype;
 	qc_pm->waterlevel = pm.waterlevel;
-	qcvm_string_list_check_ref_unset(&vm->dynamic_strings, qc_pm, sizeof(*qc_pm) / sizeof(qcvm_global_t), false);
+	qcvm_string_list_check_ref_unset(vm, qc_pm, sizeof(*qc_pm) / sizeof(qcvm_global_t), false);
 }
 
 static void QC_multicast(qcvm_t *vm)
@@ -784,13 +619,6 @@ void qcvm_init_gi_builtins(qcvm_t *vm)
 	qcvm_register_builtin(AddCommandString);
 
 	qcvm_register_builtin(DebugGraph);
-	
-	qcvm_register_builtin(entity_set_alloc);
-	qcvm_register_builtin(entity_set_get);
-	qcvm_register_builtin(entity_set_add);
-	qcvm_register_builtin(entity_set_remove);
-	qcvm_register_builtin(entity_set_length);
-	qcvm_register_builtin(entity_set_clear);
 	
 	qcvm_register_builtin(cvar_get_name);
 	qcvm_register_builtin(cvar_get_string);
