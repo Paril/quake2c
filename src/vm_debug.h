@@ -1,7 +1,7 @@
 #pragma once
 
 #ifdef ALLOW_DEBUGGING
-qcvm_eval_result_t qcvm_evaluate(qcvm_t *vm, const char *variable);
+qcvm_variant_t qcvm_evaluate(qcvm_t *vm, const char *variable);
 void qcvm_break_on_current_statement(qcvm_t *vm);
 void qcvm_set_breakpoint(qcvm_t *vm, const bool is_set, const char *file, const int line);
 void qcvm_check_debugger_commands(qcvm_t *vm);

@@ -259,6 +259,23 @@ typedef struct
 	qcvm_pointer_type_t	type : 2;
 } qcvm_pointer_t;
 
+// Variant
+typedef struct
+{
+	qcvm_deftype_t	type;
+	union
+	{
+		qcvm_string_t	str;
+		vec_t			flt;
+		vec3_t			vec;
+		qcvm_ent_t		ent;
+		int32_t			fld;
+		qcvm_func_t		fnc;
+		qcvm_pointer_t	ptr;
+		int32_t			itg; // in-te-ger.. I guess
+	} value;
+} qcvm_variant_t;
+
 // Strings & string lists
 typedef struct
 {
@@ -305,6 +322,17 @@ typedef struct qcvm_ref_storage_hash_s
 	struct qcvm_ref_storage_hash_s	*hash_next, *hash_prev;
 } qcvm_ref_storage_hash_t;
 
+// QC does not inherently support dynamic strings, but since they're stored in an integer
+// QC VMs have gone along with the standard of "positive string is offset in static string data,
+// negative string is a dynamic string". The term "dynamic" is interchangeable with "temp", which
+// is what Quake 1 calls them. Our implementation of temp strings prefers to make programming
+// with strings *easier* at the expense of operation time. There is no string "allocation" or
+// "freeing"; you just work with strings in QC as if they were magical and you never have to
+// think about it. On the engine side, we ref count strings, storing pointers to where they
+// exist in memory and handling ref counting that way. It's more complex on our end, but
+// less of a hassle and prevents other weird issues (we don't have to think about save/load
+// for instance; we just pop in the strings and away we go). Strings in my QCVM are
+// **immutable** in every circumstance. Other QCVMs allow string mutation.
 typedef struct
 {
 	// Mapped list to dynamic strings
@@ -316,8 +344,8 @@ typedef struct
 	size_t			free_indices_size, free_indices_allocated;
 
 	// mapped list of addresses that contain(ed) strings
-	qcvm_ref_storage_hash_t		*ref_storage_data, **ref_storage_hashes, *ref_storage_free;
-	size_t						ref_storage_stored, ref_storage_allocated;
+	qcvm_ref_storage_hash_t	*ref_storage_data, **ref_storage_hashes, *ref_storage_free;
+	size_t					ref_storage_stored, ref_storage_allocated;
 } qcvm_string_list_t;
 
 size_t qcvm_string_list_get_length(const qcvm_t *vm, const qcvm_string_t id);
@@ -391,32 +419,8 @@ typedef struct qcvm_field_wrapper_s
 	qcvm_field_setter_t		setter;
 } qcvm_field_wrapper_t;
 
-typedef struct
-{
-	qcvm_t					*vm;
-	qcvm_field_wrapper_t	*wraps;
-} qcvm_field_wrap_list_t;
-
-void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *field_name, const size_t field_offset, const size_t client_offset, qcvm_field_setter_t setter);
-void qcvm_field_wrap_list_check_set(qcvm_field_wrap_list_t *list, const void *ptr, const size_t span);
-
-#ifdef ALLOW_DEBUGGING
-typedef struct
-{
-	qcvm_deftype_t		type;
-
-	union
-	{
-		int	integer;
-		float single;
-		vec3_t vector;
-		qcvm_string_t strid;
-		qcvm_ent_t entid;
-		qcvm_func_t funcid;
-		qcvm_pointer_t ptr;
-	};
-} qcvm_eval_result_t;
-#endif
+void qcvm_field_wrap_list_register(qcvm_t *vm, const char *field_name, const size_t field_offset, const size_t client_offset, qcvm_field_setter_t setter);
+void qcvm_field_wrap_list_check_set(qcvm_t *vm, const void *ptr, const size_t span);
 
 static const size_t STACK_RESERVE = 32;
 
@@ -439,11 +443,6 @@ qcvm_stack_t *qcvm_state_stack_push(qcvm_state_t *state);
 void qcvm_state_stack_pop(qcvm_state_t *state);
 void qcvm_stack_push_ref_string(qcvm_stack_t *stack, const qcvm_string_backup_t ref_string);
 
-inline qcvm_global_t qcvm_global_offset(const qcvm_global_t base, const int32_t offset)
-{
-	return (qcvm_global_t)((int32_t)base + offset);
-}
-
 typedef struct qcvm_string_hash_s
 {
 	const char		*str;
@@ -461,7 +460,15 @@ typedef struct qcvm_definition_hash_s
 } qcvm_definition_hash_t;
 
 // HANDLES
-
+// Quake2C uses handles for various things, like files and advanced containers
+// like hashset. The following few functions deal with handles. They're a simple
+// integer-indexed list, with 0 acting as "null", for fast access to handles.
+// On the engine side, you set up a descriptor which stores the cleanup/free function
+// as well as read/write functions which control how these are persisted to save games
+// if used as globals/fields (the engine won't care about *where* they're stored, but will
+// persist these if need be). Then, you simply call qcvm_handle_alloc with the pointer and
+// descriptor, and you're off to the races.
+// On the QC side, just be sure to call handle_free when you're done with it!
 typedef struct
 {
 	void	(*free)		(qcvm_t *vm, void *handle);
@@ -478,6 +485,14 @@ typedef struct
 	void							*handle;
 } qcvm_handle_t;
 
+typedef struct
+{
+	qcvm_handle_t	*data;
+	size_t			size, allocated;
+	int32_t			*free;
+	size_t			free_size;
+} qcvm_handle_list_t;
+
 static const size_t HANDLES_RESERVE = 128;
 
 int32_t qcvm_handle_alloc(qcvm_t *vm, void *ptr, const qcvm_handle_descriptor_t *descriptor);
@@ -487,6 +502,11 @@ void qcvm_handle_free(qcvm_t *vm, qcvm_handle_t *handle);
 void qcvm_set_allowed_stack(qcvm_t *vm, const void *ptr, const size_t length);
 qcvm_global_t *qcvm_get_global(qcvm_t *vm, const qcvm_global_t g);
 const qcvm_global_t *qcvm_get_const_global(const qcvm_t *vm, const qcvm_global_t g);
+
+inline qcvm_global_t qcvm_global_offset(const qcvm_global_t base, const int32_t offset)
+{
+	return (qcvm_global_t)(base + offset);
+}
 
 #define qcvm_get_global_typed(type, vm, global) \
 	(type *)(qcvm_get_global(vm, global))
@@ -545,71 +565,121 @@ void qcvm_shutdown(qcvm_t *vm);
 // VM struct
 typedef struct qcvm_s
 {
-	// loaded from progs.dat
-	const char				*engine_name;
-	char					path[MAX_QPATH];
+	// most of these are just data loaded from the progs.
+	// the rest is hashing and ordering for quick lookups.
+	// definitions contain all of the globals and such. the definition's global index
+	// points to where it is in the global_data
 	qcvm_definition_t		*definitions;
 	size_t					definitions_size;
 	qcvm_definition_t		**definition_map_by_id;
 	qcvm_definition_hash_t	**definition_hashes, *definition_hashes_data;
+	// fields are entity fields; after all remapping and such is done (see below)
+	// the highest potential field is the final size of a single entity structure, which
+	// is stored in field_real_size and used later on. It's a bit confusing, but a
+	// field's global_index is the offset in the entity where the field lives, and its "id"
+	// is the type of the field (TYPE_VECTOR is the only real special one, because it then takes
+	// 3 spaces; they are also supposed to generate _x, _y and _z fields, although
+	// as of writing fteqcc only emits them for top-level vectors.. that's fun). In `definitions`, all of
+	// the fields also exist as TYPE_FIELD, whose global_index points to a *global* whose value
+	// is the same as the value of the *field*'s global_index (the entity index offset).
 	qcvm_definition_t		*fields;
 	size_t					fields_size;
 	qcvm_definition_t		**field_map_by_id;
 	size_t					field_real_size;
 	qcvm_definition_hash_t	**field_hashes, *field_hashes_data;
+	// this is the actual binary opcode data, straight list of binary opcodes.
 	qcvm_statement_t		*statements;
 	size_t					statements_size;
-	qcvm_function_t			*functions;
-	size_t					functions_size;
-	size_t					highest_stack;
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qcvm_profiler_flags_t	profile_flags;
-	const char				*profile_name;
-	qcvm_profiler_mark_t	profiler_mark;
-#endif
-#ifdef ALLOW_INSTRUMENTING
-	qcvm_profile_t			*profile_data;
-	qcvm_profile_timer_t	timers[TotalTimerFields][TOTAL_MARKS];
-	qcvm_profile_timer_t	opcode_timers[OP_NUMOPS][TOTAL_MARKS];
-	qcvm_function_t			*profiler_func;
-#endif
-#ifdef ALLOW_PROFILING
-	qcvm_sampling_t			*sample_data;
-	uint32_t				sample_id, sample_rate;
-#endif
-	qcvm_global_t			*global_data;
-	size_t					global_size;
-
-	// STRINGS
-	char					*string_data;
-	size_t					*string_lengths;
-	size_t					string_size;
-	qcvm_string_hash_t		**string_hashes, *string_hashes_data;
-	qcvm_global_t			*string_case_sensitive;
-	qcvm_string_list_t		dynamic_strings;
-
+	// special .lno file which maps statements to line numbers
+	int		*linenumbers;
+	// functions are.. uh.. functions.
+	// builtin function (in Quake2C) will always have an id of 0 and are set up
+	// at run time. In QC, builtins can be set with negative values here which are
+	// meant to map to specific functions, but, this is kinda silly since you
+	// have the name anyways.
+	qcvm_function_t		*functions;
+	size_t				functions_size;
+	// the size of the highest stack function.
+	// this is used for allocating stack space for locals
+	// that will be clobbered by other functions.
+	size_t	highest_stack;
+	// globals. these are a bit of a misnomer, but this is basically
+	// the "heap" space that the QCVM has. This space is also used for
+	// function locals (usually at the end of the table), as well as
+	// function parameters and return values.
+	qcvm_global_t	*global_data;
+	size_t			global_size;
+	// strings. just one gigantic block of string memory that should never
+	// be modified. I also cache string lengths at every location (since a
+	// compact string table may refer to locations that aren't the beginning
+	// of a string) as well as hashed string data, for quick lookups.
+	char				*string_data;
+	size_t				*string_lengths;
+	size_t				string_size;
+	qcvm_string_hash_t	**string_hashes, *string_hashes_data;
+	// see qcvm_string_list_t for more info about dynamic strings
+	qcvm_string_list_t	dynamic_strings;
+	// pointer to global of "strcasesensitive" in QC. this isn't a QC thing, but rather
+	// my attempt to workaround stricmp being a hot spot. Function calls are expensive, so
+	// rather than use functions, you can turn string case sensitiveness on/off for string
+	// operators (and functions like strcmp). Three ops (set true, do operation, set false)
+	// is quicker than a function call, generally.
+	qcvm_global_t	*string_case_sensitive;
+	// similar to strings, builtin functions have IDs of 0 and below. In "regular" QC,
+	// they used specific negative values, but in modern QCVMs they all have the ID of 0
+	// and are resolved by name instead.
 	qcvm_builtin_list_t		builtins;
-	qcvm_field_wrap_list_t	field_wraps;
-	int						*linenumbers;
-	const void				*allowed_stack;
-	size_t					allowed_stack_size;
-	qcvm_state_t			state;
+	// this is a special method of having writes to entity fields map to entity/client
+	// fields in Q2, since we have special requirements like ptrs that can't exactly
+	// be resolved by a simple mapping.
+	qcvm_field_wrapper_t	*field_wraps;
+	// there's a specific case in Q2 (specifically the trace function in pmove_t) that
+	// requires a pointer passed to a callback function to resolve a trace. While I could
+	// use an out parameter, since Pmove is quite heavy on performance I added a special method
+	// to specify a pointer to the stack in C code that is allowed to be passed by ptr to
+	// QC. This value only persists until the end of the next function call. Might get
+	// rid of this later...
+	const void	*allowed_stack;
+	size_t		allowed_stack_size;
+	// fields in QC use a zero-indexed system which is basically a direct map into an entity's data.
+	// think of an entity as int*, sized by the highest possible field value, and when a field is read/write
+	// it's just (int *)(edicts + size)[index] as the start position. In Q1 this is all fields used by QC, and
+	// "negative" indexes are system fields (ones used only by the engine). Rather than mimic this, in Quake2C
+	// system fields (ones that need to be bit-accurate and are QC types, basically) are registered through this
+	// and the indexes are set up, then every subsequent field is re-mapped from sizeof(edict_t) onwards. This allows
+	// edict_t to be engine-agnostic and work on any engine, even if it has a modified edict_t. This + field_wraps
+	// allows you to map them fully; for instance, edict_t::owner is a system field, but can't be mapped here, so it gets
+	// remapped to a non-system field and then field_wraps are used to trap writes to that value and mirror the proper
+	// entity pointer over to it.
 	qcvm_system_field_t		*system_fields;
 	size_t					system_fields_size;
+
+	// state of the VM
+	qcvm_state_t	state;
 	
 	// set by implementor
-	void					*edicts;
-	size_t					system_edict_size;
-	size_t					edict_size;
-	size_t					max_edicts;
+	// engine name
+	const char	*engine_name;
+	// path to progs.dat, used for relativeness for placing
+	// profiles and other files
+	char	path[MAX_QPATH];
+	// mirrored data from globals, here so we don't "depend" on Q2's API directly
+	void	*edicts;
+	size_t	system_edict_size;
+	size_t	edict_size;
+	size_t	max_edicts;
+	// callbacks for various routines
+	__attribute__((noreturn)) void	(*error)(const char *str);
+	void	(*warning)(const char *format, ...);
+	void	(*debug_print)(const char *str);
+	void	*(*alloc)(const size_t size);
+	void	(*free)(void *ptr);
 
-	struct {
-		qcvm_handle_t	*data;
-		size_t			size, allocated;
-		int32_t			*free;
-		size_t			free_size;
-	} handles;
+	// handles!
+	// see qcvm_handle_list_t
+	qcvm_handle_list_t handles;
 
+	// debugging data
 #ifdef ALLOW_DEBUGGING
 	struct
 	{
@@ -628,12 +698,32 @@ typedef struct qcvm_s
 	} debug;
 #endif
 
-	// callbacks set by implementor
-	void					(*error)(const char *str);
-	void					(*warning)(const char *format, ...);
-	void					(*debug_print)(const char *str);
-	void					*(*alloc)(const size_t size);
-	void					(*free)(void *ptr);
+	// instrumentation/profiling stuff
+#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+	struct
+	{
+		qcvm_profiler_flags_t	flags;
+		const char				*filename;
+		qcvm_profiler_mark_t	mark;
+
+#ifdef ALLOW_INSTRUMENTING
+		struct
+		{
+			qcvm_profile_t			*data;
+			qcvm_profile_timer_t	timers[TotalTimerFields][TOTAL_MARKS];
+			qcvm_profile_timer_t	opcode_timers[OP_NUMOPS][TOTAL_MARKS];
+			qcvm_function_t			*func;
+		} instrumentation;
+#endif
+#ifdef ALLOW_PROFILING
+		struct
+		{
+			qcvm_sampling_t	*data;
+			uint32_t		id, rate;
+		} sampling;
+#endif
+	} profiling;
+#endif
 } qcvm_t;
 
 // Entity stuff
@@ -726,7 +816,7 @@ inline qcvm_pointer_t qcvm_offset_pointer(const qcvm_t *vm, const qcvm_pointer_t
 	return (qcvm_pointer_t) { (uint32_t)(pointer.offset + offset), pointer.type };
 }
 
-void qcvm_error(const qcvm_t *vm, const char *format, ...);
+__attribute__((noreturn)) void qcvm_error(const qcvm_t *vm, const char *format, ...);
 
 #ifdef _DEBUG
 void qcvm_debug(const qcvm_t *vm, const char *format, ...);
@@ -872,7 +962,7 @@ void qcvm_copy_globals(qcvm_t *vm, const qcvm_global_t dst, const qcvm_global_t 
 		*(dst_ptr) = *(src_ptr); \
 \
 		qcvm_string_list_mark_refs_copied(vm, src_ptr, dst_ptr, span); \
-		qcvm_field_wrap_list_check_set(&vm->field_wraps, dst_ptr, span); \
+		qcvm_field_wrap_list_check_set(vm, dst_ptr, span); \
 	}
 
 inline bool qcvm_strings_case_sensitive(const qcvm_t *vm)

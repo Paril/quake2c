@@ -110,7 +110,7 @@ static void QC_configstring(qcvm_t *vm)
 	gi.configstring(id, str);
 }
 
-static void QC_error(qcvm_t *vm)
+static __attribute__((noreturn)) void QC_error(qcvm_t *vm)
 {
 	const qcvm_string_t fmtid = qcvm_argv_string_id(vm, 0);
 	qcvm_error(vm, qcvm_parse_format(fmtid, vm, 1));

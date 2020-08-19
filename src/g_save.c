@@ -312,7 +312,7 @@ void ReadGame(const char *filename)
 	func = qcvm_get_function(qvm, qce.PostReadGame);
 	qcvm_execute(qvm, func);
 
-	qcvm_field_wrap_list_check_set(&qvm->field_wraps, qcvm_itoe(qvm, 1), (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
+	qcvm_field_wrap_list_check_set(qvm, qcvm_itoe(qvm, 1), (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
 
 	fclose(fp);
 }

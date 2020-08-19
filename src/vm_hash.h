@@ -1,21 +1,5 @@
 #pragma once
 
-typedef struct
-{
-	qcvm_deftype_t	type;
-	union
-	{
-		qcvm_string_t	str;
-		vec_t			flt;
-		vec3_t			vec;
-		qcvm_ent_t		ent;
-		int32_t			fld;
-		qcvm_func_t		fnc;
-		qcvm_pointer_t	ptr;
-		int32_t			itg; // in-te-ger.. I guess
-	} value;
-} qcvm_variant_t;
-
 typedef struct qcvm_hash_value_s
 {
 	qcvm_variant_t				value;

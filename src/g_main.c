@@ -69,35 +69,35 @@ static void FieldEnt2Entity(void *out, const void *in)
 static void InitFieldWraps()
 {
 #define RegisterSingle(field_name, strct, name) \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 0, offsetof(strct, name), NULL)
+	qcvm_field_wrap_list_register(qvm, field_name, 0, offsetof(strct, name), NULL)
 
 #define RegisterSingleWrapped(field_name, strct, name, wrap) \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 0, offsetof(strct, name), wrap)
+	qcvm_field_wrap_list_register(qvm, field_name, 0, offsetof(strct, name), wrap)
 
 #define RegisterArray(field_name, strct, name, fofs, sofs) \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name "[" #fofs "]", 0, offsetof(strct, name) + sofs, NULL)
+	qcvm_field_wrap_list_register(qvm, field_name "[" #fofs "]", 0, offsetof(strct, name) + sofs, NULL)
 
 #define RegisterVector(field_name, strct, name) \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 0, offsetof(strct, name), NULL); \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 1, offsetof(strct, name) + 4, NULL); \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 2, offsetof(strct, name) + 8, NULL)
+	qcvm_field_wrap_list_register(qvm, field_name, 0, offsetof(strct, name), NULL); \
+	qcvm_field_wrap_list_register(qvm, field_name, 1, offsetof(strct, name) + 4, NULL); \
+	qcvm_field_wrap_list_register(qvm, field_name, 2, offsetof(strct, name) + 8, NULL)
 
 #define RegisterVectorCoord2Short(field_name, strct, name) \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 0, offsetof(strct, name), FieldCoord2Short); \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 1, offsetof(strct, name) + 2, FieldCoord2Short); \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 2, offsetof(strct, name) + 4, FieldCoord2Short)
+	qcvm_field_wrap_list_register(qvm, field_name, 0, offsetof(strct, name), FieldCoord2Short); \
+	qcvm_field_wrap_list_register(qvm, field_name, 1, offsetof(strct, name) + 2, FieldCoord2Short); \
+	qcvm_field_wrap_list_register(qvm, field_name, 2, offsetof(strct, name) + 4, FieldCoord2Short)
 	
 #ifdef KMQUAKE2_ENGINE_MOD
 #define RegisterVectorCoord2Int(field_name, strct, name) \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 0, offsetof(strct, name), FieldCoord2Int); \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 1, offsetof(strct, name) + 4, FieldCoord2Int); \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 2, offsetof(strct, name) + 8, FieldCoord2Int)
+	qcvm_field_wrap_list_register(qvm, field_name, 0, offsetof(strct, name), FieldCoord2Int); \
+	qcvm_field_wrap_list_register(qvm, field_name, 1, offsetof(strct, name) + 4, FieldCoord2Int); \
+	qcvm_field_wrap_list_register(qvm, field_name, 2, offsetof(strct, name) + 8, FieldCoord2Int)
 #endif
 
 #define RegisterVectorCoord2Angle(field_name, strct, name) \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 0, offsetof(strct, name), FieldCoord2Angle); \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 1, offsetof(strct, name) + 2, FieldCoord2Angle); \
-	qcvm_field_wrap_list_register(&qvm->field_wraps, field_name, 2, offsetof(strct, name) + 4, FieldCoord2Angle)
+	qcvm_field_wrap_list_register(qvm, field_name, 0, offsetof(strct, name), FieldCoord2Angle); \
+	qcvm_field_wrap_list_register(qvm, field_name, 1, offsetof(strct, name) + 2, FieldCoord2Angle); \
+	qcvm_field_wrap_list_register(qvm, field_name, 2, offsetof(strct, name) + 4, FieldCoord2Angle)
 
 	// edict_t wraps
 	RegisterSingleWrapped("owner", edict_t, owner, FieldEnt2Entity);
@@ -119,7 +119,7 @@ static void InitFieldWraps()
 	RegisterSingle("client.ps.rdflags", gclient_t, ps.rdflags);
 
 	for (int32_t i = 0; i < MAX_STATS; i++)
-		qcvm_field_wrap_list_register(&qvm->field_wraps, qcvm_temp_format(qvm, "client.ps.stats[%i]", i), 0, offsetof(gclient_t, ps.stats) + (sizeof(player_stat_t) * i), qcvm_field_wrap_to_int16);
+		qcvm_field_wrap_list_register(qvm, qcvm_temp_format(qvm, "client.ps.stats[%i]", i), 0, offsetof(gclient_t, ps.stats) + (sizeof(player_stat_t) * i), qcvm_field_wrap_to_int16);
 	
 	// gclient_t::ps::pmove
 	RegisterSingle("client.ps.pmove.pm_type", gclient_t, ps.pmove.pm_type);
@@ -249,7 +249,7 @@ void WipeEntities(void)
 	WipeClientPointers();
 }
 
-static void qvm_error(const char *str)
+static __attribute__((noreturn)) void qvm_error(const char *str)
 {
 	gi.error("%s", str);
 }
@@ -460,7 +460,7 @@ void RestoreClientData(void)
 	}
 	
 	qcvm_string_list_mark_refs_copied(qvm, game.client_load_data, qcvm_itoe(qvm, 1), (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
-	qcvm_field_wrap_list_check_set(&qvm->field_wraps, qcvm_itoe(qvm, 1), (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
+	qcvm_field_wrap_list_check_set(qvm, qcvm_itoe(qvm, 1), (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t));
 	qcvm_string_list_check_ref_unset(qvm, game.client_load_data, (globals.edict_size * game.num_clients) / sizeof(qcvm_global_t), true);
 
 	gi.TagFree(game.client_load_data);

@@ -546,7 +546,7 @@ qcvm_string_t qcvm_set_string_ptr(qcvm_t *vm, void *ptr, const char *value, cons
 	qcvm_string_t str = qcvm_store_or_find_string(vm, value, len, copy);
 	*(qcvm_string_t *)ptr = str;
 	qcvm_string_list_check_ref_unset(vm, ptr, sizeof(qcvm_string_t) / sizeof(qcvm_global_t), false);
-	qcvm_field_wrap_list_check_set(&vm->field_wraps, ptr, sizeof(qcvm_string_t) / sizeof(qcvm_global_t));
+	qcvm_field_wrap_list_check_set(vm, ptr, sizeof(qcvm_string_t) / sizeof(qcvm_global_t));
 
 	if (qcvm_string_list_is_ref_counted(vm, str))
 		qcvm_string_list_mark_ref_copy(vm, str, ptr);

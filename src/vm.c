@@ -282,24 +282,23 @@ const char *qcvm_parse_format(const qcvm_string_t formatid, const qcvm_t *vm, co
 	return buffer;
 }
 
-static void qcvm_field_wrap_list_init(qcvm_field_wrap_list_t *list, qcvm_t *vm)
+static void qcvm_field_wrap_list_init(qcvm_t *vm)
 {
-	list->vm = vm;
-	list->wraps = (qcvm_field_wrapper_t *)qcvm_alloc(list->vm, sizeof(qcvm_field_wrapper_t) * vm->field_real_size);
+	vm->field_wraps = (qcvm_field_wrapper_t *)qcvm_alloc(vm, sizeof(qcvm_field_wrapper_t) * vm->field_real_size);
 }
 
-void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *field_name, const size_t field_offset, const size_t struct_offset, qcvm_field_setter_t setter)
+void qcvm_field_wrap_list_register(qcvm_t *vm, const char *field_name, const size_t field_offset, const size_t struct_offset, qcvm_field_setter_t setter)
 {
-	for (qcvm_definition_t *f = list->vm->fields; f < list->vm->fields + list->vm->fields_size; f++)
+	for (qcvm_definition_t *f = vm->fields; f < vm->fields + vm->fields_size; f++)
 	{
 		if (f->name_index == STRING_EMPTY)
 			continue;
-		else if (strcmp(qcvm_get_string(list->vm, f->name_index), field_name))
+		else if (strcmp(qcvm_get_string(vm, f->name_index), field_name))
 			continue;
 
-		assert((f->global_index + field_offset) >= 0 && (f->global_index + field_offset) < list->vm->field_real_size);
+		assert((f->global_index + field_offset) >= 0 && (f->global_index + field_offset) < vm->field_real_size);
 
-		qcvm_field_wrapper_t *wrapper = &list->wraps[f->global_index + field_offset];
+		qcvm_field_wrapper_t *wrapper = &vm->field_wraps[f->global_index + field_offset];
 		*wrapper = (qcvm_field_wrapper_t) {
 			f,
 			f->global_index + field_offset,
@@ -310,40 +309,40 @@ void qcvm_field_wrap_list_register(qcvm_field_wrap_list_t *list, const char *fie
 		return;
 	}
 
-	list->vm->warning("QCVM WARNING: can't find field %s in progs\n", field_name);
+	vm->warning("QCVM WARNING: can't find field %s in progs\n", field_name);
 }
 
-void qcvm_field_wrap_list_check_set(qcvm_field_wrap_list_t *list, const void *ptr, const size_t span)
+void qcvm_field_wrap_list_check_set(qcvm_t *vm, const void *ptr, const size_t span)
 {
 	// FIXME: this shouldn't be required ideally...
-	if (!list->vm)
+	if (!vm)
 		return;
 
 	START_TIMER(list->vm, WrapApply);
 
 	// no entities involved in this wrap check (or no entities to check yet)
-	if (ptr < list->vm->edicts || ptr >= (void *)((uint8_t *)list->vm->edicts + (list->vm->edict_size * list->vm->max_edicts)))
+	if (ptr < vm->edicts || ptr >= (void *)((uint8_t *)vm->edicts + (vm->edict_size * vm->max_edicts)))
 	{
 		END_TIMER(list->vm, PROFILE_TIMERS);
 		return;
 	}
 
 	// check where we're starting
-	void *start = (void *)((uint8_t *)ptr - (uint8_t *)list->vm->edicts);
-	edict_t *ent = (edict_t *)qcvm_itoe(list->vm, (int32_t)((ptrdiff_t)start / list->vm->edict_size));
+	void *start = (void *)((uint8_t *)ptr - (uint8_t *)vm->edicts);
+	edict_t *ent = (edict_t *)qcvm_itoe(vm, (int32_t)((ptrdiff_t)start / vm->edict_size));
 	size_t offset = (const uint32_t *)ptr - (uint32_t *)ent;
 	const int32_t *sptr = (const int32_t *)ptr;
 
 	for (size_t i = 0; i < span; i++, sptr++, offset++)
 	{
 		// we're wrapping over to a new entity
-		if (offset >= list->vm->field_real_size)
+		if (offset >= vm->field_real_size)
 		{
 			ent++;
 			offset = 0;
 		}
 
-		const qcvm_field_wrapper_t *wrap = &list->vm->field_wraps.wraps[offset];
+		const qcvm_field_wrapper_t *wrap = &vm->field_wraps[offset];
 
 		if (!wrap->field)
 			continue;
@@ -621,7 +620,7 @@ void qcvm_set_global(qcvm_t *vm, const qcvm_global_t global, const void *value, 
 	void *dst = qcvm_get_global(vm, global);
 	memcpy(dst, value, value_size);
 	qcvm_string_list_check_ref_unset(vm, dst, value_size / sizeof(qcvm_global_t), false);
-	qcvm_field_wrap_list_check_set(&vm->field_wraps, dst, value_size / sizeof(qcvm_global_t));
+	qcvm_field_wrap_list_check_set(vm, dst, value_size / sizeof(qcvm_global_t));
 }
 
 // safe way of copying globals between other globals
@@ -635,7 +634,7 @@ void qcvm_copy_globals(qcvm_t *vm, const qcvm_global_t dst, const qcvm_global_t 
 	memcpy(dst_ptr, src_ptr, size);
 
 	qcvm_string_list_mark_refs_copied(vm, src_ptr, dst_ptr, span);
-	qcvm_field_wrap_list_check_set(&vm->field_wraps, dst_ptr, span);
+	qcvm_field_wrap_list_check_set(vm, dst_ptr, span);
 }
 
 const char *qcvm_stack_entry(const qcvm_t *vm, const qcvm_stack_t *s, const bool compact)
@@ -706,37 +705,37 @@ qcvm_definition_t *qcvm_find_field(qcvm_t *vm, const char *name)
 }
 
 #ifdef ALLOW_DEBUGGING
-static qcvm_eval_result_t qcvm_value_from_ptr(const qcvm_definition_t *def, const void *ptr)
+static qcvm_variant_t qcvm_value_from_ptr(const qcvm_definition_t *def, const void *ptr)
 {
 	switch (def->id & ~TYPE_GLOBAL)
 	{
 	default:
-		return (qcvm_eval_result_t) { .type = TYPE_VOID };
+		return (qcvm_variant_t) { .type = TYPE_VOID };
 	case TYPE_STRING:
-		return (qcvm_eval_result_t) { .type = TYPE_STRING, .strid = *(const qcvm_string_t *)(ptr) };
+		return (qcvm_variant_t) { .type = TYPE_STRING, .value.str = *(const qcvm_string_t *)(ptr) };
 	case TYPE_FLOAT:
-		return (qcvm_eval_result_t) { .type = TYPE_FLOAT, .single = *(const vec_t *)(ptr) };
+		return (qcvm_variant_t) { .type = TYPE_FLOAT, .value.flt = *(const vec_t *)(ptr) };
 	case TYPE_VECTOR:
-		return (qcvm_eval_result_t) { .type = TYPE_VECTOR, .vector = *(const vec3_t *)(ptr) };
+		return (qcvm_variant_t) { .type = TYPE_VECTOR, .value.vec = *(const vec3_t *)(ptr) };
 	case TYPE_ENTITY:
-		return (qcvm_eval_result_t) { .type = TYPE_ENTITY, .entid = *(const qcvm_ent_t *)(ptr) };
+		return (qcvm_variant_t) { .type = TYPE_ENTITY, .value.ent = *(const qcvm_ent_t *)(ptr) };
 	case TYPE_FIELD:
-		return (qcvm_eval_result_t) { .type = TYPE_VOID };
+		return (qcvm_variant_t) { .type = TYPE_FIELD, .value.fld = *(const int32_t *)(ptr) };
 	case TYPE_FUNCTION:
-		return (qcvm_eval_result_t) { .type = TYPE_FUNCTION, .funcid = *(const qcvm_func_t *)(ptr) };
+		return (qcvm_variant_t) { .type = TYPE_FUNCTION, .value.fnc = *(const qcvm_func_t *)(ptr) };
 	case TYPE_POINTER:
-		return (qcvm_eval_result_t) { .type = TYPE_POINTER, .ptr = *(const qcvm_pointer_t *)(ptr) };
+		return (qcvm_variant_t) { .type = TYPE_POINTER, .value.ptr = *(const qcvm_pointer_t *)(ptr) };
 	case TYPE_INTEGER:
-		return (qcvm_eval_result_t) { .type = TYPE_INTEGER, .integer = *(const int32_t *)(ptr) };
+		return (qcvm_variant_t) { .type = TYPE_INTEGER, .value.itg = *(const int32_t *)(ptr) };
 	}
 }
 
-static qcvm_eval_result_t qcvm_value_from_global(qcvm_t *vm, const qcvm_definition_t *def)
+static qcvm_variant_t qcvm_value_from_global(qcvm_t *vm, const qcvm_definition_t *def)
 {
 	return qcvm_value_from_ptr(def, qcvm_get_global(vm, def->global_index));
 }
 
-static qcvm_eval_result_t qcvm_evaluate_from_local_or_global(qcvm_t *vm, const char *variable)
+static qcvm_variant_t qcvm_evaluate_from_local_or_global(qcvm_t *vm, const char *variable)
 {
 	// we don't have a . so we're just checking for a base object.
 	// check locals
@@ -766,10 +765,10 @@ static qcvm_eval_result_t qcvm_evaluate_from_local_or_global(qcvm_t *vm, const c
 		return qcvm_value_from_global(vm, def);
 	}
 
-	return (qcvm_eval_result_t) { .type = TYPE_VOID };
+	return (qcvm_variant_t) { .type = TYPE_VOID };
 }
 
-qcvm_eval_result_t qcvm_evaluate(qcvm_t *vm, const char *variable)
+qcvm_variant_t qcvm_evaluate(qcvm_t *vm, const char *variable)
 {
 	const char *dot = strchr(variable, '.');
 	if (dot)
@@ -780,12 +779,12 @@ qcvm_eval_result_t qcvm_evaluate(qcvm_t *vm, const char *variable)
 		evaluate_left[dot - variable] = 0;
 
 		// we have a . so we're either a entity, pointer or struct...
-		qcvm_eval_result_t left_hand = qcvm_evaluate_from_local_or_global(vm, evaluate_left);
+		qcvm_variant_t left_hand = qcvm_evaluate_from_local_or_global(vm, evaluate_left);
 
 		if (left_hand.type == TYPE_ENTITY)
 		{
 			const char *right_context = dot + 1;
-			const qcvm_ent_t ent = left_hand.entid;
+			const qcvm_ent_t ent = left_hand.value.ent;
 
 			if (ent == ENT_INVALID)
 				return left_hand;
@@ -802,7 +801,7 @@ qcvm_eval_result_t qcvm_evaluate(qcvm_t *vm, const char *variable)
 			}
 
 			if (!field)
-				return (qcvm_eval_result_t) { .type = TYPE_VOID };
+				return (qcvm_variant_t) { .type = TYPE_VOID };
 
 			return qcvm_value_from_ptr(field, qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, qcvm_ent_to_entity(vm, ent, false), (int32_t)field->global_index)));
 		}
@@ -1523,7 +1522,7 @@ void qcvm_check(qcvm_t *vm)
 	
 	qcvm_init_field_map(vm);
 	
-	qcvm_field_wrap_list_init(&vm->field_wraps, vm);
+	qcvm_field_wrap_list_init(vm);
 
 	qcvm_check_builtins(vm);
 }

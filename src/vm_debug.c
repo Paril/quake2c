@@ -204,23 +204,23 @@ void qcvm_check_debugger_commands(qcvm_t *vm)
 		int start = 10;
 		const char *variable = strtok_emulate(vm, qc_strtok, debugger_command, &start);
 
-		qcvm_eval_result_t result = qcvm_evaluate(vm, variable);
+		qcvm_variant_t result = qcvm_evaluate(vm, variable);
 		const char *value;
 		char *slashed = NULL;
 		
 		switch (result.type)
 		{
 		case TYPE_INTEGER:
-			value = qcvm_temp_format(vm, "%i", result.integer);
+			value = qcvm_temp_format(vm, "%i", result.value.itg);
 			break;
 		case TYPE_FLOAT:
-			value = qcvm_temp_format(vm, "%g", result.single);
+			value = qcvm_temp_format(vm, "%g", result.value.flt);
 			break;
 		case TYPE_VECTOR:
-			value = qcvm_temp_format(vm, "\"%f %f %f\"", result.vector.x, result.vector.y, result.vector.z);
+			value = qcvm_temp_format(vm, "\"%f %f %f\"", result.value.vec.x, result.value.vec.y, result.value.vec.z);
 			break;
 		case TYPE_STRING:
-			value = qcvm_get_string(vm, result.strid);
+			value = qcvm_get_string(vm, result.value.str);
 
 			if (strchr(value, '"') || strchr(value, '\\'))
 			{
@@ -254,20 +254,20 @@ void qcvm_check_debugger_commands(qcvm_t *vm)
 			}
 			break;
 		case TYPE_ENTITY:
-			if (result.entid == ENT_INVALID)
+			if (result.value.ent == ENT_INVALID)
 				value = "\"invalid/null entity\"";
 			else
-				value = qcvm_temp_format(vm, "\"entity %i\"", qcvm_ent_to_entity(vm, result.entid, false)->s.number);
+				value = qcvm_temp_format(vm, "\"entity %i\"", qcvm_ent_to_entity(vm, result.value.ent, false)->s.number);
 			break;
 		case TYPE_FUNCTION:
-			if (result.funcid == FUNC_VOID)
+			if (result.value.fnc == FUNC_VOID)
 				value = "\"invalid/null function\"";
 			else
 			{
-				qcvm_function_t *func = qcvm_get_function(vm, result.funcid);
+				qcvm_function_t *func = qcvm_get_function(vm, result.value.fnc);
 
 				if (!func || func->name_index == STRING_EMPTY)
-					value = qcvm_temp_format(vm, "\"can't resolve function: %i\"", result.funcid);
+					value = qcvm_temp_format(vm, "\"can't resolve function: %i\"", result.value.fnc);
 				else
 					value = qcvm_temp_format(vm, "%s", qcvm_get_string(vm, func->name_index));
 			}
