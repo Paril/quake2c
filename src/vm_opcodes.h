@@ -285,18 +285,15 @@ enum
 	OP_STOREF_S,	//1 string reference
 	OP_STOREF_I,	//1 non-string reference/int
 
+//r5744+
+	OP_STOREP_B,//((char*)b)[(int)c] = (int)a
+	OP_LOADP_B,	//(int)c = *(char*)
+
 	OP_NUMOPS,
 
 	OP_BREAKPOINT = 0x10000000
 };
 
-typedef uint32_t qcvm_opcode_t;
-
-typedef struct
-{
-	qcvm_global_t	a, b, c;
-} qcvm_operands_t;
-
 typedef void(*qcvm_opcode_func_t) (qcvm_t *vm, const qcvm_operands_t operands, int *depth);
 
-extern qcvm_opcode_func_t qcvm_code_funcs[];
+#include "vm_opcodes.c.h"

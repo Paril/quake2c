@@ -1,8 +1,9 @@
 #pragma once
 
-// memory tags to allow dynamic memory to be cleaned up
-#define	TAG_GAME	765		// clear when unloading the dll
-#define	TAG_LEVEL	766		// clear when loading a new level
+// memory tags to allow dynamic memory to be cleaned up.
+// need to use the value 765 because the engine clears this
+// on fatal errors.
+enum { TAG_GAME	= 765 };
 
 extern game_import_t gi;
 extern game_export_t globals;

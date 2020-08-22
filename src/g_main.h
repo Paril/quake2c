@@ -46,3 +46,6 @@ void AssignClientPointer(edict_t *e, const bool assign);
 void WipeClientPointers(void);
 void WipeEntities(void);
 void BackupClientData(void);
+
+// exported, but here to prevent warnings
+game_export_t *GetGameAPI (game_import_t *import);

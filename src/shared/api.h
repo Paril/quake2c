@@ -227,7 +227,7 @@ typedef struct
 	int32_t	waterlevel;
 
 	// callbacks to test the world
-	trace_t			(* q_gameabi trace)(const vec3_t *start, const vec3_t *mins, const vec3_t *maxs, const vec3_t *end);
+	trace_t			(*trace)(const vec3_t *start, const vec3_t *mins, const vec3_t *maxs, const vec3_t *end);
 	content_flags_t	(*pointcontents)(const vec3_t *point);
 } pmove_t;
 
@@ -245,10 +245,10 @@ typedef int32_t fsMode_t;
 typedef struct
 {
 	// special messages
-	void (* q_printf(2, 3) bprintf)(print_level_t printlevel, const char *fmt, ...);
-	void (* q_printf(1, 2) dprintf)(const char *fmt, ...);
-	void (* q_printf(3, 4) cprintf)(edict_t *ent, print_level_t printlevel, const char *fmt, ...);
-	void (* q_printf(2, 3) centerprintf)(edict_t *ent, const char *fmt, ...);
+	void (*bprintf)(print_level_t printlevel, const char *fmt, ...);
+	void (*dprintf)(const char *fmt, ...);
+	void (*cprintf)(edict_t *ent, print_level_t printlevel, const char *fmt, ...);
+	void (*centerprintf)(edict_t *ent, const char *fmt, ...);
 	void (*sound)(edict_t *ent, sound_channel_t channel, int soundindex, vec_t volume, sound_attn_t attenuation, vec_t timeofs);
 	void (*positioned_sound)(const vec3_t *origin, edict_t *ent, sound_channel_t channel, int soundindex, vec_t volume, sound_attn_t attenuation, vec_t timeofs);
 
@@ -268,7 +268,7 @@ typedef struct
 	void (*setmodel)(edict_t *ent, const char *name);
 
 	// collision detection
-	trace_t (* q_gameabi trace)(const vec3_t *start, const vec3_t *mins, const vec3_t *maxs, const vec3_t *end, edict_t *passent, content_flags_t contentmask);
+	trace_t (*trace)(const vec3_t *start, const vec3_t *mins, const vec3_t *maxs, const vec3_t *end, edict_t *passent, content_flags_t contentmask);
 	content_flags_t (*pointcontents)(const vec3_t *point);
 	qboolean (*inPVS)(const vec3_t *p1, const vec3_t *p2);
 	qboolean (*inPHS)(const vec3_t *p1, const vec3_t *p2);

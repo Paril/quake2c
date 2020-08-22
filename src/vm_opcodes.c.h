@@ -1,8 +1,4 @@
-#define QCVM_INTERNAL
-#include "shared/shared.h"
-#include "vm.h"
-#include "vm_math.h"
-
+// This is the "source" component of vm_opcodes.h that is included alongside it.
 static void F_OP_DONE(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
 	qcvm_leave(vm);
@@ -757,7 +753,7 @@ static void F_OP_LOADP_C(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 		result = str[offset];
 	}
 
-	qcvm_set_global_typed_value(int32_t, vm, operands.c, result);
+	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
 }
 
 static void F_OP_BOUNDCHECK(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
@@ -932,220 +928,279 @@ F_OP_STOREF(F_OP_STOREF_I, int32_t)
 F_OP_STOREF(F_OP_STOREF_V, vec3_t)
 #undef F_OP_STOREF
 
-#define OP(N) \
-	[OP_##N] = F_OP_##N
+static void F_OP_LOADP_B(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
+{
+	const qcvm_string_t strid = *qcvm_get_global_typed(qcvm_string_t, vm, operands.a);
+	const size_t offset = *qcvm_get_global_typed(int32_t, vm, operands.b);
+	int32_t result;
 
-qcvm_opcode_func_t qcvm_code_funcs[] = {
-	OP(DONE),
+	if (offset > qcvm_get_string_length(vm, strid))
+		result = 0;
+	else
+	{
+		const char *str = qcvm_get_string(vm, strid);
+		result = str[offset];
+	}
 
-	OP(MUL_F),
-	OP(MUL_V),
-	OP(MUL_FV),
-	OP(MUL_VF),
-	OP(MUL_I),
-	OP(MUL_IF),
-	OP(MUL_FI),
-	OP(MUL_VI),
-	OP(MUL_IV),
-	
-	OP(DIV_F),
-	OP(DIV_I),
-	OP(DIV_VF),
-	OP(DIV_IF),
-	OP(DIV_FI),
-	
-	OP(ADD_F),
-	OP(ADD_V),
-	OP(ADD_I),
-	OP(ADD_FI),
-	OP(ADD_IF),
-	
-	OP(SUB_F),
-	OP(SUB_V),
-	OP(SUB_I),
-	OP(SUB_FI),
-	OP(SUB_IF),
-	
-	OP(EQ_F),
-	OP(EQ_V),
-	OP(EQ_S),
-	OP(EQ_E),
-	OP(EQ_FNC),
-	OP(EQ_I),
-	OP(EQ_IF),
-	OP(EQ_FI),
+	qcvm_set_global_typed_value(int32_t, vm, operands.c, result);
+}
 
-	OP(NE_F),
-	OP(NE_V),
-	OP(NE_S),
-	OP(NE_E),
-	OP(NE_FNC),
-	OP(NE_I),
-	OP(NE_IF),
-	OP(NE_FI),
+#define FOR_ALL_JUMPCODES(OP) \
+	OP(DONE) \
+\
+	OP(MUL_F) \
+	OP(MUL_V) \
+	OP(MUL_FV) \
+	OP(MUL_VF) \
+	OP(MUL_I) \
+	OP(MUL_IF) \
+	OP(MUL_FI) \
+	OP(MUL_VI) \
+	OP(MUL_IV) \
+\
+	OP(DIV_F) \
+	OP(DIV_I) \
+	OP(DIV_VF) \
+	OP(DIV_IF) \
+	OP(DIV_FI) \
+\
+	OP(ADD_F) \
+	OP(ADD_V) \
+	OP(ADD_I) \
+	OP(ADD_FI) \
+	OP(ADD_IF) \
+\
+	OP(SUB_F) \
+	OP(SUB_V) \
+	OP(SUB_I) \
+	OP(SUB_FI) \
+	OP(SUB_IF) \
+\
+	OP(EQ_F) \
+	OP(EQ_V) \
+	OP(EQ_S) \
+	OP(EQ_E) \
+	OP(EQ_FNC) \
+	OP(EQ_I) \
+	OP(EQ_IF) \
+	OP(EQ_FI) \
+\
+	OP(NE_F) \
+	OP(NE_V) \
+	OP(NE_S) \
+	OP(NE_E) \
+	OP(NE_FNC) \
+	OP(NE_I) \
+	OP(NE_IF) \
+	OP(NE_FI) \
+\
+	OP(LE_F) \
+	OP(LE_I) \
+	OP(LE_IF) \
+	OP(LE_FI) \
+\
+	OP(GE_F) \
+	OP(GE_I) \
+	OP(GE_IF) \
+	OP(GE_FI) \
+\
+	OP(LT_F) \
+	OP(LT_I) \
+	OP(LT_IF) \
+	OP(LT_FI) \
+\
+	OP(GT_F) \
+	OP(GT_I) \
+	OP(GT_IF) \
+	OP(GT_FI) \
+\
+	OP(LOAD_F) \
+	OP(LOAD_V) \
+	OP(LOAD_S) \
+	OP(LOAD_ENT) \
+	OP(LOAD_FLD) \
+	OP(LOAD_FNC) \
+	OP(LOAD_I) \
+	OP(LOAD_P) \
+\
+	OP(ADDRESS) \
+\
+	OP(STORE_F) \
+	OP(STORE_V) \
+	OP(STORE_S) \
+	OP(STORE_ENT) \
+	OP(STORE_FLD) \
+	OP(STORE_FNC) \
+	OP(STORE_I) \
+	OP(STORE_IF) \
+	OP(STORE_FI) \
+	OP(STORE_P) \
+\
+	OP(STOREP_F) \
+	OP(STOREP_V) \
+	OP(STOREP_S) \
+	OP(STOREP_ENT) \
+	OP(STOREP_FLD) \
+	OP(STOREP_FNC) \
+	OP(STOREP_I) \
+	OP(STOREP_IF) \
+	OP(STOREP_FI) \
+\
+	OP(RETURN) \
+\
+	OP(MULSTOREP_F) \
+	OP(MULSTOREP_VF) \
+\
+	OP(DIVSTOREP_F) \
+\
+	OP(ADDSTOREP_F) \
+	OP(ADDSTOREP_V) \
+\
+	OP(SUBSTOREP_F) \
+	OP(SUBSTOREP_V) \
+\
+	OP(NOT_F) \
+	OP(NOT_V) \
+	OP(NOT_S) \
+	OP(NOT_FNC) \
+	OP(NOT_ENT) \
+	OP(NOT_I) \
+\
+	OP(IF_I) \
+	OP(IF_S) \
+	OP(IF_F) \
+\
+	OP(IFNOT_I) \
+	OP(IFNOT_S) \
+	OP(IFNOT_F) \
+\
+	OP(CALL0) \
+	OP(CALL1) \
+	OP(CALL2) \
+	OP(CALL3) \
+	OP(CALL4) \
+	OP(CALL5) \
+	OP(CALL6) \
+	OP(CALL7) \
+	OP(CALL8) \
+\
+	OP(CALL1H) \
+	OP(CALL2H) \
+	OP(CALL3H) \
+	OP(CALL4H) \
+	OP(CALL5H) \
+	OP(CALL6H) \
+	OP(CALL7H) \
+	OP(CALL8H) \
+\
+	OP(GOTO) \
+\
+	OP(AND_F) \
+	OP(AND_I) \
+	OP(AND_IF) \
+	OP(AND_FI) \
+\
+	OP(OR_F) \
+	OP(OR_I) \
+	OP(OR_IF) \
+	OP(OR_FI) \
+\
+	OP(BITAND_F) \
+	OP(BITAND_I) \
+	OP(BITAND_IF) \
+	OP(BITAND_FI) \
+\
+	OP(BITOR_F) \
+	OP(BITOR_I) \
+	OP(BITOR_IF) \
+	OP(BITOR_FI) \
+\
+	OP(CONV_ITOF) \
+	OP(CONV_FTOI) \
+	OP(CP_ITOF) \
+	OP(CP_FTOI) \
+\
+	OP(BITXOR_I) \
+	OP(RSHIFT_I) \
+	OP(LSHIFT_I) \
+\
+	OP(GLOBALADDRESS) \
+	OP(ADD_PIW) \
+\
+	OP(LOADA_F) \
+	OP(LOADA_V) \
+	OP(LOADA_S) \
+	OP(LOADA_ENT) \
+	OP(LOADA_FLD) \
+	OP(LOADA_FNC) \
+	OP(LOADA_I) \
+\
+	OP(LOADP_F) \
+	OP(LOADP_V) \
+	OP(LOADP_S) \
+	OP(LOADP_ENT) \
+	OP(LOADP_FLD) \
+	OP(LOADP_FNC) \
+	OP(LOADP_I) \
+	OP(LOADP_C) \
+\
+	OP(BOUNDCHECK) \
+\
+	OP(RAND0) \
+	OP(RAND1) \
+	OP(RAND2) \
+\
+	OP(RANDV0) \
+	OP(RANDV1) \
+	OP(RANDV2) \
+\
+	OP(STOREF_F) \
+	OP(STOREF_S) \
+	OP(STOREF_I) \
+	OP(STOREF_V) \
+\
+	OP(LOADP_B) \
 	
-	OP(LE_F),
-	OP(LE_I),
-	OP(LE_IF),
-	OP(LE_FI),
-	
-	OP(GE_F),
-	OP(GE_I),
-	OP(GE_IF),
-	OP(GE_FI),
-	
-	OP(LT_F),
-	OP(LT_I),
-	OP(LT_IF),
-	OP(LT_FI),
-	
-	OP(GT_F),
-	OP(GT_I),
-	OP(GT_IF),
-	OP(GT_FI),
-	
-	OP(LOAD_F),
-	OP(LOAD_V),
-	OP(LOAD_S),
-	OP(LOAD_ENT),
-	OP(LOAD_FLD),
-	OP(LOAD_FNC),
-	OP(LOAD_I),
-	OP(LOAD_P),
+#ifdef USE_GNU_OPCODE_JUMPING
+#define OPC(N) \
+	[OP_##N] = &&JMP_##N,
 
-	OP(ADDRESS),
-	
-	OP(STORE_F),
-	OP(STORE_V),
-	OP(STORE_S),
-	OP(STORE_ENT),
-	OP(STORE_FLD),
-	OP(STORE_FNC),
-	OP(STORE_I),
-	OP(STORE_IF),
-	OP(STORE_FI),
-	OP(STORE_P),
-	
-	OP(STOREP_F),
-	OP(STOREP_V),
-	OP(STOREP_S),
-	OP(STOREP_ENT),
-	OP(STOREP_FLD),
-	OP(STOREP_FNC),
-	OP(STOREP_I),
-	OP(STOREP_IF),
-	OP(STOREP_FI),
+#define JUMPCODE_LIST \
+	static const void *jmps[] = { \
+		FOR_ALL_JUMPCODES(OPC) \
+	};
 
-	OP(RETURN),
-		
-	OP(MULSTOREP_F),
-	OP(MULSTOREP_VF),
-		
-	OP(DIVSTOREP_F),
-		
-	OP(ADDSTOREP_F),
-	OP(ADDSTOREP_V),
-		
-	OP(SUBSTOREP_F),
-	OP(SUBSTOREP_V),
-		
-	OP(NOT_F),
-	OP(NOT_V),
-	OP(NOT_S),
-	OP(NOT_FNC),
-	OP(NOT_ENT),
-	OP(NOT_I),
-		
-	OP(IF_I),
-	OP(IF_S),
-	OP(IF_F),
-		
-	OP(IFNOT_I),
-	OP(IFNOT_S),
-	OP(IFNOT_F),
-		
-	OP(CALL0),
-	OP(CALL1),
-	OP(CALL2),
-	OP(CALL3),
-	OP(CALL4),
-	OP(CALL5),
-	OP(CALL6),
-	OP(CALL7),
-	OP(CALL8),
-		
-	OP(CALL1H),
-	OP(CALL2H),
-	OP(CALL3H),
-	OP(CALL4H),
-	OP(CALL5H),
-	OP(CALL6H),
-	OP(CALL7H),
-	OP(CALL8H),
+#define OPN(N) \
+	JMP_##N: \
+		F_OP_##N(vm, statement->args, &enter_depth); \
+		goto JMP_R;
 
-	OP(GOTO),
-		
-	OP(AND_F),
-	OP(AND_I),
-	OP(AND_IF),
-	OP(AND_FI),
-		
-	OP(OR_F),
-	OP(OR_I),
-	OP(OR_IF),
-	OP(OR_FI),
-		
-	OP(BITAND_F),
-	OP(BITAND_I),
-	OP(BITAND_IF),
-	OP(BITAND_FI),
-		
-	OP(BITOR_F),
-	OP(BITOR_I),
-	OP(BITOR_IF),
-	OP(BITOR_FI),
-		
-	OP(CONV_ITOF),
-	OP(CONV_FTOI),
-	OP(CP_ITOF),
-	OP(CP_FTOI),
-		
-	OP(BITXOR_I),
-	OP(RSHIFT_I),
-	OP(LSHIFT_I),
+#define JUMPCODE_ASM \
+		FOR_ALL_JUMPCODES(OPN)
 
-	OP(GLOBALADDRESS),
-	OP(ADD_PIW),
+#define EXECUTE_JUMPCODE \
+		goto *jmps[code]; \
+JMP_R:
 
-	OP(LOADA_F),
-	OP(LOADA_V),
-	OP(LOADA_S),
-	OP(LOADA_ENT),
-	OP(LOADA_FLD),
-	OP(LOADA_FNC),
-	OP(LOADA_I),
+#else
+#define JUMPCODE_LIST
+#define JUMPCODE_ASM
 
-	OP(LOADP_F),
-	OP(LOADP_V),
-	OP(LOADP_S),
-	OP(LOADP_ENT),
-	OP(LOADP_FLD),
-	OP(LOADP_FNC),
-	OP(LOADP_I),
-	OP(LOADP_C),
+#define OPN(N) \
+	case OP_##N: \
+		F_OP_##N(vm, statement->args, &enter_depth); \
+		break;
 
-	OP(BOUNDCHECK),
-		
-	OP(RAND0),
-	OP(RAND1),
-	OP(RAND2),
+#define EXECUTE_JUMPCODE \
+	switch (code) \
+	{ \
+		FOR_ALL_JUMPCODES(OPN) \
+	}
+#endif
 
-	OP(RANDV0),
-	OP(RANDV1),
-	OP(RANDV2),
-		
-	OP(STOREF_F),
-	OP(STOREF_S),
-	OP(STOREF_I),
-	OP(STOREF_V),
+#define OPF(N) \
+	[OP_##N] = F_OP_##N,
+
+static qcvm_opcode_func_t qcvm_code_funcs[] = {
+	FOR_ALL_JUMPCODES(OPF)
 };

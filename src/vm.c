@@ -2,7 +2,6 @@
 #include "shared/shared.h"
 #include "vm.h"
 #include "vm_game.h"
-#include "vm_opcodes.h"
 #include "vm_math.h"
 #include "vm_debug.h"
 #include "vm_mem.h"
@@ -10,6 +9,7 @@
 #include "vm_ext.h"
 #include "vm_file.h"
 #include "vm_hash.h"
+#include "vm_opcodes.h"
 
 #include <time.h>
 
@@ -1003,6 +1003,7 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 	}
 
 	int32_t enter_depth = 1;
+	const qcvm_statement_t *statement;
 
 	qcvm_enter(vm, function);
 
@@ -1010,7 +1011,7 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 	{
 		// get next statement
 		qcvm_stack_t *current = &vm->state.stack[vm->state.current];
-		const qcvm_statement_t *statement = ++current->statement;
+		statement = ++current->statement;
 
 #ifdef ALLOW_INSTRUMENTING
 		if (vm->profile_flags & PROFILE_FIELDS)
@@ -1051,11 +1052,11 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 #else
 		const qcvm_opcode_t code = statement->opcode;
 #endif
-		const qcvm_opcode_func_t func = qcvm_code_funcs[code];
+		JUMPCODE_LIST;
 
 		START_OPCODE_TIMER(vm, code);
 
-		func(vm, statement->args, &enter_depth);
+		EXECUTE_JUMPCODE;
 
 		END_TIMER(vm, PROFILE_OPCODES);
 
@@ -1078,6 +1079,8 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 	
 	while (vm->state.current != -1)
 		qcvm_leave(vm);*/
+
+JUMPCODE_ASM
 }
 
 static const uint32_t QCVM_VERSION	= 1;
@@ -1332,7 +1335,7 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 	{
 		if (func->id < 0)
 		{
-			vm->warning("QCVM WARNING: Code contains old-school negative-indexed builtin. Use #0 for all builtins!");
+			vm->warning("QCVM WARNING: Code contains old-school negative-indexed builtin \"%s\". Use #0 for all builtins!\n", qcvm_get_string(vm, func->name_index));
 			func->id = 0;
 		}
 		
@@ -1340,6 +1343,9 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 			vm->builtins.count++;
 
 		vm->highest_stack = maxsz(vm->highest_stack, func->num_args_and_locals);
+
+		if (func->num_args_and_locals > 128)
+			vm->warning("QCVM WARNING: func \"%s\" has a pretty big stack (%i locals)\n", qcvm_get_string(vm, func->name_index), func->num_args_and_locals);
 	}
 
 	vm->builtins.list = (qcvm_builtin_t *)qcvm_alloc(vm, sizeof(qcvm_builtin_t *) * vm->builtins.count);

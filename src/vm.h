@@ -2,8 +2,17 @@
 
 typedef struct qcvm_s qcvm_t;
 
-//#define ALLOW_DEBUGGING
+// whether or not to use address-of-label opcode jumps.
+// if this is disabled, a simple switch(code) is used.
+#define USE_GNU_OPCODE_JUMPING
+// whether the FTEQCC debugger is supported. shouldn't really
+// affect performance.
+#define ALLOW_DEBUGGING
+// whether intense instrumentation is enabled or not.
+// enabling this may have adverse consequences on performance!
 //#define ALLOW_INSTRUMENTING
+// whether simple sampling is enabled or not. this is light and
+// will barely affect performance.
 //#define ALLOW_PROFILING
 
 #ifdef ALLOW_DEBUGGING
@@ -39,8 +48,6 @@ enum
 	GLOBAL_QC		= 28
 };
 typedef uint32_t qcvm_global_t;
-
-#include "vm_opcodes.h"
 
 enum
 {
@@ -86,6 +93,13 @@ enum
 };
 
 typedef uint32_t qcvm_deftype_t;
+
+typedef uint32_t qcvm_opcode_t;
+
+typedef struct
+{
+	qcvm_global_t	a, b, c;
+} qcvm_operands_t;
 
 typedef struct
 {
@@ -971,7 +985,10 @@ inline bool qcvm_strings_case_sensitive(const qcvm_t *vm)
 }
 
 #ifdef QCVM_INTERNAL
-__attribute__((always_inline)) inline void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
+#ifndef _DEBUG
+__attribute__((always_inline))
+#endif
+inline void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
 {
 	qcvm_builtin_t func;
 
@@ -1017,7 +1034,10 @@ __attribute__((always_inline)) inline void qcvm_call_builtin(qcvm_t *vm, qcvm_fu
 #endif
 }
 
-__attribute__((always_inline)) inline void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
+#ifndef _DEBUG
+__attribute__((always_inline))
+#endif
+inline void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 {
 #ifdef ALLOW_INSTRUMENTING
 	if (vm->profiler_func && function == vm->profiler_func && !vm->state.profile_mark_depth)
@@ -1061,9 +1081,8 @@ __attribute__((always_inline)) inline void qcvm_enter(qcvm_t *vm, qcvm_function_
 	new_stack->statement = &vm->statements[function->id - 1];
 
 	// copy parameters
-	for (qcvm_global_t i = 0, arg_id = function->first_arg; i < function->num_args; i++)
-		for (qcvm_global_t s = 0; s < function->arg_sizes[i]; s++, arg_id++)
-			qcvm_copy_globals_typed(qcvm_global_t, vm, arg_id, qcvm_global_offset(GLOBAL_PARM0, (i * 3) + s));
+	for (qcvm_global_t i = 0, arg_id = function->first_arg; i < function->num_args; arg_id += function->arg_sizes[i], i++)
+		qcvm_copy_globals(vm, arg_id, qcvm_global_offset(GLOBAL_PARM0, i * 3), sizeof(qcvm_global_t) * function->arg_sizes[i]);
 
 #ifdef ALLOW_INSTRUMENTING
 	if (vm->profile_flags & (PROFILE_FUNCTIONS | PROFILE_FIELDS))
@@ -1078,7 +1097,10 @@ __attribute__((always_inline)) inline void qcvm_enter(qcvm_t *vm, qcvm_function_
 #endif
 }
 
-__attribute__((always_inline)) inline void qcvm_leave(qcvm_t *vm)
+#ifndef _DEBUG
+__attribute__((always_inline))
+#endif
+inline void qcvm_leave(qcvm_t *vm)
 {
 	// restore stack
 	qcvm_stack_t *current_stack = &vm->state.stack[vm->state.current];

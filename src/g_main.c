@@ -140,6 +140,8 @@ static void InitFieldWraps()
 
 qc_export_t qce;
 
+#include <unistd.h>
+
 static const char *GetProgsName(void)
 {
 	cvar_t *game_var = gi.cvar("game", "", 0);
@@ -413,7 +415,6 @@ static void ShutdownGame(void)
 
 	qcvm_shutdown(qvm);
 
-	gi.FreeTags (TAG_LEVEL);
 	gi.FreeTags (TAG_GAME);
 }
 
@@ -476,8 +477,6 @@ static void SpawnEntities(const char *mapname, const char *entities, const char 
 #ifdef ALLOW_DEBUGGING
 	qcvm_check_debugger_commands(qvm);
 #endif
-
-	gi.FreeTags(TAG_LEVEL);
 
 	qcvm_function_t *func = qcvm_get_function(qvm, qce.PreSpawnEntities);
 	qcvm_execute(qvm, func);
@@ -692,7 +691,7 @@ Returns a pointer to the structure with all entry points
 and global variables
 =================
 */
-q_exported game_export_t *GetGameAPI (game_import_t *import)
+game_export_t *GetGameAPI (game_import_t *import)
 {
 	gi = *import;
 	return &globals;

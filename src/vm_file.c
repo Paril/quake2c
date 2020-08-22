@@ -177,7 +177,7 @@ static void QC_CreatePath(qcvm_t *vm)
 #ifdef KMQUAKE2_ENGINE_MOD
 	gi.CreatePath((char *)name);
 #else
-	os_mkdir(name);
+	mkdir(name);
 #endif
 }
 

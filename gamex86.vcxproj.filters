@@ -21,9 +21,6 @@
     <ClCompile Include="src\vm_string.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm_opcodes.c">
-      <Filter>src</Filter>
-    </ClCompile>
     <ClCompile Include="src\vm_mem.c">
       <Filter>src</Filter>
     </ClCompile>
@@ -65,6 +62,9 @@
     </ClCompile>
     <ClCompile Include="src\vm_string_list.c">
       <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\vm_opcodes.c.h">
+      <Filter>inc</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
