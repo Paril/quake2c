@@ -125,52 +125,60 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
-    <OutDir>bin\</OutDir>
+    <OutDir>$(SolutionDir)..\</OutDir>
     <CodeAnalysisRuleSet>MixedMinimumRules.ruleset</CodeAnalysisRuleSet>
-    <IncludePath>src/;src/windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <IncludePath>./;windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
     <TargetName>$(ProjectName)86</TargetName>
+    <IntDir>obj\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
     <CodeAnalysisRuleSet>MixedMinimumRules.ruleset</CodeAnalysisRuleSet>
-    <IncludePath>src/;src/windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <IncludePath>./;windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
     <TargetName>$(ProjectName)86_x64</TargetName>
-    <OutDir>bin\</OutDir>
+    <OutDir>$(SolutionDir)..\</OutDir>
+    <IntDir>obj\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
-    <OutDir>bin\</OutDir>
+    <OutDir>$(SolutionDir)..\</OutDir>
     <CodeAnalysisRuleSet>MixedMinimumRules.ruleset</CodeAnalysisRuleSet>
-    <IncludePath>src/;src/windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <IncludePath>./;windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
     <TargetName>kmq2$(ProjectName)86</TargetName>
+    <IntDir>obj\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|x64'">
     <CodeAnalysisRuleSet>MixedMinimumRules.ruleset</CodeAnalysisRuleSet>
-    <IncludePath>src/;src/windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <IncludePath>./;windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
     <TargetName>kmq2$(ProjectName)64</TargetName>
-    <OutDir>bin\</OutDir>
+    <OutDir>$(SolutionDir)..\</OutDir>
+    <IntDir>obj\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'">
-    <OutDir>bin\</OutDir>
+    <OutDir>$(SolutionDir)..\</OutDir>
     <CodeAnalysisRuleSet>MixedMinimumRules.ruleset</CodeAnalysisRuleSet>
-    <IncludePath>src/;src/windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <IncludePath>./;windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
     <TargetName>$(ProjectName)86</TargetName>
+    <IntDir>obj\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|x64'">
     <CodeAnalysisRuleSet>MixedMinimumRules.ruleset</CodeAnalysisRuleSet>
-    <IncludePath>src/;src/windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <IncludePath>./;windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
     <TargetName>$(ProjectName)86_x64</TargetName>
-    <OutDir>bin\</OutDir>
+    <OutDir>$(SolutionDir)..\</OutDir>
+    <IntDir>obj\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
-    <OutDir>bin\</OutDir>
+    <OutDir>$(SolutionDir)..\</OutDir>
     <CodeAnalysisRuleSet>MixedMinimumRules.ruleset</CodeAnalysisRuleSet>
-    <IncludePath>src/;src/windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <IncludePath>./;windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
     <TargetName>kmq2$(ProjectName)86</TargetName>
+    <IntDir>obj\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
     <CodeAnalysisRuleSet>MixedMinimumRules.ruleset</CodeAnalysisRuleSet>
-    <IncludePath>src/;src/windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <IncludePath>./;windows/;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
     <TargetName>kmq2$(ProjectName)64</TargetName>
-    <OutDir>bin\</OutDir>
+    <OutDir>$(SolutionDir)..\</OutDir>
+    <IntDir>obj\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
     <VcpkgEnabled>false</VcpkgEnabled>
@@ -212,7 +220,7 @@
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
-      <ModuleDefinitionFile>src\game.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>game.def</ModuleDefinitionFile>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -232,7 +240,7 @@
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
-      <ModuleDefinitionFile>src\game.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>game.def</ModuleDefinitionFile>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -252,7 +260,7 @@
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
-      <ModuleDefinitionFile>src\game.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>game.def</ModuleDefinitionFile>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -272,7 +280,7 @@
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
-      <ModuleDefinitionFile>src\game.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>game.def</ModuleDefinitionFile>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
     </Link>
   </ItemDefinitionGroup>
@@ -295,7 +303,7 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <ModuleDefinitionFile>src\game.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>game.def</ModuleDefinitionFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|x64'">
@@ -317,7 +325,7 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <ModuleDefinitionFile>src\game.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>game.def</ModuleDefinitionFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|Win32'">
@@ -339,7 +347,7 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <ModuleDefinitionFile>src\game.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>game.def</ModuleDefinitionFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
@@ -361,15 +369,15 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <ModuleDefinitionFile>src\game.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>game.def</ModuleDefinitionFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <None Include="src\game.def" />
+    <None Include="game.def" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\g_file.cpp" />
-    <ClCompile Include="src\g_main.c">
+    <ClCompile Include="g_file.cpp" />
+    <ClCompile Include="g_main.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
@@ -387,7 +395,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClCompile Include="src\g_save.c">
+    <ClCompile Include="g_save.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
@@ -405,8 +413,8 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClCompile Include="src\g_thread.cpp" />
-    <ClCompile Include="src\vm.c">
+    <ClCompile Include="g_thread.cpp" />
+    <ClCompile Include="vm.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
@@ -424,7 +432,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClCompile Include="src\shared\shared.c">
+    <ClCompile Include="shared\shared.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
@@ -442,7 +450,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClCompile Include="src\vm_debug.c">
+    <ClCompile Include="vm_debug.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
@@ -460,7 +468,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClCompile Include="src\vm_ext.c">
+    <ClCompile Include="vm_ext.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
@@ -478,7 +486,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClCompile Include="src\vm_file.c">
+    <ClCompile Include="vm_file.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|x64'">
@@ -496,7 +504,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClCompile Include="src\vm_game.c">
+    <ClCompile Include="vm_game.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
@@ -514,7 +522,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClCompile Include="src\vm_gi.c">
+    <ClCompile Include="vm_gi.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
@@ -532,7 +540,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClCompile Include="src\vm_hash.c">
+    <ClCompile Include="vm_hash.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
@@ -550,7 +558,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClCompile Include="src\vm_math.c">
+    <ClCompile Include="vm_math.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
@@ -568,7 +576,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClCompile Include="src\vm_mem.c">
+    <ClCompile Include="vm_mem.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
@@ -586,7 +594,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClInclude Include="src\vm_opcodes.c.h">
+    <ClInclude Include="vm_opcodes.c.h">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
@@ -604,7 +612,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClInclude>
-    <ClCompile Include="src\vm_string.c">
+    <ClCompile Include="vm_string.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|x64'">
@@ -622,7 +630,7 @@
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Release|x64'">
       </LanguageStandard>
     </ClCompile>
-    <ClCompile Include="src\vm_string_list.c">
+    <ClCompile Include="vm_string_list.c">
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='KMQuake2 Debug|Win32'">
       </LanguageStandard>
       <LanguageStandard Condition="'$(Configuration)|$(Platform)'=='Vanilla Debug|Win32'">
@@ -642,27 +650,27 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\game.h" />
-    <ClInclude Include="src\g_file.h" />
-    <ClInclude Include="src\g_main.h" />
-    <ClInclude Include="src\g_save.h" />
-    <ClInclude Include="src\g_thread.h" />
-    <ClInclude Include="src\vm.h" />
-    <ClInclude Include="src\shared\client.h" />
-    <ClInclude Include="src\shared\entity.h" />
-    <ClInclude Include="src\shared\api.h" />
-    <ClInclude Include="src\shared\platform.h" />
-    <ClInclude Include="src\shared\shared.h" />
-    <ClInclude Include="src\vm_debug.h" />
-    <ClInclude Include="src\vm_ext.h" />
-    <ClInclude Include="src\vm_file.h" />
-    <ClInclude Include="src\vm_game.h" />
-    <ClInclude Include="src\vm_gi.h" />
-    <ClInclude Include="src\vm_hash.h" />
-    <ClInclude Include="src\vm_math.h" />
-    <ClInclude Include="src\vm_mem.h" />
-    <ClInclude Include="src\vm_opcodes.h" />
-    <ClInclude Include="src\vm_string.h" />
+    <ClInclude Include="game.h" />
+    <ClInclude Include="g_file.h" />
+    <ClInclude Include="g_main.h" />
+    <ClInclude Include="g_save.h" />
+    <ClInclude Include="g_thread.h" />
+    <ClInclude Include="vm.h" />
+    <ClInclude Include="shared\client.h" />
+    <ClInclude Include="shared\entity.h" />
+    <ClInclude Include="shared\api.h" />
+    <ClInclude Include="shared\platform.h" />
+    <ClInclude Include="shared\shared.h" />
+    <ClInclude Include="vm_debug.h" />
+    <ClInclude Include="vm_ext.h" />
+    <ClInclude Include="vm_file.h" />
+    <ClInclude Include="vm_game.h" />
+    <ClInclude Include="vm_gi.h" />
+    <ClInclude Include="vm_hash.h" />
+    <ClInclude Include="vm_math.h" />
+    <ClInclude Include="vm_mem.h" />
+    <ClInclude Include="vm_opcodes.h" />
+    <ClInclude Include="vm_string.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

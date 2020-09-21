@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <None Include="src\game.def" />
+    <None Include="game.def" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="src">
@@ -15,121 +15,119 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\g_thread.cpp">
+    <ClCompile Include="g_thread.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm_string.c">
+    <ClCompile Include="vm_string.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm_mem.c">
+    <ClCompile Include="vm_mem.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm_math.c">
+    <ClCompile Include="vm_math.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm_gi.c">
+    <ClCompile Include="vm_gi.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm_game.c">
+    <ClCompile Include="vm_game.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm_ext.c">
+    <ClCompile Include="vm_ext.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm_debug.c">
+    <ClCompile Include="vm_debug.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\shared\shared.c">
+    <ClCompile Include="shared\shared.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\g_main.c">
+    <ClCompile Include="g_main.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm_file.c">
+    <ClCompile Include="vm_file.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\g_file.cpp">
+    <ClCompile Include="g_file.cpp">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\g_save.c">
+    <ClCompile Include="g_save.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm_hash.c">
+    <ClCompile Include="vm_hash.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm.c">
+    <ClCompile Include="vm.c">
       <Filter>src</Filter>
     </ClCompile>
-    <ClCompile Include="src\vm_string_list.c">
+    <ClCompile Include="vm_string_list.c">
       <Filter>src</Filter>
-    </ClCompile>
-    <ClCompile Include="src\vm_opcodes.c.h">
-      <Filter>inc</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\shared\client.h">
+    <ClInclude Include="shared\client.h">
       <Filter>inc\shared</Filter>
     </ClInclude>
-    <ClInclude Include="src\shared\entity.h">
+    <ClInclude Include="shared\entity.h">
       <Filter>inc\shared</Filter>
     </ClInclude>
-    <ClInclude Include="src\shared\api.h">
+    <ClInclude Include="shared\api.h">
       <Filter>inc\shared</Filter>
     </ClInclude>
-    <ClInclude Include="src\shared\platform.h">
+    <ClInclude Include="shared\platform.h">
       <Filter>inc\shared</Filter>
     </ClInclude>
-    <ClInclude Include="src\shared\shared.h">
+    <ClInclude Include="shared\shared.h">
       <Filter>inc\shared</Filter>
     </ClInclude>
-    <ClInclude Include="src\game.h">
+    <ClInclude Include="game.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\vm_game.h">
+    <ClInclude Include="vm_game.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\vm_opcodes.h">
+    <ClInclude Include="vm_opcodes.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\g_thread.h">
+    <ClInclude Include="g_thread.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\vm_math.h">
+    <ClInclude Include="vm_math.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\vm_debug.h">
+    <ClInclude Include="vm_debug.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\vm_mem.h">
+    <ClInclude Include="vm_mem.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\vm_string.h">
+    <ClInclude Include="vm_string.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\vm_ext.h">
+    <ClInclude Include="vm_ext.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\vm_gi.h">
+    <ClInclude Include="vm_gi.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\vm_file.h">
+    <ClInclude Include="vm_file.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\g_file.h">
+    <ClInclude Include="g_file.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\g_save.h">
+    <ClInclude Include="g_save.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\g_main.h">
+    <ClInclude Include="g_main.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\vm_hash.h">
+    <ClInclude Include="vm_hash.h">
       <Filter>inc</Filter>
     </ClInclude>
-    <ClInclude Include="src\vm.h">
+    <ClInclude Include="vm.h">
       <Filter>inc</Filter>
     </ClInclude>
+    <ClInclude Include="vm_opcodes.c.h" />
   </ItemGroup>
 </Project>
