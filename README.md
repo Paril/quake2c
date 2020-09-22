@@ -7,3 +7,6 @@ That's the alternate reality I have constructed here. An alternate reality where
 This started as a joke in the Quake Mapping & Quake Legacy Discords. I had an idea to construct a VM inside of a Q2 game DLL and natively load Quake 1 progs.dat's to be able to run Quake 1 mods inside of Quake 2. Sadly that idea never made it beyond initial testing (although it might still be mostly possible!!), but I then decided to simply convert Quake 2's code to QC and load that instead.
 
 Those more familiar with QC can jump on in and create mods for Quake II without needing to touch any C code at all.
+
+# I wanna make a progs - how do?
+See the https://github.com/Paril/quake2c-progs repo for the actual progs source - this is just the game DLL!
