@@ -136,14 +136,15 @@ static void QC_FRead(qcvm_t *vm)
 	const int32_t size = qcvm_argv_int32(vm, 1);
 	const fileHandle_t *handle = qcvm_argv_handle(fileHandle_t, vm, 2);
 	int32_t written;
+	void *address;
 
-	if (!qcvm_pointer_valid(vm, pointer, false, size))
+	if (!qcvm_resolve_pointer(vm, pointer, false, size, &address))
 		qcvm_error(vm, "bad pointer");
 
 #ifdef KMQUAKE2_ENGINE_MOD
-	written = gi.FRead(qcvm_resolve_pointer(vm, pointer), size, (fileHandle_t)handle);
+	written = gi.FRead(address, size, (fileHandle_t)handle);
 #else
-	written = fread(qcvm_resolve_pointer(vm, pointer), size, 1, (FILE *)handle);
+	written = fread(address, size, 1, (FILE *)handle);
 #endif
 
 	qcvm_return_int32(vm, written);
@@ -155,14 +156,15 @@ static void QC_FWrite(qcvm_t *vm)
 	const int32_t size = qcvm_argv_int32(vm, 1);
 	const fileHandle_t *handle = qcvm_argv_handle(fileHandle_t, vm, 2);
 	int32_t written;
+	void *address;
 
-	if (!qcvm_pointer_valid(vm, pointer, false, size))
+	if (!qcvm_resolve_pointer(vm, pointer, false, size, &address))
 		qcvm_error(vm, "bad pointer");
 
 #ifdef KMQUAKE2_ENGINE_MOD
-	written = gi.FWrite(qcvm_resolve_pointer(vm, pointer), size, (fileHandle_t)handle);
+	written = gi.FWrite(address, size, (fileHandle_t)handle);
 #else
-	written = fwrite(qcvm_resolve_pointer(vm, pointer), size, 1, (FILE *)handle);
+	written = fwrite(address, size, 1, (FILE *)handle);
 #endif
 
 	qcvm_return_int32(vm, written);

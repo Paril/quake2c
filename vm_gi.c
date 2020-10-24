@@ -172,14 +172,26 @@ static void QC_trace(qcvm_t *vm)
 	const content_flags_t contents = qcvm_argv_int32(vm, 6);
 
 	trace_t trace_result = gi.trace(&start, &mins, &maxs, &end, ent, contents);
+
+	if (trace_result.fraction == 1.0f && trace_result.surface == NULL)
+	{
+		gi.dprintf("Q2PRO runaway trace trapped, re-tracing...\n");
+		trace_result = gi.trace(&start, &mins, &maxs, &end, ent, contents);
+	}
+
 	trace->allsolid = trace_result.allsolid;
 	trace->startsolid = trace_result.startsolid;
 	trace->fraction = trace_result.fraction;
 	trace->endpos = trace_result.endpos;
 	trace->normal = trace_result.plane.normal;
-	trace->surface.flags = trace_result.surface->flags;
-	trace->surface.value = trace_result.surface->value;
-	trace->surface.name = qcvm_store_or_find_string(vm, trace_result.surface->name, strlen(trace_result.surface->name), true);
+	if (trace_result.surface)
+	{
+		trace->surface.flags = trace_result.surface->flags;
+		trace->surface.value = trace_result.surface->value;
+		trace->surface.name = qcvm_store_or_find_string(vm, trace_result.surface->name, strlen(trace_result.surface->name), true);
+	}
+	else
+		trace->surface = (QC_csurface_t) { STRING_EMPTY, 0, 0 };
 
 	if (qcvm_string_list_is_ref_counted(vm, trace->surface.name))
 		qcvm_string_list_mark_ref_copy(vm, trace->surface.name, &trace->surface.name);
@@ -278,6 +290,8 @@ typedef struct
 	// in
 	QC_usercmd_t	cmd;
 	bool			snapinitial;
+	qcvm_ent_t		passent;
+	content_flags_t	mask;
 	
 	// out
 	QC_entity_set_t	touchents;
@@ -292,7 +306,6 @@ typedef struct
 	int		waterlevel;
 	
 	// in (callbacks)
-	qcvm_func_t trace;
 	qcvm_func_t pointcontents;
 } QC_pmove_t;
 
@@ -310,44 +323,12 @@ static content_flags_t QC_pm_pointcontents(const vec3_t *position)
 	return *qcvm_get_global_typed(content_flags_t, pmove_vm, GLOBAL_RETURN);
 }
 
-static qcvm_func_t QC_pm_trace_func;
+static edict_t *QC_pm_passent;
+static content_flags_t QC_pm_mask;
 
 static trace_t QC_pm_trace(const vec3_t *start, const vec3_t *mins, const vec3_t *maxs, const vec3_t *end)
 {
-	QC_trace_t qc_tr;
-
-	qcvm_function_t *func = qcvm_get_function(pmove_vm, QC_pm_trace_func);
-	qcvm_set_allowed_stack(pmove_vm, &qc_tr, sizeof(qc_tr));
-	const qcvm_pointer_t pointer = qcvm_make_pointer(pmove_vm, QCVM_POINTER_STACK, &qc_tr);
-	qcvm_set_global_typed_value(qcvm_pointer_t, pmove_vm, GLOBAL_PARM0, pointer);
-	qcvm_set_global_typed_ptr(vec3_t, pmove_vm, GLOBAL_PARM1, start);
-	qcvm_set_global_typed_ptr(vec3_t, pmove_vm, GLOBAL_PARM2, mins);
-	qcvm_set_global_typed_ptr(vec3_t, pmove_vm, GLOBAL_PARM3, maxs);
-	qcvm_set_global_typed_ptr(vec3_t, pmove_vm, GLOBAL_PARM4, end);
-	qcvm_execute(pmove_vm, func);
-
-	static csurface_t qc_surface;
-	trace_t tr;
-	tr.allsolid = (qboolean)qc_tr.allsolid;
-	tr.startsolid = (qboolean)qc_tr.startsolid;
-	tr.fraction = qc_tr.fraction;
-	tr.endpos = qc_tr.endpos;
-	tr.plane = (cplane_t) { qc_tr.normal, 0, 0, 0, { 0, 0 } };
-	qc_surface.flags = qc_tr.surface.flags;
-	qc_surface.value = qc_tr.surface.value;
-
-	const char *str = qcvm_get_string(pmove_vm, qc_tr.surface.name);
-
-	if (str)
-		Q_strlcpy(qc_surface.name, str, sizeof(qc_surface.name));
-	else
-		qc_surface.name[0] = 0;
-
-	tr.surface = &qc_surface;
-	tr.contents = (content_flags_t)qc_tr.contents;
-	tr.ent = qcvm_ent_to_entity(pmove_vm, qc_tr.ent, false);
-
-	return tr;
+	return gi.trace(start, mins, maxs, end, QC_pm_passent, QC_pm_mask);
 }
 
 static void QC_Pmove(qcvm_t *vm)
@@ -385,10 +366,16 @@ static void QC_Pmove(qcvm_t *vm)
 	pm.cmd.sidemove = qc_pm->cmd.sidemove;
 	pm.cmd.upmove = qc_pm->cmd.upmove;
 
-	QC_pm_pointcontents_func = qc_pm->pointcontents;
-	pm.pointcontents = QC_pm_pointcontents;
+	if (qc_pm->pointcontents)
+	{
+		QC_pm_pointcontents_func = qc_pm->pointcontents;
+		pm.pointcontents = QC_pm_pointcontents;
+	}
+	else
+		pm.pointcontents = gi.pointcontents;
 
-	QC_pm_trace_func = qc_pm->trace;
+	QC_pm_passent = qcvm_ent_to_entity(vm, qc_pm->passent, true);
+	QC_pm_mask = qc_pm->mask;
 	pm.trace = QC_pm_trace;
 
 	gi.Pmove(&pm);

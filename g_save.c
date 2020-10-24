@@ -64,14 +64,17 @@ static void WriteDefinitionData(FILE *fp, const qcvm_definition_t *def, const qc
 		fwrite(&number, sizeof(number), 1, fp);
 		return;
 	}
-	
-	const size_t len = (type == TYPE_VECTOR) ? 3 : 1;
-	fwrite(value, sizeof(qcvm_global_t), len, fp);
+
+	fwrite(value, sizeof(qcvm_global_t), qcvm_type_span(def->id), fp);
 }
 
 static void WriteEntityFieldData(FILE *fp, edict_t *ent, const qcvm_definition_t *def)
 {
-	const int32_t *field = (const int32_t *)qcvm_resolve_pointer(qvm, qcvm_get_entity_field_pointer(qvm, ent, (int32_t)def->global_index));
+	int32_t *field;
+	
+	if (!qcvm_resolve_pointer(qvm, qcvm_get_entity_field_pointer(qvm, ent, (int32_t)def->global_index), false, qcvm_type_size(def->id), (void**)&field))
+		qcvm_error(qvm, "bad pointer");
+
 	WriteDefinitionData(fp, def, (const qcvm_global_t *)field);
 }
 
@@ -116,14 +119,17 @@ static void ReadDefinitionData(qcvm_t *vm, FILE *fp, const qcvm_definition_t *de
 		*value = (qcvm_global_t)qcvm_entity_to_ent(qvm, qcvm_itoe(qvm, number));
 		return;
 	}
-	
-	const size_t len = (type == TYPE_VECTOR) ? 3 : 1;
-	fread(value, sizeof(qcvm_global_t), len, fp);
+
+	fread(value, sizeof(qcvm_global_t), qcvm_type_span(def->id), fp);
 }
 
 static void ReadEntityFieldData(qcvm_t *vm, FILE *fp, edict_t *ent, const qcvm_definition_t *def)
 {
-	int32_t *field = (int32_t *)qcvm_resolve_pointer(qvm, qcvm_get_entity_field_pointer(qvm, ent, (int32_t)def->global_index));
+	int32_t *field;
+
+	if (!qcvm_resolve_pointer(qvm, qcvm_get_entity_field_pointer(qvm, ent, (int32_t)def->global_index), false, qcvm_type_size(def->id), (void**)&field))
+		qcvm_error(vm, "bad pointer");
+
 	ReadDefinitionData(vm, fp, def, (qcvm_global_t *)field);
 }
 

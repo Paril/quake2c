@@ -123,12 +123,15 @@ static void QC_entity_key_parse(qcvm_t *vm)
 
 	const qcvm_global_t field = vm->global_data[hashed->def->global_index];
 
-	void *ptr = qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, ent, field));
-
 	qcvm_definition_t *f = vm->field_map_by_id[field];
 
 	if (!f || strcmp(key, qcvm_get_string(vm, f->name_index)) || f->global_index != field)
 		qcvm_error(vm, "Couldn't match field %u", field);
+
+	void *ptr;
+
+	if (!qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, ent, field), false, qcvm_type_size(f->id), &ptr))
+		qcvm_error(vm, "bad pointer");
 
 	QC_parse_value_into_ptr(vm, f->id, value, ptr);
 }

@@ -1,5 +1,8 @@
 #pragma once
 
+// fixing a bug with num_locals
+#define LOCALS_FIX 2
+
 typedef struct qcvm_s qcvm_t;
 
 // whether or not to use address-of-label opcode jumps.
@@ -93,6 +96,16 @@ enum
 };
 
 typedef uint32_t qcvm_deftype_t;
+
+inline size_t qcvm_type_span(const qcvm_deftype_t type)
+{
+	return (type & ~TYPE_GLOBAL) == TYPE_VECTOR ? 3 : 1;
+}
+
+inline size_t qcvm_type_size(const qcvm_deftype_t type)
+{
+	return qcvm_type_span(type) * sizeof(qcvm_global_t);
+}
 
 typedef uint32_t qcvm_opcode_t;
 
@@ -259,18 +272,36 @@ typedef struct
 // POINTER STUFF
 enum
 {
+	// null pointer; offset means nothing
 	QCVM_POINTER_NULL,
+	// pointer into global; offset is a byte offset into global data
 	QCVM_POINTER_GLOBAL,
+	// pointer into entity; offset is a byte offset into entity data
 	QCVM_POINTER_ENTITY,
-	QCVM_POINTER_STACK
+	// pointer into handle; first 10 bits are handle index (max handles of 2048)
+	// and the other 20 bits are the byte offset (max offset of 2 MB)
+	QCVM_POINTER_HANDLE
 };
 
 typedef uint32_t qcvm_pointer_type_t;
 
 typedef struct
 {
+	uint32_t			offset : 20;
+	uint32_t			index : 10;
+	qcvm_pointer_type_t	type : 2;
+} qcvm_handle_pointer_t;
+
+typedef struct
+{
 	uint32_t			offset : 30;
 	qcvm_pointer_type_t	type : 2;
+} qcvm_raw_pointer_t;
+
+typedef union
+{
+	qcvm_raw_pointer_t		raw;
+	qcvm_handle_pointer_t	handle;
 } qcvm_pointer_t;
 
 // Variant
@@ -362,7 +393,6 @@ typedef struct
 	size_t					ref_storage_stored, ref_storage_allocated;
 } qcvm_string_list_t;
 
-size_t qcvm_string_list_get_length(const qcvm_t *vm, const qcvm_string_t id);
 const char *qcvm_string_list_get(const qcvm_t *vm, const qcvm_string_t id);
 void qcvm_string_list_acquire(qcvm_t *vm, const qcvm_string_t id);
 void qcvm_string_list_release(qcvm_t *vm, const qcvm_string_t id);
@@ -485,9 +515,10 @@ typedef struct qcvm_definition_hash_s
 // On the QC side, just be sure to call handle_free when you're done with it!
 typedef struct
 {
-	void	(*free)		(qcvm_t *vm, void *handle);
-	void	(*write)	(qcvm_t *vm, void *handle, FILE *fp);
-	void	*(*read)	(qcvm_t *vm, FILE *fp);
+	void	(*free)				(qcvm_t *vm, void *handle);
+	void	(*write)			(qcvm_t *vm, void *handle, FILE *fp);
+	void	*(*read)			(qcvm_t *vm, FILE *fp);
+	bool	(*resolve_pointer)	(const qcvm_t *vm, void *handle, const size_t offset, const size_t len, void **address);
 } qcvm_handle_descriptor_t;
 
 typedef int32_t qcvm_handle_id_t;
@@ -510,10 +541,13 @@ typedef struct
 static const size_t HANDLES_RESERVE = 128;
 
 int32_t qcvm_handle_alloc(qcvm_t *vm, void *ptr, const qcvm_handle_descriptor_t *descriptor);
-qcvm_handle_t *qcvm_fetch_handle(qcvm_t *vm, const int32_t id);
+qcvm_handle_t *qcvm_fetch_handle(const qcvm_t *vm, const int32_t id);
+
+#define qcvm_fetch_handle_typed(type, vm, id) \
+	((type *)(qcvm_fetch_handle(vm, (id))->handle))
+
 void qcvm_handle_free(qcvm_t *vm, qcvm_handle_t *handle);
 
-void qcvm_set_allowed_stack(qcvm_t *vm, const void *ptr, const size_t length);
 qcvm_global_t *qcvm_get_global(qcvm_t *vm, const qcvm_global_t g);
 const qcvm_global_t *qcvm_get_const_global(const qcvm_t *vm, const qcvm_global_t g);
 
@@ -647,14 +681,6 @@ typedef struct qcvm_s
 	// fields in Q2, since we have special requirements like ptrs that can't exactly
 	// be resolved by a simple mapping.
 	qcvm_field_wrapper_t	*field_wraps;
-	// there's a specific case in Q2 (specifically the trace function in pmove_t) that
-	// requires a pointer passed to a callback function to resolve a trace. While I could
-	// use an out parameter, since Pmove is quite heavy on performance I added a special method
-	// to specify a pointer to the stack in C code that is allowed to be passed by ptr to
-	// QC. This value only persists until the end of the next function call. Might get
-	// rid of this later...
-	const void	*allowed_stack;
-	size_t		allowed_stack_size;
 	// fields in QC use a zero-indexed system which is basically a direct map into an entity's data.
 	// think of an entity as int*, sized by the highest possible field value, and when a field is read/write
 	// it's just (int *)(edicts + size)[index] as the start position. In Q1 this is all fields used by QC, and
@@ -740,6 +766,8 @@ typedef struct qcvm_s
 #endif
 } qcvm_t;
 
+__attribute__((noreturn)) void qcvm_error(const qcvm_t *vm, const char *format, ...);
+
 // Entity stuff
 inline void *qcvm_itoe(const qcvm_t *vm, const int32_t n)
 {
@@ -776,61 +804,74 @@ inline qcvm_ent_t qcvm_entity_to_ent(const qcvm_t *vm, const edict_t *ent)
 	return (qcvm_ent_t)ent->s.number;
 }
 
+inline bool qcvm_handle_resolve_pointer(const qcvm_t *vm, const qcvm_handle_pointer_t pointer, const size_t len, void **address)
+{
+	qcvm_handle_t *handle = qcvm_fetch_handle(vm, pointer.index);
+
+	if (!handle->descriptor->resolve_pointer)
+		qcvm_error(vm, "handle has no pointer routine");
+
+	return handle->descriptor->resolve_pointer(vm, handle->handle, pointer.offset, len, address);
+}
+
 // Pointers
-inline bool qcvm_pointer_valid(const qcvm_t *vm, const qcvm_pointer_t pointer, const bool allow_null, const size_t len)
+inline bool qcvm_resolve_pointer(const qcvm_t *vm, const qcvm_pointer_t pointer, const bool allow_null, const size_t len, void **address)
 {
-	switch (pointer.type)
+	switch (pointer.raw.type)
 	{
 	case QCVM_POINTER_NULL:
 	default:
-		return allow_null && !len && !pointer.offset;
+		if (allow_null && !len && !pointer.raw.offset)
+		{
+			if (address)
+				*address = NULL;
+			return true;
+		}
+		return false;
 	case QCVM_POINTER_GLOBAL:
-		return (pointer.offset + len) <= vm->global_size * sizeof(qcvm_global_t);
+		if ((pointer.raw.offset + len) <= vm->global_size * sizeof(qcvm_global_t))
+		{
+			if (address)
+				*address = (uint8_t *)vm->global_data + pointer.raw.offset;
+			return true;
+		}
+		return false;
 	case QCVM_POINTER_ENTITY:
-		return (pointer.offset + len) <= vm->edict_size * vm->max_edicts * sizeof(qcvm_global_t);
-	case QCVM_POINTER_STACK:
-		return vm->allowed_stack && (pointer.offset + len) <= vm->allowed_stack_size;
+		if ((pointer.raw.offset + len) <= vm->edict_size * vm->max_edicts * sizeof(qcvm_global_t))
+		{
+			if (address)
+				*address = (uint8_t *)vm->edicts + pointer.raw.offset;
+			return true;
+		}
+		return false;
+	case QCVM_POINTER_HANDLE:
+		return qcvm_handle_resolve_pointer(vm, pointer.handle, len, address);
 	}
 }
 
-inline void *qcvm_resolve_pointer(const qcvm_t *vm, const qcvm_pointer_t address)
-{
-	switch (address.type)
-	{
-	case QCVM_POINTER_NULL:
-	default:
-		return NULL;
-	case QCVM_POINTER_GLOBAL:
-		return (uint8_t *)vm->global_data + address.offset;
-	case QCVM_POINTER_ENTITY:
-		return (uint8_t *)vm->edicts + address.offset;
-	case QCVM_POINTER_STACK:
-		return (uint8_t *)vm->allowed_stack + address.offset;
-	}
-}
-
+// this is a convenience function, but cannot make QCVM_POINTER_HANDLE pointers
 inline qcvm_pointer_t qcvm_make_pointer(const qcvm_t *vm, const qcvm_pointer_type_t type, const void *pointer)
 {
 	switch (type)
 	{
 	case QCVM_POINTER_NULL:
-	default:
-		return (qcvm_pointer_t) { 0, type };
+		return (qcvm_pointer_t) { .raw = { .offset = 0, .type = type } };
 	case QCVM_POINTER_GLOBAL:
-		return (qcvm_pointer_t) { (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->global_data), type };
+		return (qcvm_pointer_t) { .raw = { .offset = (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->global_data), .type = type } };
 	case QCVM_POINTER_ENTITY:
-		return (qcvm_pointer_t) { (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->edicts), type };
-	case QCVM_POINTER_STACK:
-		return (qcvm_pointer_t) { (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->allowed_stack), type };
+		return (qcvm_pointer_t) { .raw = { .offset = (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->edicts), .type = type } };
+	default:
+		qcvm_error(vm, "bad use of qcvm_make_pointer");
 	}
 }
 
 inline qcvm_pointer_t qcvm_offset_pointer(const qcvm_t *vm, const qcvm_pointer_t pointer, const size_t offset)
 {
-	return (qcvm_pointer_t) { (uint32_t)(pointer.offset + offset), pointer.type };
-}
+	if (pointer.raw.type == QCVM_POINTER_HANDLE)
+		return (qcvm_pointer_t) { .handle = { .offset = (uint32_t)(pointer.handle.offset + offset), .index = pointer.handle.index, .type = pointer.handle.type } };
 
-__attribute__((noreturn)) void qcvm_error(const qcvm_t *vm, const char *format, ...);
+	return (qcvm_pointer_t) { .raw = { .offset = (uint32_t)(pointer.raw.offset + offset), .type = pointer.raw.type } };
+}
 
 #ifdef _DEBUG
 void qcvm_debug(const qcvm_t *vm, const char *format, ...);
@@ -891,6 +932,11 @@ inline vec3_t qcvm_argv_vector(const qcvm_t *vm, const uint8_t d)
 	return *qcvm_get_const_global_typed(vec3_t, vm, qcvm_global_offset(GLOBAL_PARM0, d * 3));
 }
 
+inline qcvm_variant_t qcvm_argv_variant(const qcvm_t *vm, const uint8_t d)
+{
+	return *qcvm_get_const_global_typed(qcvm_variant_t, vm, qcvm_global_offset(GLOBAL_PARM0, d * 3));
+}
+
 inline qcvm_pointer_t qcvm_argv_pointer(const qcvm_t *vm, const uint8_t d)
 {
 	return *qcvm_get_const_global_typed(qcvm_pointer_t, vm, qcvm_global_offset(GLOBAL_PARM0, d * 3));
@@ -907,6 +953,11 @@ inline void qcvm_return_float(qcvm_t *vm, const vec_t value)
 inline void qcvm_return_vector(qcvm_t *vm, const vec3_t value)
 {
 	qcvm_set_global_typed_value(vec3_t, vm, GLOBAL_RETURN, value);
+}
+
+inline void qcvm_return_variant(qcvm_t *vm, const qcvm_variant_t value)
+{
+	qcvm_set_global_typed_value(qcvm_variant_t, vm, GLOBAL_RETURN, value);
 }
 	
 inline void qcvm_return_entity(qcvm_t *vm, const edict_t *value)
@@ -945,7 +996,7 @@ inline void qcvm_return_string(qcvm_t *vm, const char *str)
 inline void qcvm_return_pointer(qcvm_t *vm, const qcvm_pointer_t ptr)
 {
 #ifdef _DEBUG
-	if (!qcvm_pointer_valid(vm, ptr, false, sizeof(qcvm_global_t)))
+	if (!qcvm_resolve_pointer(vm, ptr, false, sizeof(qcvm_global_t), NULL))
 		qcvm_debug(vm, "Invalid pointer returned; writes to this will fail");
 #endif
 
@@ -1053,9 +1104,9 @@ inline void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 	// save current stack space that will be overwritten by the new function
 	if (cur_stack && function->num_args_and_locals)
 	{
-		memcpy(cur_stack->locals, qcvm_get_global(vm, function->first_arg), sizeof(qcvm_global_t) * function->num_args_and_locals);
+		memcpy(cur_stack->locals, qcvm_get_global(vm, function->first_arg), sizeof(qcvm_global_t) * (function->num_args_and_locals + LOCALS_FIX));
 		
-		for (qcvm_global_t i = 0, arg = function->first_arg; i < function->num_args_and_locals; i++, arg++)
+		for (qcvm_global_t i = 0, arg = function->first_arg; i < (function->num_args_and_locals + LOCALS_FIX); i++, arg++)
 		{
 			const void *ptr = qcvm_get_global(vm, (qcvm_global_t)arg);
 
@@ -1109,7 +1160,7 @@ inline void qcvm_leave(qcvm_t *vm)
 
 	if (prev_stack && current_stack->function->num_args_and_locals)
 	{
-		memcpy(qcvm_get_global(vm, current_stack->function->first_arg), prev_stack->locals, sizeof(qcvm_global_t) * current_stack->function->num_args_and_locals);
+		memcpy(qcvm_get_global(vm, current_stack->function->first_arg), prev_stack->locals, sizeof(qcvm_global_t) * (current_stack->function->num_args_and_locals + LOCALS_FIX));
 
 		for (const qcvm_string_backup_t *str = prev_stack->ref_strings; str < prev_stack->ref_strings + prev_stack->ref_strings_size; str++)
 			qcvm_string_list_push_ref(vm, str);
@@ -1131,9 +1182,6 @@ inline void qcvm_leave(qcvm_t *vm)
 	if (vm->profile_flags & PROFILE_FUNCTIONS)
 		current_stack->profile->self[vm->profiler_mark] += Q_time() - current_stack->caller_start;
 #endif
-
-	vm->allowed_stack = 0;
-	vm->allowed_stack_size = 0;
 
 #ifdef ALLOW_INSTRUMENTING
 	if (vm->profiler_func && vm->state.profile_mark_depth)

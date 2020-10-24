@@ -38,8 +38,8 @@ static int QC_qsort_callback(const void *a, const void *b, void *ctx)
 #endif
 {
 	qsort_context_t *context = (qsort_context_t *)ctx;
-	qcvm_pointer_t a_ptr = qcvm_make_pointer(context->vm, context->elements.type, a);
-	qcvm_pointer_t b_ptr = qcvm_make_pointer(context->vm, context->elements.type, b);
+	qcvm_pointer_t a_ptr = qcvm_make_pointer(context->vm, context->elements.raw.type, a);
+	qcvm_pointer_t b_ptr = qcvm_make_pointer(context->vm, context->elements.raw.type, b);
 	
 	qcvm_set_global_typed_value(qcvm_pointer_t, context->vm, GLOBAL_PARM0, a_ptr);
 	qcvm_set_global_typed_value(qcvm_pointer_t, context->vm, GLOBAL_PARM1, b_ptr);
@@ -54,8 +54,9 @@ static void QC_qsort(qcvm_t *vm)
 	const qcvm_pointer_t elements = qcvm_argv_pointer(vm, 0);
 	const int32_t num = qcvm_argv_int32(vm, 1);
 	const int32_t size_of_element = qcvm_argv_int32(vm, 2);
+	void *address;
 
-	if (!qcvm_pointer_valid(vm, elements, false, num * size_of_element))
+	if (elements.raw.type == QCVM_POINTER_HANDLE || !qcvm_resolve_pointer(vm, elements, false, num * size_of_element, &address))
 		qcvm_error(vm, "bad pointer");
 
 	qcvm_function_t *comparator_func = qcvm_get_function(vm, qcvm_argv_int32(vm, 3));
@@ -65,7 +66,7 @@ static void QC_qsort(qcvm_t *vm)
 	if (vm->state.argc > 4)
 		context.ctx = qcvm_argv_pointer(vm, 4);
 
-	qsort_s(qcvm_resolve_pointer(vm, elements), num, size_of_element, QC_qsort_callback, &context);
+	qsort_s(address, num, size_of_element, QC_qsort_callback, &context);
 }
 
 void qcvm_init_ext_builtins(qcvm_t *vm)

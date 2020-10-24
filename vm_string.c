@@ -158,6 +158,48 @@ static void QC_strchr(qcvm_t *vm)
 	qcvm_return_int32(vm, c == NULL ? -1 : (int32_t)(c - a));
 }
 
+static void QC_chrlwr(qcvm_t *vm)
+{
+	char a = qcvm_argv_int32(vm, 0);
+	qcvm_return_int32(vm, tolower(a));
+}
+
+static void QC_chrupr(qcvm_t *vm)
+{
+	char a = qcvm_argv_int32(vm, 0);
+	qcvm_return_int32(vm, toupper(a));
+}
+
+static void QC_strlwr(qcvm_t *vm)
+{
+	const qcvm_string_t a = qcvm_argv_string_id(vm, 0);
+	const size_t length = qcvm_get_string_length(vm, a);
+	
+	char *buffer = qcvm_temp_buffer(vm, length);
+	strncpy(buffer, qcvm_get_string(vm, a), length);
+	buffer[length] = 0;
+
+	for (size_t i = 0; i < length; i++)
+		buffer[i] = tolower(buffer[i]);
+
+	qcvm_return_string(vm, buffer);
+}
+
+static void QC_strupr(qcvm_t *vm)
+{
+	const qcvm_string_t a = qcvm_argv_string_id(vm, 0);
+	const size_t length = qcvm_get_string_length(vm, a);
+	
+	char *buffer = qcvm_temp_buffer(vm, length);
+	strncpy(buffer, qcvm_get_string(vm, a), length);
+	buffer[length] = 0;
+
+	for (size_t i = 0; i < length; i++)
+		buffer[i] = toupper(buffer[i]);
+
+	qcvm_return_string(vm, buffer);
+}
+
 #include <time.h>
 
 static void QC_localtime(qcvm_t *vm)
@@ -186,6 +228,10 @@ void qcvm_init_string_builtins(qcvm_t *vm)
 	qcvm_register_builtin(strconcat);
 	qcvm_register_builtin(strstr);
 	qcvm_register_builtin(strchr);
+	qcvm_register_builtin(chrlwr);
+	qcvm_register_builtin(chrupr);
+	qcvm_register_builtin(strlwr);
+	qcvm_register_builtin(strupr);
 
 	qcvm_register_builtin(localtime);
 }

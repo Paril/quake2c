@@ -68,7 +68,7 @@ void qcvm_string_list_unstore(qcvm_t *vm, const qcvm_string_t id)
 	list->free_indices[list->free_indices_size++] = id;
 }
 
-size_t qcvm_string_list_get_length(const qcvm_t *vm, const qcvm_string_t id)
+static size_t qcvm_string_list_get_length(const qcvm_t *vm, const qcvm_string_t id)
 {
 	const qcvm_string_list_t *list = &vm->dynamic_strings;
 	const int32_t index = (int32_t)(-id) - 1;

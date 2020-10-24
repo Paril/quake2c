@@ -25,7 +25,13 @@ static void QC_dumpentity(qcvm_t *vm)
 	{
 		fprintf(fp, "%s: ", qcvm_get_string(vm, f->name_index));
 
-		const ptrdiff_t val = (ptrdiff_t)(qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, ent, (int32_t)f->global_index)));
+		ptrdiff_t val;
+
+		if (!qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, ent, (int32_t)f->global_index), true, qcvm_type_size(f->id), (void **)&val))
+		{
+			fclose(fp);
+			qcvm_error(vm, "invalid pointer");
+		}
 
 		switch (f->id)
 		{
@@ -204,23 +210,23 @@ void qcvm_check_debugger_commands(qcvm_t *vm)
 		int start = 10;
 		const char *variable = strtok_emulate(vm, qc_strtok, debugger_command, &start);
 
-		qcvm_variant_t result = qcvm_evaluate(vm, variable);
+		qcvm_evaluated_t result = qcvm_evaluate(vm, variable);
 		const char *value;
 		char *slashed = NULL;
 		
-		switch (result.type)
+		switch (result.variant.type)
 		{
 		case TYPE_INTEGER:
-			value = qcvm_temp_format(vm, "%i", result.value.itg);
+			value = qcvm_temp_format(vm, "[%i]_%i", result.global, result.variant.value.itg);
 			break;
 		case TYPE_FLOAT:
-			value = qcvm_temp_format(vm, "%g", result.value.flt);
+			value = qcvm_temp_format(vm, "[%i]_%g", result.global, result.variant.value.flt);
 			break;
 		case TYPE_VECTOR:
-			value = qcvm_temp_format(vm, "\"%f %f %f\"", result.value.vec.x, result.value.vec.y, result.value.vec.z);
+			value = qcvm_temp_format(vm, "[%i]_%f_%f_%f", result.global, result.variant.value.vec.x, result.variant.value.vec.y, result.variant.value.vec.z);
 			break;
 		case TYPE_STRING:
-			value = qcvm_get_string(vm, result.value.str);
+			value = qcvm_get_string(vm, result.variant.value.str);
 
 			if (strchr(value, '"') || strchr(value, '\\'))
 			{
@@ -252,28 +258,30 @@ void qcvm_check_debugger_commands(qcvm_t *vm)
 
 				value = slashed;
 			}
+
+			value = qcvm_temp_format(vm, "[%i]_%s", result.global, value);
 			break;
 		case TYPE_ENTITY:
-			if (result.value.ent == ENT_INVALID)
-				value = "\"invalid/null entity\"";
+			if (result.variant.value.ent == ENT_INVALID)
+				value = qcvm_temp_format(vm, "[%i]_invalid/null_entity", result.global);
 			else
-				value = qcvm_temp_format(vm, "\"entity %i\"", qcvm_ent_to_entity(vm, result.value.ent, false)->s.number);
+				value = qcvm_temp_format(vm, "[%i]_entity_%i", result.global, qcvm_ent_to_entity(vm, result.variant.value.ent, false)->s.number);
 			break;
 		case TYPE_FUNCTION:
-			if (result.value.fnc == FUNC_VOID)
-				value = "\"invalid/null function\"";
+			if (result.variant.value.fnc == FUNC_VOID)
+				value = qcvm_temp_format(vm, "[%i]_invalid/null_function", result.global);
 			else
 			{
-				qcvm_function_t *func = qcvm_get_function(vm, result.value.fnc);
+				qcvm_function_t *func = qcvm_get_function(vm, result.variant.value.fnc);
 
 				if (!func || func->name_index == STRING_EMPTY)
-					value = qcvm_temp_format(vm, "\"can't resolve function: %i\"", result.value.fnc);
+					value = qcvm_temp_format(vm, "[%i]_can't_resolve_function_%i", result.global, result.variant.value.fnc);
 				else
-					value = qcvm_temp_format(vm, "%s", qcvm_get_string(vm, func->name_index));
+					value = qcvm_temp_format(vm, "[%i]_%s", result.global, qcvm_get_string(vm, func->name_index));
 			}
 			break;
 		default:
-			value = "\"unable to evaluate\"";
+			value = "unable_to_evaluate";
 			break;
 		}
 

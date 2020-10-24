@@ -286,7 +286,9 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 	edict_t *ent = qcvm_ent_to_entity(vm, *qcvm_get_global_typed(qcvm_ent_t, vm, operands.a), true); \
 	const int32_t field = *qcvm_get_global_typed(int32_t, vm, operands.b); \
 	const qcvm_pointer_t pointer = qcvm_get_entity_field_pointer(vm, ent, field); \
-	TType *field_value = (TType *)qcvm_resolve_pointer(vm, pointer); \
+	TType *field_value; \
+	if (!qcvm_resolve_pointer(vm, pointer, false, sizeof(TType), (void**)&field_value)) \
+		qcvm_error(vm, "invalid pointer"); \
 	qcvm_set_global_typed_ptr(TType, vm, operands.c, field_value); \
 	qcvm_string_list_mark_refs_copied(vm, field_value, qcvm_get_global(vm, operands.c), sizeof(TType) / sizeof(qcvm_global_t)); \
 	qcvm_field_wrap_list_check_set(vm, qcvm_get_global(vm, operands.c), sizeof(TType) / sizeof(qcvm_global_t)); \
@@ -340,14 +342,14 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 	qcvm_pointer_t pointer = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b); \
 	const ptrdiff_t offset = *qcvm_get_global_typed(int32_t, vm, operands.c); \
 	pointer = qcvm_offset_pointer(vm, pointer, offset * sizeof(qcvm_global_t)); \
+	TResult *address_ptr; \
 \
-	if (!qcvm_pointer_valid(vm, pointer, false, sizeof(TResult))) \
+	if (!qcvm_resolve_pointer(vm, pointer, false, sizeof(TResult), (void **)&address_ptr)) \
 		qcvm_error(vm, "invalid address"); \
 \
 	const TType *value = qcvm_get_global_typed(TType, vm, operands.a); \
 	const size_t span = sizeof(TType) / sizeof(qcvm_global_t); \
 \
-	TResult *address_ptr = (TResult *)qcvm_resolve_pointer(vm, pointer); \
 	*address_ptr = *value; \
 	qcvm_string_list_mark_refs_copied(vm, value, address_ptr, span); \
 	qcvm_field_wrap_list_check_set(vm, address_ptr, span); \
@@ -616,22 +618,24 @@ static void F_OP_CONV_FTOI(qcvm_t *vm, const qcvm_operands_t operands, int *dept
 static void F_OP_CP_ITOF(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
 	const qcvm_pointer_t address = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.a);
+	int32_t i;
 
-	if (!qcvm_pointer_valid(vm, address, false, sizeof(int32_t)))
+	if (!qcvm_resolve_pointer(vm, address, false, sizeof(int32_t), (void**)&i))
 		qcvm_error(vm, "invalid address");
 
-	const vec_t result = (vec_t)(*(int32_t *)qcvm_resolve_pointer(vm, address));
+	const vec_t result = i;
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
 }
 
 static void F_OP_CP_FTOI(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
 	const qcvm_pointer_t address = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.a);
+	vec_t f;
 	
-	if (!qcvm_pointer_valid(vm, address, false, sizeof(vec_t)))
+	if (!qcvm_resolve_pointer(vm, address, false, sizeof(vec_t), (void**)&f))
 		qcvm_error(vm, "invalid address");
 	
-	const int32_t result = (int32_t)(*(vec_t *)qcvm_resolve_pointer(vm, address));
+	const int32_t result = f;
 	qcvm_set_global_typed_value(int32_t, vm, operands.c, result);
 }
 
@@ -666,7 +670,7 @@ static void F_OP_GLOBALADDRESS(qcvm_t *vm, const qcvm_operands_t operands, int *
 	const qcvm_pointer_t pointer = qcvm_make_pointer(vm, QCVM_POINTER_GLOBAL, base + offset);
 
 #ifdef _DEBUG
-	if (!qcvm_pointer_valid(vm, pointer, false, sizeof(qcvm_global_t)))
+	if (!qcvm_resolve_pointer(vm, pointer, false, sizeof(qcvm_global_t), NULL))
 		qcvm_error(vm, "bad pointer");
 #endif
 
@@ -687,11 +691,11 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 { \
 	const ptrdiff_t address = (ptrdiff_t)operands.a + *qcvm_get_global_typed(int32_t, vm, operands.b); \
 	const qcvm_pointer_t pointer = qcvm_make_pointer(vm, QCVM_POINTER_GLOBAL, (void *)(vm->global_data + address)); \
+	TType *field_value; \
 \
-	if (!qcvm_pointer_valid(vm, pointer, false, sizeof(TType))) \
+	if (!qcvm_resolve_pointer(vm, pointer, false, sizeof(TType), (void**)&field_value)) \
 		qcvm_error(vm, "Invalid pointer %x", address); \
 \
-	TType *field_value = (TType *)(qcvm_resolve_pointer(vm, pointer)); \
 	qcvm_set_global_typed_ptr(TType, vm, operands.c, field_value); \
 \
 	const size_t span = sizeof(TType) / sizeof(qcvm_global_t); \
@@ -712,11 +716,11 @@ static inline void F_OP_LOADP_BASE(qcvm_t *vm, const qcvm_operands_t operands, i
 {
 	qcvm_pointer_t pointer = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.a);
 	pointer = qcvm_offset_pointer(vm, pointer, *qcvm_get_global_typed(int32_t, vm, operands.b) * sizeof(qcvm_global_t));
+	void *field_value;
 
-	if (!qcvm_pointer_valid(vm, pointer, false, TType_size))
-		qcvm_error(vm, "Invalid pointer %i:%x", pointer.type, pointer.offset);
+	if (!qcvm_resolve_pointer(vm, pointer, false, TType_size, &field_value))
+		qcvm_error(vm, "Invalid pointer");
 
-	void *field_value = (void *)(qcvm_resolve_pointer(vm, pointer));
 	qcvm_set_global(vm, operands.c, field_value, TType_size);
 
 	const size_t span = TType_size / sizeof(qcvm_global_t);
@@ -770,12 +774,12 @@ static void F_OP_BOUNDCHECK(qcvm_t *vm, const qcvm_operands_t operands, int *dep
 
 static void F_OP_MULSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
-	const qcvm_pointer_t address = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	const qcvm_pointer_t pointer = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	vec_t *f;
 
-	if (!qcvm_pointer_valid(vm, address, false, sizeof(vec_t)))
+	if (!qcvm_resolve_pointer(vm, pointer, false, sizeof(vec_t), (void**)&f))
 		qcvm_error(vm, "bad pointer");
 
-	vec_t *f = (vec_t *)qcvm_resolve_pointer(vm, address);
 	const vec_t a = *qcvm_get_global_typed(vec_t, vm, operands.a);
 	const vec_t result = (*f) *= a;
 
@@ -785,12 +789,12 @@ static void F_OP_MULSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *de
 
 static void F_OP_MULSTOREP_VF(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
-	const qcvm_pointer_t address = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	const qcvm_pointer_t pointer = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	vec3_t *f;
 
-	if (!qcvm_pointer_valid(vm, address, false, sizeof(vec3_t)))
+	if (!qcvm_resolve_pointer(vm, pointer, false, sizeof(vec3_t), (void**)&f))
 		qcvm_error(vm, "bad pointer");
 
-	vec3_t *f = (vec3_t *)qcvm_resolve_pointer(vm, address);
 	const vec_t a = *qcvm_get_global_typed(vec_t, vm, operands.a);
 	const vec3_t result = (*f) = VectorScaleF(*f, a);
 	qcvm_set_global_typed_value(vec3_t, vm, operands.c, result);
@@ -799,12 +803,12 @@ static void F_OP_MULSTOREP_VF(qcvm_t *vm, const qcvm_operands_t operands, int *d
 
 static void F_OP_DIVSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
-	const qcvm_pointer_t address = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	const qcvm_pointer_t pointer = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	vec_t *f;
 
-	if (!qcvm_pointer_valid(vm, address, false, sizeof(vec_t)))
+	if (!qcvm_resolve_pointer(vm, pointer, false, sizeof(vec_t), (void**)&f))
 		qcvm_error(vm, "bad pointer");
 
-	vec_t *f = (vec_t *)qcvm_resolve_pointer(vm, address);
 	const vec_t a = *qcvm_get_global_typed(vec_t, vm, operands.a);
 	const vec_t result = (*f) /= a;
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
@@ -813,12 +817,12 @@ static void F_OP_DIVSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *de
 
 static void F_OP_ADDSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
-	const qcvm_pointer_t address = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	const qcvm_pointer_t pointer = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	vec_t *f;
 
-	if (!qcvm_pointer_valid(vm, address, false, sizeof(vec_t)))
+	if (!qcvm_resolve_pointer(vm, pointer, false, sizeof(vec_t), (void**)&f))
 		qcvm_error(vm, "bad pointer");
 
-	vec_t *f = (vec_t *)qcvm_resolve_pointer(vm, address);
 	const vec_t a = *qcvm_get_global_typed(vec_t, vm, operands.a);
 	const vec_t result = (*f) += a;
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
@@ -827,12 +831,12 @@ static void F_OP_ADDSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *de
 
 static void F_OP_ADDSTOREP_V(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
-	const qcvm_pointer_t address = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	const qcvm_pointer_t pointer = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	vec3_t *f;
 
-	if (!qcvm_pointer_valid(vm, address, false, sizeof(vec3_t)))
+	if (!qcvm_resolve_pointer(vm, pointer, false, sizeof(vec3_t), (void**)&f))
 		qcvm_error(vm, "bad pointer");
 
-	vec3_t *f = (vec3_t *)qcvm_resolve_pointer(vm, address);
 	const vec3_t a = *qcvm_get_global_typed(vec3_t, vm, operands.a);
 	const vec3_t result = (*f) = VectorAdd(*f, a);
 	qcvm_set_global_typed_value(vec3_t, vm, operands.c, result);
@@ -841,12 +845,12 @@ static void F_OP_ADDSTOREP_V(qcvm_t *vm, const qcvm_operands_t operands, int *de
 
 static void F_OP_SUBSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
-	const qcvm_pointer_t address = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	const qcvm_pointer_t pointer = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	vec_t *f;
 
-	if (!qcvm_pointer_valid(vm, address, false, sizeof(vec_t)))
+	if (!qcvm_resolve_pointer(vm, pointer, false, sizeof(vec_t), (void**)&f))
 		qcvm_error(vm, "bad pointer");
 
-	vec_t *f = (vec_t *)qcvm_resolve_pointer(vm, address);
 	const vec_t a = *qcvm_get_global_typed(vec_t, vm, operands.a);
 	const vec_t result = (*f) -= a;
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
@@ -855,12 +859,12 @@ static void F_OP_SUBSTOREP_F(qcvm_t *vm, const qcvm_operands_t operands, int *de
 
 static void F_OP_SUBSTOREP_V(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
-	const qcvm_pointer_t address = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	const qcvm_pointer_t pointer = *qcvm_get_global_typed(qcvm_pointer_t, vm, operands.b);
+	vec3_t *f;
 
-	if (!qcvm_pointer_valid(vm, address, false, sizeof(vec3_t)))
+	if (!qcvm_resolve_pointer(vm, pointer, false, sizeof(vec3_t), (void**)&f))
 		qcvm_error(vm, "bad pointer");
 
-	vec3_t *f = (vec3_t *)qcvm_resolve_pointer(vm, address);
 	const vec3_t a = *qcvm_get_global_typed(vec3_t, vm, operands.a);
 	const vec3_t result = (*f) = VectorSubtract(*f, a);
 	qcvm_set_global_typed_value(vec3_t, vm, operands.c, result);
@@ -912,8 +916,10 @@ static void F_OP(qcvm_t *vm, const qcvm_operands_t operands, int *depth) \
 	const size_t span = sizeof(TType) / sizeof(qcvm_global_t); \
 	edict_t *ent = qcvm_ent_to_entity(vm, *qcvm_get_global_typed(qcvm_ent_t, vm, operands.a), true); \
 	const int32_t field = *qcvm_get_global_typed(int32_t, vm, operands.b); \
-	const qcvm_pointer_t address = qcvm_get_entity_field_pointer(vm, ent, field); \
-	TType *field_value = (TType *)qcvm_resolve_pointer(vm, address); \
+	const qcvm_pointer_t pointer = qcvm_get_entity_field_pointer(vm, ent, field); \
+	TType *field_value; \
+	if (!qcvm_resolve_pointer(vm, pointer, false, sizeof(TType), (void**)&field_value)) \
+		qcvm_error(vm, "bad pointer"); \
 	const TType *value = qcvm_get_global_typed(TType, vm, operands.c); \
 \
 	*field_value = *value; \

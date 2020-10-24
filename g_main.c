@@ -366,7 +366,7 @@ static void InitGame (void)
 	qvm->debug.create_thread = qcvm_cpp_create_thread;
 	qvm->debug.thread_sleep = qcvm_cpp_thread_sleep;
 
-	if (gi.cvar("qc_debugger", "", CVAR_NONE)->value)
+	if (gi.cvar("qcvm_debugger", "", CVAR_NONE)->value)
 	{
 		qcvm_init_debugger(qvm);
 		qcvm_check_debugger_commands(qvm);
@@ -451,9 +451,12 @@ void RestoreClientData(void)
 			if (def->name_index == STRING_EMPTY || strnicmp(name, "client.", 6))
 				continue;
 
-			const uint32_t len = def->id == TYPE_VECTOR ? 3 : 1;
+			const size_t len = qcvm_type_span(def->id);
+			void *dst;
 
-			void *dst = qcvm_resolve_pointer(qvm, qcvm_get_entity_field_pointer(qvm, ent, def->global_index));
+			if (!qcvm_resolve_pointer(qvm, qcvm_get_entity_field_pointer(qvm, ent, def->global_index), false, len * sizeof(qcvm_global_t), &dst))
+				qcvm_error(qvm, "invalid pointer");
+
 			void *src = (int32_t *)backup + def->global_index;
 
 			memcpy(dst, src, sizeof(qcvm_global_t) * len);
@@ -628,6 +631,10 @@ static void RunFrame()
 	qcvm_execute(qvm, game.funcs.RunFrame);
 }
 
+#define OPCODES_ONLY
+#include "vm_opcodes.h"
+#undef OPCODES_ONLY
+
 static void ServerCommand()
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
@@ -643,6 +650,27 @@ static void ServerCommand()
 		qcvm_string_list_dump_refs(fp, qvm);
 		fclose(fp);
 		return;
+	}
+	else if (strcmp(cmd, "qc_dump_function") == 0)
+	{
+		const char *func = gi.argv(2);
+		qcvm_function_t *function;
+
+		if ((function = qcvm_find_function(qvm, func)))
+		{
+			FILE *fp = fopen(qcvm_temp_format(qvm, "%s%s.txt", qvm->path, func), "w");
+			fprintf(fp, "%s (locals: %i -> %i)\n", func, function->first_arg, function->first_arg + function->num_args_and_locals);
+			const qcvm_statement_t *statement = &qvm->statements[function->id];
+
+			while (statement->opcode != OP_DONE)
+			{
+				fprintf(fp, "%s\t%i\t%i\t%i\n", opcode_names[statement->opcode], statement->args.a, statement->args.b, statement->args.c);
+				statement++;
+			}
+
+			fclose(fp);
+			return;
+		}
 	}
 #endif
 

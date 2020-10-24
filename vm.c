@@ -9,6 +9,8 @@
 #include "vm_ext.h"
 #include "vm_file.h"
 #include "vm_hash.h"
+#include "vm_structlist.h"
+#include "vm_list.h"
 #include "vm_opcodes.h"
 
 #include <time.h>
@@ -564,15 +566,6 @@ const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
 #endif
 #endif
 
-void qcvm_set_allowed_stack(qcvm_t *vm, const void *ptr, const size_t length)
-{
-	if (length % 4 != 0)
-		qcvm_error(vm, "QCVM 'Allowed Stack' must be a multiple of 4.");
-
-	vm->allowed_stack = ptr;
-	vm->allowed_stack_size = length;
-}
-
 qcvm_global_t *qcvm_get_global(qcvm_t *vm, const qcvm_global_t g)
 {
 #ifdef ALLOW_INSTRUMENTING
@@ -595,14 +588,16 @@ const qcvm_global_t *qcvm_get_const_global(const qcvm_t *vm, const qcvm_global_t
 
 void *qcvm_get_global_ptr(qcvm_t *vm, const qcvm_global_t global, const size_t value_size)
 {
-	const qcvm_pointer_t address = *(const qcvm_pointer_t*)qcvm_get_const_global(vm, global);
+	const qcvm_pointer_t pointer = *(const qcvm_pointer_t*)qcvm_get_const_global(vm, global);
 
 	assert((value_size % 4) == 0);
 
-	if (!qcvm_pointer_valid(vm, address, false, value_size))
+	void *address;
+
+	if (!qcvm_resolve_pointer(vm, pointer, false, value_size, &address))
 		qcvm_error(vm, "bad address");
 
-	return (void *)(qcvm_resolve_pointer(vm, address));
+	return address;
 }
 
 void qcvm_set_global(qcvm_t *vm, const qcvm_global_t global, const void *value, const size_t value_size)
@@ -705,37 +700,37 @@ qcvm_definition_t *qcvm_find_field(qcvm_t *vm, const char *name)
 }
 
 #ifdef ALLOW_DEBUGGING
-static qcvm_variant_t qcvm_value_from_ptr(const qcvm_definition_t *def, const void *ptr)
+static qcvm_evaluated_t qcvm_value_from_ptr(const qcvm_definition_t *def, const void *ptr)
 {
 	switch (def->id & ~TYPE_GLOBAL)
 	{
 	default:
-		return (qcvm_variant_t) { .type = TYPE_VOID };
+		return (qcvm_evaluated_t) { def->global_index, .variant = { .type = TYPE_VOID } };
 	case TYPE_STRING:
-		return (qcvm_variant_t) { .type = TYPE_STRING, .value.str = *(const qcvm_string_t *)(ptr) };
+		return (qcvm_evaluated_t) { def->global_index, .variant = { .type = TYPE_STRING, .value.str = *(const qcvm_string_t *)(ptr) } };
 	case TYPE_FLOAT:
-		return (qcvm_variant_t) { .type = TYPE_FLOAT, .value.flt = *(const vec_t *)(ptr) };
+		return (qcvm_evaluated_t) { def->global_index, .variant = { .type = TYPE_FLOAT, .value.flt = *(const vec_t *)(ptr) } };
 	case TYPE_VECTOR:
-		return (qcvm_variant_t) { .type = TYPE_VECTOR, .value.vec = *(const vec3_t *)(ptr) };
+		return (qcvm_evaluated_t) { def->global_index, .variant = { .type = TYPE_VECTOR, .value.vec = *(const vec3_t *)(ptr) } };
 	case TYPE_ENTITY:
-		return (qcvm_variant_t) { .type = TYPE_ENTITY, .value.ent = *(const qcvm_ent_t *)(ptr) };
+		return (qcvm_evaluated_t) { def->global_index, .variant = { .type = TYPE_ENTITY, .value.ent = *(const qcvm_ent_t *)(ptr) } };
 	case TYPE_FIELD:
-		return (qcvm_variant_t) { .type = TYPE_FIELD, .value.fld = *(const int32_t *)(ptr) };
+		return (qcvm_evaluated_t) { def->global_index, .variant = { .type = TYPE_FIELD, .value.fld = *(const int32_t *)(ptr) } };
 	case TYPE_FUNCTION:
-		return (qcvm_variant_t) { .type = TYPE_FUNCTION, .value.fnc = *(const qcvm_func_t *)(ptr) };
+		return (qcvm_evaluated_t) { def->global_index, .variant = { .type = TYPE_FUNCTION, .value.fnc = *(const qcvm_func_t *)(ptr) } };
 	case TYPE_POINTER:
-		return (qcvm_variant_t) { .type = TYPE_POINTER, .value.ptr = *(const qcvm_pointer_t *)(ptr) };
+		return (qcvm_evaluated_t) { def->global_index, .variant = { .type = TYPE_POINTER, .value.ptr = *(const qcvm_pointer_t *)(ptr) } };
 	case TYPE_INTEGER:
-		return (qcvm_variant_t) { .type = TYPE_INTEGER, .value.itg = *(const int32_t *)(ptr) };
+		return (qcvm_evaluated_t) { def->global_index, .variant = { .type = TYPE_INTEGER, .value.itg = *(const int32_t *)(ptr) } };
 	}
 }
 
-static qcvm_variant_t qcvm_value_from_global(qcvm_t *vm, const qcvm_definition_t *def)
+static qcvm_evaluated_t qcvm_value_from_global(qcvm_t *vm, const qcvm_definition_t *def)
 {
 	return qcvm_value_from_ptr(def, qcvm_get_global(vm, def->global_index));
 }
 
-static qcvm_variant_t qcvm_evaluate_from_local_or_global(qcvm_t *vm, const char *variable)
+static qcvm_evaluated_t qcvm_evaluate_from_local_or_global(qcvm_t *vm, const char *variable)
 {
 	// we don't have a . so we're just checking for a base object.
 	// check locals
@@ -765,10 +760,10 @@ static qcvm_variant_t qcvm_evaluate_from_local_or_global(qcvm_t *vm, const char 
 		return qcvm_value_from_global(vm, def);
 	}
 
-	return (qcvm_variant_t) { .type = TYPE_VOID };
+	return (qcvm_evaluated_t) { 0, .variant = { .type = TYPE_VOID } };
 }
 
-qcvm_variant_t qcvm_evaluate(qcvm_t *vm, const char *variable)
+qcvm_evaluated_t qcvm_evaluate(qcvm_t *vm, const char *variable)
 {
 	const char *dot = strchr(variable, '.');
 	if (dot)
@@ -779,12 +774,12 @@ qcvm_variant_t qcvm_evaluate(qcvm_t *vm, const char *variable)
 		evaluate_left[dot - variable] = 0;
 
 		// we have a . so we're either a entity, pointer or struct...
-		qcvm_variant_t left_hand = qcvm_evaluate_from_local_or_global(vm, evaluate_left);
+		qcvm_evaluated_t left_hand = qcvm_evaluate_from_local_or_global(vm, evaluate_left);
 
-		if (left_hand.type == TYPE_ENTITY)
+		if (left_hand.variant.type == TYPE_ENTITY)
 		{
 			const char *right_context = dot + 1;
-			const qcvm_ent_t ent = left_hand.value.ent;
+			const qcvm_ent_t ent = left_hand.variant.value.ent;
 
 			if (ent == ENT_INVALID)
 				return left_hand;
@@ -801,9 +796,14 @@ qcvm_variant_t qcvm_evaluate(qcvm_t *vm, const char *variable)
 			}
 
 			if (!field)
-				return (qcvm_variant_t) { .type = TYPE_VOID };
+				return (qcvm_evaluated_t) { 0, .variant = { .type = TYPE_VOID } };
 
-			return qcvm_value_from_ptr(field, qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, qcvm_ent_to_entity(vm, ent, false), (int32_t)field->global_index)));
+			void *ptr;
+
+			if (!qcvm_resolve_pointer(vm, qcvm_get_entity_field_pointer(vm, qcvm_ent_to_entity(vm, ent, false), (int32_t)field->global_index), true, qcvm_type_size(field->id), &ptr))
+				qcvm_error(vm, "bad pointer");
+
+			return qcvm_value_from_ptr(field, ptr);
 		}
 	}
 
@@ -953,7 +953,7 @@ int32_t qcvm_handle_alloc(qcvm_t *vm, void *ptr, const qcvm_handle_descriptor_t 
 	return handle->id;
 }
 
-qcvm_handle_t *qcvm_fetch_handle(qcvm_t *vm, const int32_t id)
+qcvm_handle_t *qcvm_fetch_handle(const qcvm_t *vm, const int32_t id)
 {
 	if (id <= 0 || id > vm->handles.size)
 		qcvm_error(vm, "invalid handle ID");
@@ -984,7 +984,7 @@ qcvm_pointer_t qcvm_get_entity_field_pointer(qcvm_t *vm, edict_t *ent, const int
 	const qcvm_pointer_t ptr = qcvm_make_pointer(vm, QCVM_POINTER_ENTITY, (int32_t *)ent + field);
 
 #ifdef _DEBUG
-	if (!qcvm_pointer_valid(vm, ptr, false, sizeof(qcvm_global_t)))
+	if (!qcvm_resolve_pointer(vm, ptr, false, sizeof(qcvm_global_t), NULL))
 		qcvm_error(vm, "Returning invalid entity field pointer");
 #endif
 
@@ -1342,7 +1342,7 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 		if (func->id == 0 && func->name_index)
 			vm->builtins.count++;
 
-		vm->highest_stack = maxsz(vm->highest_stack, func->num_args_and_locals);
+		vm->highest_stack = maxsz(vm->highest_stack, func->num_args_and_locals + LOCALS_FIX);
 
 		if (func->num_args_and_locals > 128)
 			vm->warning("QCVM WARNING: func \"%s\" has a pretty big stack (%i locals)\n", qcvm_get_string(vm, func->name_index), func->num_args_and_locals);
@@ -1460,7 +1460,7 @@ static inline void qcvm_setup_fields(qcvm_t *vm)
 		{
 			// not a sysfield, so we have to be positioned after them
 			real_offset = field_offset;
-			field_offset += field->id == TYPE_VECTOR ? 3 : 1;
+			field_offset += qcvm_type_span(field->id);
 			fielddef = qcvm_find_definition(vm, name, TYPE_FIELD);
 
 			if (!fielddef)
@@ -1497,7 +1497,7 @@ static inline void qcvm_setup_fields(qcvm_t *vm)
 static inline void qcvm_init_field_map(qcvm_t *vm)
 {
 	for (qcvm_definition_t *field = vm->fields + 1; field < vm->fields + vm->fields_size; field++)
-		vm->field_real_size = maxsz(vm->field_real_size, field->global_index + (field->id == TYPE_VECTOR ? 3 : 1));
+		vm->field_real_size = maxsz(vm->field_real_size, field->global_index + qcvm_type_span(field->id));
 
 	vm->field_map_by_id = (qcvm_definition_t **)qcvm_alloc(vm, sizeof(qcvm_definition_t *) * vm->field_real_size);
 
@@ -1755,4 +1755,6 @@ void qcvm_init_all_builtins(qcvm_t *vm)
 	qcvm_init_math_builtins(vm);
 	qcvm_init_file_builtins(vm);
 	qcvm_init_hash_builtins(vm);
+	qcvm_init_structlist_builtins(vm);
+	qcvm_init_list_builtins(vm);
 }
