@@ -451,7 +451,7 @@ void qcvm_error(const qcvm_t *vm, const char *format, ...)
 
 	// this breaks const-correctness, but since this is for debugging I think it's
 	// fine.
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	qcvm_break_on_current_statement((qcvm_t *)vm);
 	__debugbreak();
 #endif
@@ -569,7 +569,7 @@ const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
 
 qcvm_global_t *qcvm_get_global(qcvm_t *vm, const qcvm_global_t g)
 {
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	if ((vm->profiling.flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
 		vm->state.stack[vm->state.current].profile->fields[NumGlobalsFetched][vm->profiling.mark]++;
 #endif
@@ -579,7 +579,7 @@ qcvm_global_t *qcvm_get_global(qcvm_t *vm, const qcvm_global_t g)
 
 const qcvm_global_t *qcvm_get_const_global(const qcvm_t *vm, const qcvm_global_t g)
 {
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	if ((vm->profiling.flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
 		vm->state.stack[vm->state.current].profile->fields[NumGlobalsFetched][vm->profiling.mark]++;
 #endif
@@ -603,7 +603,7 @@ void *qcvm_get_global_ptr(qcvm_t *vm, const qcvm_global_t global, const size_t v
 
 void qcvm_set_global(qcvm_t *vm, const qcvm_global_t global, const void *value, const size_t value_size)
 {
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	if ((vm->profiling.flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
 		vm->state.stack[vm->state.current].profile->fields[NumGlobalsSet][vm->profiling.mark]++;
 #endif
@@ -700,7 +700,7 @@ qcvm_definition_t *qcvm_find_field(qcvm_t *vm, const char *name)
 	return NULL;
 }
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 static qcvm_evaluated_t qcvm_value_from_ptr(const qcvm_definition_t *def, const void *ptr)
 {
 	switch (def->id & ~TYPE_GLOBAL)
@@ -1014,12 +1014,12 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 		qcvm_stack_t *current = &vm->state.stack[vm->state.current];
 		statement = ++current->statement;
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 		if (vm->profiling.flags & PROFILE_FIELDS)
 			current->profile->fields[NumInstructions][vm->profiling.mark]++;
 #endif
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 		if (vm->debug.attached)
 		{
 			if (statement->opcode & OP_BREAKPOINT)
@@ -1061,7 +1061,7 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 
 		END_TIMER(vm, PROFILE_OPCODES);
 
-#ifdef ALLOW_PROFILING
+#if ALLOW_PROFILING
 		if (vm->profiling.flags & PROFILE_SAMPLES)
 		{
 			if (!--vm->profiling.sampling.id)
@@ -1380,28 +1380,28 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 		fclose(fp);
 	}
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	vm->profiling.instrumentation.data = (qcvm_profile_t *)qcvm_alloc(vm, sizeof(qcvm_profile_t) * vm->functions_size);
 #endif
 
-#ifdef ALLOW_PROFILING
+#if ALLOW_PROFILING
 	vm->profiling.sampling.data = (qcvm_sampling_t *)qcvm_alloc(vm, sizeof(qcvm_sampling_t) * vm->statements_size);
 	vm->profiling.sampling.function_data = (qcvm_sampling_t *)qcvm_alloc(vm, sizeof(qcvm_sampling_t) * vm->functions_size);
 #endif
 
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	if (vm->profiling.flags & PROFILE_CONTINUOUS)
 	{
 		fp = fopen(qcvm_temp_format(vm, "%s%s.perf", vm->path, vm->profiling.filename), "rb");
 
 		if (fp)
 		{
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 			fread(vm->profiling.instrumentation.data, sizeof(qcvm_profile_t), vm->functions_size, fp);
 			fread(vm->profiling.instrumentation.opcode_timers, sizeof(qcvm_profile_timer_t), OP_NUMOPS, fp);
 			fread(vm->profiling.instrumentation.timers, sizeof(qcvm_profile_timer_t), OP_NUMOPS, fp);
 #endif
-#ifdef ALLOW_PROFILING
+#if ALLOW_PROFILING
 			fread(vm->profiling.sampling.data, sizeof(qcvm_sampling_t), vm->statements_size, fp);
 			fread(vm->profiling.sampling.function_data, sizeof(qcvm_sampling_t), vm->functions_size, fp);
 #endif
@@ -1552,7 +1552,7 @@ void qcvm_check(qcvm_t *vm)
 	qcvm_check_builtins(vm);
 }
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 static const char *profile_type_names[TotalProfileFields] =
 {
 	"# Calls",
@@ -1581,7 +1581,7 @@ static const char *timer_type_names[TotalTimerFields] =
 };
 #endif
 
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 static const char *mark_names[TOTAL_MARKS] =
 {
 	"init",
@@ -1605,17 +1605,17 @@ static const char *mark_names[TOTAL_MARKS] =
 
 void qcvm_shutdown(qcvm_t *vm)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	if (vm->profiling.flags & PROFILE_CONTINUOUS)
 	{
 		FILE *fp = fopen(qcvm_temp_format(vm, "%s%s.perf", vm->path, vm->profiling.filename), "wb");
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 		fwrite(vm->profiling.instrumentation.data, sizeof(qcvm_profile_t), vm->functions_size, fp);
 		fwrite(vm->profiling.instrumentation.opcode_timers, sizeof(vm->profiling.instrumentation.opcode_timers), 1, fp);
 		fwrite(vm->profiling.instrumentation.timers, sizeof(vm->profiling.instrumentation.timers), 1, fp);
 #endif
-#ifdef ALLOW_PROFILING
+#if ALLOW_PROFILING
 		fwrite(vm->profiling.sampling.data, sizeof(qcvm_sampling_t), vm->statements_size, fp);
 		fwrite(vm->profiling.sampling.function_data, sizeof(qcvm_sampling_t), vm->functions_size, fp);
 #endif
@@ -1624,7 +1624,7 @@ void qcvm_shutdown(qcvm_t *vm)
 	}
 #endif
 
-#ifdef ALLOW_PROFILING
+#if ALLOW_PROFILING
 	if (vm->profiling.flags & PROFILE_SAMPLES)
 	{
 		for (size_t m = 0; m < TOTAL_MARKS; m++)
@@ -1665,7 +1665,7 @@ void qcvm_shutdown(qcvm_t *vm)
 	}
 #endif
 	
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	for (size_t m = 0; m < TOTAL_MARKS; m++)
 	{
 		const char *mark = mark_names[m];

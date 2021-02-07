@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "vm_string.h"
 #include "vm_gi.h"
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 #include "g_thread.h"
 #endif
 
@@ -288,7 +288,7 @@ static void InitGameFields(void)
 	game.funcs.ServerCommand = qcvm_get_function(qvm, qce.ServerCommand);
 }
 
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 #include <time.h>
 #endif
 
@@ -310,14 +310,14 @@ static void InitGame (void)
 	qvm->debug_print = qvm_debug;
 	qvm->alloc = qvm_alloc;
 	qvm->free = gi.TagFree;
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_INIT;
 #endif
 
 	qvm->max_edicts = globals.max_edicts = MAX_EDICTS;
 	qvm->system_edict_size = sizeof(edict_t);
 
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.flags = (int32_t)gi.cvar("qc_profile_flags", "0", CVAR_LATCH)->value;
 
 	if (qvm->profiling.flags & PROFILE_CONTINUOUS)
@@ -327,7 +327,7 @@ static void InitGame (void)
 	}
 #endif
 
-#ifdef ALLOW_PROFILING
+#if ALLOW_PROFILING
 	qvm->profiling.sampling.rate = (uint32_t)gi.cvar("qc_sample_rate", "32", CVAR_LATCH)->value;
 	qvm->profiling.sampling.id = qvm->profiling.sampling.function_id = qvm->profiling.sampling.rate;
 #endif
@@ -346,7 +346,7 @@ static void InitGame (void)
 
 	qcvm_check(qvm);
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	const cvar_t *qc_profile_func = gi.cvar("qc_profile_func", "", CVAR_LATCH);
 
 	if (*qc_profile_func->string)
@@ -355,7 +355,7 @@ static void InitGame (void)
 
 	InitFieldWraps();
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	qvm->debug.create_mutex = qcvm_cpp_create_mutex;
 	qvm->debug.free_mutex = qcvm_cpp_free_mutex;
 	qvm->debug.lock_mutex = qcvm_cpp_lock_mutex;
@@ -399,11 +399,11 @@ static void InitGame (void)
 
 static void ShutdownGame(void)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_SHUTDOWN;
 #endif
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	qcvm_check_debugger_commands(qvm);
 #endif
 
@@ -474,11 +474,11 @@ void RestoreClientData(void)
 
 static void SpawnEntities(const char *mapname, const char *entities, const char *spawnpoint)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_SPAWNENTITIES;
 #endif
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	qcvm_check_debugger_commands(qvm);
 #endif
 
@@ -503,11 +503,11 @@ static void SpawnEntities(const char *mapname, const char *entities, const char 
 
 static qboolean ClientConnect(edict_t *e, char *userinfo)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_CLIENTCONNECT;
 #endif
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	qcvm_check_debugger_commands(qvm);
 #endif
 
@@ -530,11 +530,11 @@ static qboolean ClientConnect(edict_t *e, char *userinfo)
 
 static void ClientBegin(edict_t *e)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_CLIENTBEGIN;
 #endif
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	qcvm_check_debugger_commands(qvm);
 #endif
 
@@ -547,11 +547,11 @@ static void ClientBegin(edict_t *e)
 
 static void ClientUserinfoChanged(edict_t *e, char *userinfo)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_CLIENTUSERINFOCHANGED;
 #endif
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	qcvm_check_debugger_commands(qvm);
 #endif
 
@@ -563,11 +563,11 @@ static void ClientUserinfoChanged(edict_t *e, char *userinfo)
 
 static void ClientDisconnect(edict_t *e)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_CLIENTDISCONNECT;
 #endif
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	qcvm_check_debugger_commands(qvm);
 #endif
 
@@ -578,11 +578,11 @@ static void ClientDisconnect(edict_t *e)
 
 static void ClientCommand(edict_t *e)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_CLIENTCOMMAND;
 #endif
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	qcvm_check_debugger_commands(qvm);
 #endif
 
@@ -593,11 +593,11 @@ static void ClientCommand(edict_t *e)
 
 static void ClientThink(edict_t *e, usercmd_t *ucmd)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_CLIENTTHINK;
 #endif
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	qcvm_check_debugger_commands(qvm);
 #endif
 
@@ -621,11 +621,11 @@ static void ClientThink(edict_t *e, usercmd_t *ucmd)
 
 static void RunFrame(void)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_RUNFRAME;
 #endif
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	qcvm_check_debugger_commands(qvm);
 #endif
 
@@ -638,7 +638,7 @@ static void RunFrame(void)
 
 static void ServerCommand(void)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_SERVERCOMMAND;
 #endif
 
@@ -675,7 +675,7 @@ static void ServerCommand(void)
 	}
 #endif
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	qcvm_check_debugger_commands(qvm);
 #endif
 

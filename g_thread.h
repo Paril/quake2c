@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 // Wrapper for C++ threads. Blek.
 #ifdef __cplusplus
 extern "C"

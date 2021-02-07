@@ -7,18 +7,26 @@ typedef struct qcvm_s qcvm_t;
 
 // whether or not to use address-of-label opcode jumps (if supported).
 // if this is disabled, a simple switch(code) is used.
-#define USE_GNU_OPCODE_JUMPING
+#ifndef USE_GNU_OPCODE_JUMPING
+#define USE_GNU_OPCODE_JUMPING 1
+#endif
 // whether the FTEQCC debugger is supported. shouldn't really
 // affect performance.
-//#define ALLOW_DEBUGGING
+#ifndef ALLOW_DEBUGGING
+#define ALLOW_DEBUGGING 1
+#endif
 // whether intense instrumentation is enabled or not.
 // enabling this may have adverse consequences on performance!
-//#define ALLOW_INSTRUMENTING
+#ifndef ALLOW_INSTRUMENTING
+#define ALLOW_INSTRUMENTING 0
+#endif
 // whether simple sampling is enabled or not. this is light and
 // will barely affect performance.
-//#define ALLOW_PROFILING
+#ifndef ALLOW_PROFILING
+#define ALLOW_PROFILING 1
+#endif
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 typedef enum
 {
 	DEBUG_NONE,
@@ -120,7 +128,7 @@ typedef struct
 	qcvm_operands_t	args;
 } qcvm_statement_t;
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 #define OPCODES_ONLY
 #include "vm_opcodes.h"
 #undef OPCODES_ONLY
@@ -145,7 +153,7 @@ typedef struct
 	uint8_t			arg_sizes[8];
 } qcvm_function_t;
 
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 enum
 {
 	PROFILE_FUNCTIONS	= 1,
@@ -185,7 +193,7 @@ enum
 
 typedef size_t qcvm_profiler_mark_t;
 
-#ifdef ALLOW_PROFILING
+#if ALLOW_PROFILING
 typedef struct
 {
 	uint64_t	count[TOTAL_MARKS];
@@ -194,7 +202,7 @@ typedef struct
 
 #endif
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 enum
 {
 	NumSelfCalls,
@@ -347,7 +355,7 @@ typedef struct
 	qcvm_string_backup_t	*ref_strings;
 	size_t					ref_strings_size, ref_strings_allocated;
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	qcvm_profile_t	*profile;
 	vec_t			callee_start, caller_start;
 #endif
@@ -484,7 +492,7 @@ typedef struct
 	uint8_t	argc;
 	int32_t current;
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	qcvm_profiler_mark_t	profile_mark_backup;
 	size_t					profile_mark_depth;
 #endif
@@ -728,7 +736,7 @@ typedef struct qcvm_s
 	qcvm_handle_list_t handles;
 
 	// debugging data
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	struct
 	{
 		bool attached;
@@ -747,14 +755,14 @@ typedef struct qcvm_s
 #endif
 
 	// instrumentation/profiling stuff
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	struct
 	{
 		qcvm_profiler_flags_t	flags;
 		const char				*filename;
 		qcvm_profiler_mark_t	mark;
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 		struct
 		{
 			qcvm_profile_t			*data;
@@ -763,7 +771,7 @@ typedef struct qcvm_s
 			qcvm_function_t			*func;
 		} instrumentation;
 #endif
-#ifdef ALLOW_PROFILING
+#if ALLOW_PROFILING
 		struct
 		{
 			qcvm_sampling_t	*data;
@@ -1063,7 +1071,7 @@ void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
 	if (!(func = qcvm_builtin_list_get(vm, function->id)))
 		qcvm_error(vm, "Bad builtin call number");
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	qcvm_profile_t *profile = &vm->profiling.instrumentation.data[function - vm->functions];
 
 	if (vm->profiling.flags & PROFILE_FIELDS)
@@ -1088,7 +1096,7 @@ void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
 
 	func(vm);
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	if (vm->profiling.flags & PROFILE_FUNCTIONS)
 	{
 		// builtins don't have external call time, just internal self time
@@ -1109,7 +1117,7 @@ inline
 #endif
 void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 {
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	if (vm->profiling.instrumentation.func && function == vm->profiling.instrumentation.func && !vm->state.profile_mark_depth)
 	{
 		vm->state.profile_mark_backup = vm->profiling.mark;
@@ -1133,7 +1141,7 @@ void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 				qcvm_stack_push_ref_string(cur_stack, qcvm_string_list_pop_ref(vm, ptr));
 		}
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 		// entering a function call;
 		// add time we spent up till now into self
 		if (vm->profiling.flags & PROFILE_FUNCTIONS)
@@ -1154,7 +1162,7 @@ void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 	for (qcvm_global_t i = 0, arg_id = function->first_arg; i < function->num_args; arg_id += function->arg_sizes[i], i++)
 		qcvm_copy_globals(vm, arg_id, qcvm_global_offset(GLOBAL_PARM0, i * 3), sizeof(qcvm_global_t) * function->arg_sizes[i]);
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	if (vm->profiling.flags & (PROFILE_FUNCTIONS | PROFILE_FIELDS))
 	{
 		new_stack->profile = &vm->profiling.instrumentation.data[function - vm->functions];
@@ -1188,7 +1196,7 @@ void qcvm_leave(qcvm_t *vm)
 
 		prev_stack->ref_strings_size = 0;
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 		if (vm->profiling.flags & PROFILE_FUNCTIONS)
 		{
 			// we're coming back into prev_stack, so set up its caller_start
@@ -1199,12 +1207,12 @@ void qcvm_leave(qcvm_t *vm)
 #endif
 	}
 		
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	if (vm->profiling.flags & PROFILE_FUNCTIONS)
 		current_stack->profile->self[vm->profiling.mark] += qcvm_cpp_now() - current_stack->caller_start;
 #endif
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	if (vm->profiling.instrumentation.func && vm->state.profile_mark_depth)
 	{
 		vm->state.profile_mark_depth--;

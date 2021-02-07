@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 typedef struct
 {
 	qcvm_global_t	global;

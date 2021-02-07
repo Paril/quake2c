@@ -6,7 +6,7 @@ extern "C"
 	#include "g_thread.h"
 };
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 #include <thread>
 #include <mutex>
 #include <chrono>

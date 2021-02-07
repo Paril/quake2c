@@ -397,7 +397,7 @@ static void F_OP_NOT_S(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 	qcvm_set_global_typed_value(vec_t, vm, operands.c, result);
 }
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 #define PROFILE_COND_JUMP \
 	if (vm->profiling.flags & PROFILE_FIELDS) \
 		current->profile->fields[NumConditionalJumps][vm->profiling.mark]++
@@ -469,7 +469,7 @@ static void F_OP_CALL_BASE(qcvm_t *vm, const qcvm_operands_t operands, int *dept
 	if (enter_func <= 0 || enter_func >= vm->functions_size)
 		qcvm_error(vm, "NULL function");
 	
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	if (vm->profiling.flags & PROFILE_FIELDS)
 	{
 		qcvm_stack_t *current = &vm->state.stack[vm->state.current];
@@ -482,7 +482,7 @@ static void F_OP_CALL_BASE(qcvm_t *vm, const qcvm_operands_t operands, int *dept
 	if (!call->id)
 		qcvm_error(vm, "Tried to call missing function %s", qcvm_get_string(vm, call->name_index));
 
-#ifdef ALLOW_PROFILING
+#if ALLOW_PROFILING
 	if (vm->profiling.flags & PROFILE_SAMPLES)
 	{
 		if (!--vm->profiling.sampling.function_id)
@@ -554,7 +554,7 @@ static void F_OP_GOTO(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 	qcvm_stack_t *current = &vm->state.stack[vm->state.current];
 	current->statement += (int16_t)current->statement->args.a - 1;
 
-#ifdef ALLOW_INSTRUMENTING
+#if ALLOW_INSTRUMENTING
 	if (vm->profiling.flags & PROFILE_FIELDS)
 		current->profile->fields[NumUnconditionalJumps][vm->profiling.mark]++;
 #endif

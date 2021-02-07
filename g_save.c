@@ -149,7 +149,7 @@ last save position.
 */
 void WriteGame(const char *filename, qboolean autosave)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_WRITEGAME;
 #endif
 
@@ -215,7 +215,7 @@ void WriteGame(const char *filename, qboolean autosave)
 
 void ReadGame(const char *filename)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_READGAME;
 #endif
 
@@ -334,7 +334,7 @@ WriteLevel
 */
 void WriteLevel(const char *filename)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_WRITELEVEL;
 #endif
 
@@ -425,7 +425,7 @@ No clients are connected yet.
 */
 void ReadLevel(const char *filename)
 {
-#if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
+#if ALLOW_INSTRUMENTING || ALLOW_PROFILING
 	qvm->profiling.mark = MARK_READLEVEL;
 #endif
 

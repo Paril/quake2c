@@ -11,7 +11,7 @@ static void QC_stacktrace(qcvm_t *vm)
 
 static void QC_debugbreak(qcvm_t *vm)
 {
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 	qcvm_break_on_current_statement(vm);
 #endif
 }
@@ -60,7 +60,7 @@ void qcvm_init_debug_builtins(qcvm_t *vm)
 	qcvm_register_builtin(dumpentity);
 }
 
-#ifdef ALLOW_DEBUGGING
+#if ALLOW_DEBUGGING
 static size_t debuggerwnd;
 static char *debugger_command;
 static qcvm_mutex_t input_mutex;
@@ -69,7 +69,7 @@ static qcvm_thread_t input_thread;
 static bool running_thread = false;
 static qcvm_t *thread_vm;
 
-static void qcvm_debugger_thread()
+static void qcvm_debugger_thread(void)
 {
 	static char debug_string[MAX_INFO_STRING * 4];
 	static size_t debug_pos = 0;
