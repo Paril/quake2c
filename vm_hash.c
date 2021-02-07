@@ -214,7 +214,7 @@ static void QC_hashset_alloc(qcvm_t *vm)
 	qcvm_return_handle(vm, set, &hashset_descriptor);
 }
 
-static __attribute__((always_inline)) inline void QC_hashset_func(qcvm_t *vm, bool (*func)(qcvm_t *vm, qcvm_hashset_t *set, const qcvm_variant_t variant))
+static qcvm_always_inline void QC_hashset_func(qcvm_t *vm, bool (*func)(qcvm_t *vm, qcvm_hashset_t *set, const qcvm_variant_t variant))
 {
 	qcvm_hashset_t *set = qcvm_argv_handle(qcvm_hashset_t, vm, 0);
 	qcvm_variant_t variant = {

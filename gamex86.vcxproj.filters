@@ -69,6 +69,12 @@
     <ClCompile Include="vm_list.c">
       <Filter>src</Filter>
     </ClCompile>
+    <ClCompile Include="vm_heap.c">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="g_time.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="shared\client.h">
@@ -139,6 +145,12 @@
       <Filter>inc</Filter>
     </ClInclude>
     <ClInclude Include="vm_list.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="vm_heap.h">
+      <Filter>inc</Filter>
+    </ClInclude>
+    <ClInclude Include="g_time.h">
       <Filter>inc</Filter>
     </ClInclude>
   </ItemGroup>

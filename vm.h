@@ -5,12 +5,12 @@
 
 typedef struct qcvm_s qcvm_t;
 
-// whether or not to use address-of-label opcode jumps.
+// whether or not to use address-of-label opcode jumps (if supported).
 // if this is disabled, a simple switch(code) is used.
 #define USE_GNU_OPCODE_JUMPING
 // whether the FTEQCC debugger is supported. shouldn't really
 // affect performance.
-#define ALLOW_DEBUGGING
+//#define ALLOW_DEBUGGING
 // whether intense instrumentation is enabled or not.
 // enabling this may have adverse consequences on performance!
 //#define ALLOW_INSTRUMENTING
@@ -119,6 +119,12 @@ typedef struct
 	qcvm_opcode_t	opcode;
 	qcvm_operands_t	args;
 } qcvm_statement_t;
+
+#ifdef ALLOW_INSTRUMENTING
+#define OPCODES_ONLY
+#include "vm_opcodes.h"
+#undef OPCODES_ONLY
+#endif
 
 typedef struct
 {
@@ -236,31 +242,33 @@ typedef struct
 	uint64_t				start;
 } qcvm_active_timer_t;
 
+#include "g_time.h"
+
 #define START_TIMER(vm, id) \
 	qcvm_active_timer_t __timer; \
-	if (vm->profile_flags & PROFILE_TIMERS) \
+	if (vm->profiling.flags & PROFILE_TIMERS) \
 	{ \
-		__timer = (qcvm_active_timer_t) { &vm->timers[id][vm->profiler_mark], Q_time() }; __timer.timer->count[vm->profiler_mark]++; \
+		__timer = (qcvm_active_timer_t) { &vm->profiling.instrumentation.timers[id][vm->profiling.mark], qcvm_cpp_now() }; __timer.timer->count[vm->profiling.mark]++; \
 	}
 #define END_TIMER(vm, flag) \
-	{ if (vm->profile_flags & flag) \
-		__timer.timer->time[vm->profiler_mark] += Q_time() - __timer.start; }
+	{ if (vm->profiling.flags & flag) \
+		__timer.timer->time[vm->profiling.mark] += qcvm_cpp_now() - __timer.start; }
 
 #define RESUME_TIMER(vm, flag) \
-	{ if (vm->profile_flags & flag) \
-		__timer.start = Q_time(); }
+	{ if (vm->profiling.flags & flag) \
+		__timer.start = qcvm_cpp_now(); }
 
 #define START_OPCODE_TIMER(vm, id) \
 	qcvm_active_timer_t __timer; \
-	if (vm->profile_flags & PROFILE_OPCODES) \
+	if (vm->profiling.flags & PROFILE_OPCODES) \
 	{ \
-		__timer = (qcvm_active_timer_t) { &vm->opcode_timers[id][vm->profiler_mark], Q_time() }; __timer.timer->count[vm->profiler_mark]++; \
+		__timer = (qcvm_active_timer_t) { &vm->profiling.instrumentation.opcode_timers[id][vm->profiling.mark], qcvm_cpp_now() }; __timer.timer->count[vm->profiling.mark]++; \
 	}
 
 typedef struct
 {
-	uint64_t	ext[TOTAL_MARKS], self[TOTAL_MARKS];
-	size_t		fields[TotalProfileFields][TOTAL_MARKS];
+	vec_t	ext[TOTAL_MARKS], self[TOTAL_MARKS];
+	size_t	fields[TotalProfileFields][TOTAL_MARKS];
 } qcvm_profile_t;
 #else
 #define START_TIMER(...)
@@ -341,7 +349,7 @@ typedef struct
 
 #ifdef ALLOW_INSTRUMENTING
 	qcvm_profile_t	*profile;
-	uint64_t		callee_start, caller_start;
+	vec_t			callee_start, caller_start;
 #endif
 } qcvm_stack_t;
 
@@ -709,7 +717,7 @@ typedef struct qcvm_s
 	size_t	edict_size;
 	size_t	max_edicts;
 	// callbacks for various routines
-	__attribute__((noreturn)) void	(*error)(const char *str);
+	qcvm_noreturn void (*error)(const char *str);
 	void	(*warning)(const char *format, ...);
 	void	(*debug_print)(const char *str);
 	void	*(*alloc)(const size_t size);
@@ -759,14 +767,15 @@ typedef struct qcvm_s
 		struct
 		{
 			qcvm_sampling_t	*data;
-			uint32_t		id, rate;
+			qcvm_sampling_t	*function_data;
+			uint32_t		id, function_id, rate;
 		} sampling;
 #endif
 	} profiling;
 #endif
 } qcvm_t;
 
-__attribute__((noreturn)) void qcvm_error(const qcvm_t *vm, const char *format, ...);
+qcvm_noreturn void qcvm_error(const qcvm_t *vm, const char *format, ...);
 
 // Entity stuff
 inline void *qcvm_itoe(const qcvm_t *vm, const int32_t n)
@@ -799,7 +808,7 @@ inline qcvm_ent_t qcvm_entity_to_ent(const qcvm_t *vm, const edict_t *ent)
 	if (ent == NULL)
 		return ENT_INVALID;
 
-	assert(ent->s.number == ((uint8_t *)ent - (uint8_t *)vm->edicts) / vm->edict_size);
+	assert(ent->s.number == (int32_t)(((uint8_t *)ent - (uint8_t *)vm->edicts) / vm->edict_size));
 
 	return (qcvm_ent_t)ent->s.number;
 }
@@ -849,17 +858,23 @@ inline bool qcvm_resolve_pointer(const qcvm_t *vm, const qcvm_pointer_t pointer,
 	}
 }
 
+#ifdef __cplusplus
+#define POINTER
+#else
+#define POINTER (qcvm_pointer_t)
+#endif
+
 // this is a convenience function, but cannot make QCVM_POINTER_HANDLE pointers
 inline qcvm_pointer_t qcvm_make_pointer(const qcvm_t *vm, const qcvm_pointer_type_t type, const void *pointer)
 {
 	switch (type)
 	{
 	case QCVM_POINTER_NULL:
-		return (qcvm_pointer_t) { .raw = { .offset = 0, .type = type } };
+		return POINTER { .raw = { .offset = 0, .type = type } };
 	case QCVM_POINTER_GLOBAL:
-		return (qcvm_pointer_t) { .raw = { .offset = (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->global_data), .type = type } };
+		return POINTER { .raw = { .offset = (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->global_data), .type = type } };
 	case QCVM_POINTER_ENTITY:
-		return (qcvm_pointer_t) { .raw = { .offset = (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->edicts), .type = type } };
+		return POINTER { .raw = { .offset = (uint32_t)((const uint8_t *)pointer - (const uint8_t *)vm->edicts), .type = type } };
 	default:
 		qcvm_error(vm, "bad use of qcvm_make_pointer");
 	}
@@ -868,9 +883,9 @@ inline qcvm_pointer_t qcvm_make_pointer(const qcvm_t *vm, const qcvm_pointer_typ
 inline qcvm_pointer_t qcvm_offset_pointer(const qcvm_t *vm, const qcvm_pointer_t pointer, const size_t offset)
 {
 	if (pointer.raw.type == QCVM_POINTER_HANDLE)
-		return (qcvm_pointer_t) { .handle = { .offset = (uint32_t)(pointer.handle.offset + offset), .index = pointer.handle.index, .type = pointer.handle.type } };
+		return POINTER { .handle = { .offset = (uint32_t)(pointer.handle.offset + offset), .index = pointer.handle.index, .type = pointer.handle.type } };
 
-	return (qcvm_pointer_t) { .raw = { .offset = (uint32_t)(pointer.raw.offset + offset), .type = pointer.raw.type } };
+	return POINTER { .raw = { .offset = (uint32_t)(pointer.raw.offset + offset), .type = pointer.raw.type } };
 }
 
 #ifdef _DEBUG
@@ -1032,14 +1047,16 @@ void qcvm_copy_globals(qcvm_t *vm, const qcvm_global_t dst, const qcvm_global_t 
 
 inline bool qcvm_strings_case_sensitive(const qcvm_t *vm)
 {
-	return *vm->string_case_sensitive;
+	return *vm->string_case_sensitive ? true : false;
 }
 
 #ifdef QCVM_INTERNAL
 #ifndef _DEBUG
-__attribute__((always_inline))
+qcvm_always_inline
+#else
+inline
 #endif
-inline void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
+void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
 {
 	qcvm_builtin_t func;
 
@@ -1047,24 +1064,24 @@ inline void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
 		qcvm_error(vm, "Bad builtin call number");
 
 #ifdef ALLOW_INSTRUMENTING
-	qcvm_profile_t *profile = &vm->profile_data[function - vm->functions];
+	qcvm_profile_t *profile = &vm->profiling.instrumentation.data[function - vm->functions];
 
-	if (vm->profile_flags & PROFILE_FIELDS)
-		profile->fields[NumSelfCalls][vm->profiler_mark]++;
+	if (vm->profiling.flags & PROFILE_FIELDS)
+		profile->fields[NumSelfCalls][vm->profiling.mark]++;
 	
-	uint64_t start = 0;
+	vec_t start = 0;
 	qcvm_stack_t *prev_stack = NULL;
 	
-	if (vm->profile_flags & PROFILE_FUNCTIONS)
+	if (vm->profiling.flags & PROFILE_FUNCTIONS)
 	{
-		start = Q_time();
+		start = qcvm_cpp_now();
 		prev_stack = (vm->state.current >= 0 && vm->state.stack[vm->state.current].profile) ? &vm->state.stack[vm->state.current] : NULL;
 
 		// moving into builtin; add up what we have so far into prev stack
 		if (prev_stack)
 		{
-			prev_stack->profile->self[vm->profiler_mark] += Q_time() - prev_stack->caller_start;
-			prev_stack->callee_start = Q_time();
+			prev_stack->profile->self[vm->profiling.mark] += qcvm_cpp_now() - prev_stack->caller_start;
+			prev_stack->callee_start = qcvm_cpp_now();
 		}
 	}
 #endif
@@ -1072,30 +1089,32 @@ inline void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
 	func(vm);
 
 #ifdef ALLOW_INSTRUMENTING
-	if (vm->profile_flags & PROFILE_FUNCTIONS)
+	if (vm->profiling.flags & PROFILE_FUNCTIONS)
 	{
 		// builtins don't have external call time, just internal self time
-		const uint64_t time_spent = Q_time() - start;
-		profile->self[vm->profiler_mark] += time_spent;
+		const vec_t time_spent = qcvm_cpp_now() - start;
+		profile->self[vm->profiling.mark] += time_spent;
 
 		// add time we spent in this function into the parent's call_into time
 		if (prev_stack)
-			prev_stack->profile->ext[vm->profiler_mark] += Q_time() - prev_stack->callee_start;
+			prev_stack->profile->ext[vm->profiling.mark] += qcvm_cpp_now() - prev_stack->callee_start;
 	}
 #endif
 }
 
 #ifndef _DEBUG
-__attribute__((always_inline))
+qcvm_always_inline
+#else
+inline
 #endif
-inline void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
+void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 {
 #ifdef ALLOW_INSTRUMENTING
-	if (vm->profiler_func && function == vm->profiler_func && !vm->state.profile_mark_depth)
+	if (vm->profiling.instrumentation.func && function == vm->profiling.instrumentation.func && !vm->state.profile_mark_depth)
 	{
-		vm->state.profile_mark_backup = vm->profiler_mark;
+		vm->state.profile_mark_backup = vm->profiling.mark;
 		vm->state.profile_mark_depth++;
-		vm->profiler_mark = MARK_CUSTOM;
+		vm->profiling.mark = MARK_CUSTOM;
 	}
 #endif
 
@@ -1117,10 +1136,10 @@ inline void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 #ifdef ALLOW_INSTRUMENTING
 		// entering a function call;
 		// add time we spent up till now into self
-		if (vm->profile_flags & PROFILE_FUNCTIONS)
+		if (vm->profiling.flags & PROFILE_FUNCTIONS)
 		{
-			cur_stack->profile->self[vm->profiler_mark] += Q_time() - cur_stack->caller_start;
-			cur_stack->callee_start = Q_time();
+			cur_stack->profile->self[vm->profiling.mark] += qcvm_cpp_now() - cur_stack->caller_start;
+			cur_stack->callee_start = qcvm_cpp_now();
 		}
 #endif
 	}
@@ -1136,22 +1155,24 @@ inline void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 		qcvm_copy_globals(vm, arg_id, qcvm_global_offset(GLOBAL_PARM0, i * 3), sizeof(qcvm_global_t) * function->arg_sizes[i]);
 
 #ifdef ALLOW_INSTRUMENTING
-	if (vm->profile_flags & (PROFILE_FUNCTIONS | PROFILE_FIELDS))
+	if (vm->profiling.flags & (PROFILE_FUNCTIONS | PROFILE_FIELDS))
 	{
-		new_stack->profile = &vm->profile_data[function - vm->functions];
+		new_stack->profile = &vm->profiling.instrumentation.data[function - vm->functions];
 
-		if (vm->profile_flags & PROFILE_FIELDS)
-			new_stack->profile->fields[NumSelfCalls][vm->profiler_mark]++;
-		if (vm->profile_flags & PROFILE_FUNCTIONS)
-			new_stack->caller_start = Q_time();
+		if (vm->profiling.flags & PROFILE_FIELDS)
+			new_stack->profile->fields[NumSelfCalls][vm->profiling.mark]++;
+		if (vm->profiling.flags & PROFILE_FUNCTIONS)
+			new_stack->caller_start = qcvm_cpp_now();
 	}
 #endif
 }
 
 #ifndef _DEBUG
-__attribute__((always_inline))
+qcvm_always_inline
+#else
+inline
 #endif
-inline void qcvm_leave(qcvm_t *vm)
+void qcvm_leave(qcvm_t *vm)
 {
 	// restore stack
 	qcvm_stack_t *current_stack = &vm->state.stack[vm->state.current];
@@ -1168,28 +1189,28 @@ inline void qcvm_leave(qcvm_t *vm)
 		prev_stack->ref_strings_size = 0;
 
 #ifdef ALLOW_INSTRUMENTING
-		if (vm->profile_flags & PROFILE_FUNCTIONS)
+		if (vm->profiling.flags & PROFILE_FUNCTIONS)
 		{
 			// we're coming back into prev_stack, so set up its caller_start
-			prev_stack->caller_start = Q_time();
+			prev_stack->caller_start = qcvm_cpp_now();
 			// and add up the time we spent in the previous stack
-			prev_stack->profile->ext[vm->profiler_mark] += Q_time() - prev_stack->callee_start;
+			prev_stack->profile->ext[vm->profiling.mark] += qcvm_cpp_now() - prev_stack->callee_start;
 		}
 #endif
 	}
 		
 #ifdef ALLOW_INSTRUMENTING
-	if (vm->profile_flags & PROFILE_FUNCTIONS)
-		current_stack->profile->self[vm->profiler_mark] += Q_time() - current_stack->caller_start;
+	if (vm->profiling.flags & PROFILE_FUNCTIONS)
+		current_stack->profile->self[vm->profiling.mark] += qcvm_cpp_now() - current_stack->caller_start;
 #endif
 
 #ifdef ALLOW_INSTRUMENTING
-	if (vm->profiler_func && vm->state.profile_mark_depth)
+	if (vm->profiling.instrumentation.func && vm->state.profile_mark_depth)
 	{
 		vm->state.profile_mark_depth--;
 
 		if (!vm->state.profile_mark_depth)
-			vm->profiler_mark = vm->state.profile_mark_backup;
+			vm->profiling.mark = vm->state.profile_mark_backup;
 	}
 #endif
 }

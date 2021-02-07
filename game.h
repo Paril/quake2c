@@ -17,6 +17,7 @@ typedef struct
 
 	struct {
 		uint32_t	is_client;
+		uint32_t	is_linked;
 		uint32_t	owner;
 	} fields;
 

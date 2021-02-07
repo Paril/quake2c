@@ -18,72 +18,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "shared/shared.h"
 
-// From https://gist.github.com/ForeverZer0/0a4f80fc02b96e19380ebb7a3debbee5
-#include <stdint.h>
-#if defined(__linux)
-#  define HAVE_POSIX_TIMER
-#  include <time.h>
-#  ifdef CLOCK_MONOTONIC
-#     define CLOCKID CLOCK_MONOTONIC
-#  else
-#     define CLOCKID CLOCK_REALTIME
-#  endif
-#elif defined(__APPLE__)
-#  define HAVE_MACH_TIMER
-#  include <mach/mach_time.h>
-static mach_timebase_info_data_t info;
-#elif defined(_WIN32)
-#  define WIN32_LEAN_AND_MEAN
-#  include <Windows.h>
-static LARGE_INTEGER win_frequency;
-#endif
-uint64_t Q_time(void)
-{
-	static bool is_init = false;
-#if defined(__APPLE__)
-	if (!is_init)
-	{
-		mach_timebase_info(&info);
-		is_init = true;
-	}
-	uint64_t now;
-	now = mach_absolute_time();
-	return now;
-#elif defined(__linux)
-	static struct timespec linux_rate;
-	if (!is_init)
-	{
-		clock_getres(CLOCKID, &linux_rate);
-		is_init = true;
-	}
-	uint64_t now;
-	struct timespec spec;
-	clock_gettime(CLOCKID, &spec);
-	now = spec.tv_sec * 1.0e9 + spec.tv_nsec;
-	return now;
-#elif defined(_WIN32)
-	if (!is_init)
-	{
-		QueryPerformanceFrequency(&win_frequency);
-		is_init = true;
-	}
-	static LARGE_INTEGER now;
-	QueryPerformanceCounter(&now);
-	return now.QuadPart;
-#endif
-}
-
-uint64_t Q_time_adjust(const uint64_t time)
-{
-#if defined(__APPLE__)
-	return (time * info.numer) / info.denom;
-#elif defined(__linux)
-	return time;
-#elif defined(_WIN32)
-	return (uint64_t) ((1e9 * time) / win_frequency.QuadPart);
-#endif
-}
-
 /*
 ===============
 Q_strlcpy
@@ -148,7 +82,18 @@ uint32_t Q_hash_pointer(uint32_t a, const size_t hash_size)
 Q_next_pow2
 ================
 */
-uint64_t Q_next_pow2(const uint64_t x)
+uint64_t Q_next_pow2(uint64_t x)
 {
+#ifdef __GNU__
 	return x == 1 ? 1 : 1 << (64 - __builtin_clzl((uint32_t)(x - 1)));
+#else
+	x--;
+	x |= x >> 1;
+	x |= x >> 2;
+	x |= x >> 4;
+	x |= x >> 8;
+	x |= x >> 16;
+	x |= x >> 32;
+	return x + 1;
+#endif
 }

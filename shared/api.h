@@ -258,7 +258,7 @@ typedef struct
 	// they connect, and changes are sent to all connected clients.
 	void (*configstring)(config_string_t num, const char *string);
 
-	void (* __attribute__((noreturn)) error)(const char *fmt, ...);
+	void (* qcvm_noreturn error)(const char *fmt, ...);
 
 	// the *index functions create configstrings and some internal server state
 	int (*modelindex)(const char *name);

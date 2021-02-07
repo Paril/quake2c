@@ -1,6 +1,7 @@
 #include "shared/shared.h"
 #include "vm.h"
 #include "vm_math.h"
+#include "g_time.h"
 #include <float.h>
 
 // float(float)
@@ -203,7 +204,7 @@ void Q_srand(const uint32_t seed)
 		qcvm_mt.mt[qcvm_mt.index] = (6069 * qcvm_mt.mt[qcvm_mt.index - 1]) & 0xffffffff;
 }
 
-static uint32_t Q_rand()
+static uint32_t Q_rand(void)
 {
 	unsigned long y;
 	static unsigned long mag[2] = { 0x0, 0x9908b0df };
@@ -253,7 +254,7 @@ static uint32_t Q_rand_uniform(uint32_t n)
     return r;
 }
 
-vec_t frand()
+vec_t frand(void)
 {
 	return (vec_t)(Q_rand()) / 0xffffffffu;
 }
@@ -276,6 +277,11 @@ static void QC_Q_rand(qcvm_t *vm)
 static void QC_Q_rand_uniform(qcvm_t *vm)
 {
 	qcvm_return_int32(vm, Q_rand_uniform(qcvm_argv_int32(vm, 0)));
+}
+
+static void QC_now(qcvm_t *vm)
+{
+	qcvm_return_float(vm, qcvm_cpp_now());
 }
 
 void qcvm_init_math_builtins(qcvm_t *vm)
@@ -383,4 +389,7 @@ void qcvm_init_math_builtins(qcvm_t *vm)
 	// randomness
 	qcvm_register_builtin(Q_rand);
 	qcvm_register_builtin(Q_rand_uniform);
+
+	// time
+	qcvm_register_builtin(now);
 }

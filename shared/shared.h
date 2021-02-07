@@ -37,24 +37,23 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "shared/platform.h"
 
+#if defined(__clang__) || defined(__GNUC__)
+#define qcvm_always_inline __attribute__((always_inline))
+#define qcvm_noreturn __attribute__((noreturn))
+#elif defined(_MSC_VER)
+#define qcvm_always_inline __forceinline
+#ifndef __cplusplus
+#define inline __inline
+#endif
+#define qcvm_noreturn
+#endif
+
 // ABI compat only, don't use
 typedef enum
 {
 	qfalse,
 	qtrue
 } qboolean;
-
-/*
-==============================================================
-
-TIME
-
-==============================================================
-*/
-
-// High resolution timer
-uint64_t Q_time(void);
-uint64_t Q_time_adjust(const uint64_t time);
 
 /*
 ==============================================================
@@ -76,9 +75,15 @@ inline vec_t DotProduct(const vec3_t l, const vec3_t r)
 	return l.x * r.x + l.y * r.y + l.z * r.z;
 }
 
+#ifdef __cplusplus
+#define VEC3
+#else
+#define VEC3 (vec3_t)
+#endif
+
 inline vec3_t VectorAdd(const vec3_t l, const vec3_t r)
 {
-	return (vec3_t) {
+	return VEC3 {
 		l.x + r.x,
 		l.y + r.y,
 		l.z + r.z
@@ -87,7 +92,7 @@ inline vec3_t VectorAdd(const vec3_t l, const vec3_t r)
 
 inline vec3_t VectorSubtract(const vec3_t l, const vec3_t r)
 {
-	return (vec3_t) {
+	return VEC3 {
 		l.x - r.x,
 		l.y - r.y,
 		l.z - r.z
@@ -106,7 +111,7 @@ inline bool VectorEquals(const vec3_t a, const vec3_t b)
 
 inline vec3_t VectorScaleF(const vec3_t v, const vec_t r)
 {
-	return (vec3_t) {
+	return VEC3 {
 		v.x * r,
 		v.y * r,
 		v.z * r 
@@ -115,16 +120,16 @@ inline vec3_t VectorScaleF(const vec3_t v, const vec_t r)
 
 inline vec3_t VectorScaleI(const vec3_t v, const int32_t r)
 {
-	return (vec3_t) {
-		v.x * r,
-		v.y * r,
-		v.z * r 
+	return VEC3 {
+		v.x * (vec_t) r,
+		v.y * (vec_t) r,
+		v.z * (vec_t) r 
 	};
 }
 
 inline vec3_t VectorDivideF(const vec3_t v, const vec_t r)
 {
-	return (vec3_t) {
+	return VEC3 {
 		v.x / r,
 		v.y / r,
 		v.z / r 
@@ -133,10 +138,10 @@ inline vec3_t VectorDivideF(const vec3_t v, const vec_t r)
 
 inline vec3_t VectorDivideI(const vec3_t v, const int32_t r)
 {
-	return (vec3_t) {
-		v.x / r,
-		v.y / r,
-		v.z / r 
+	return VEC3 {
+		v.x / (vec_t) r,
+		v.y / (vec_t) r,
+		v.z / (vec_t) r 
 	};
 }
 
@@ -181,7 +186,7 @@ uint32_t Q_hash_string(const char *string, const size_t hash_size);
 
 uint32_t Q_hash_pointer(uint32_t a, const size_t hash_size);
 
-uint64_t Q_next_pow2(const uint64_t x);
+uint64_t Q_next_pow2(uint64_t x);
 
 /*
 ==========================================================

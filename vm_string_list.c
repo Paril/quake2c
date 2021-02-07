@@ -602,6 +602,9 @@ bool qcvm_find_string(qcvm_t *vm, const char *value, qcvm_string_t *rstr)
 
 qcvm_string_t qcvm_store_or_find_string(qcvm_t *vm, const char *value, const size_t len, const bool copy)
 {
+	if (!len)
+		return 0;
+
 	// check built-ins
 	qcvm_string_t str;
 

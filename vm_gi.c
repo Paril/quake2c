@@ -110,7 +110,7 @@ static void QC_configstring(qcvm_t *vm)
 	gi.configstring(id, str);
 }
 
-static __attribute__((noreturn)) void QC_error(qcvm_t *vm)
+static qcvm_noreturn void QC_error(qcvm_t *vm)
 {
 	const qcvm_string_t fmtid = qcvm_argv_string_id(vm, 0);
 	qcvm_error(vm, qcvm_parse_format(fmtid, vm, 1));
@@ -240,12 +240,16 @@ static void QC_linkentity(qcvm_t *vm)
 {
 	edict_t *ent = qcvm_argv_entity(vm, 0);
 	gi.linkentity(ent);
+
+	((int32_t *)ent)[game.fields.is_linked] = true;
 }
 
 static void QC_unlinkentity(qcvm_t *vm)
 {
 	edict_t *ent = qcvm_argv_entity(vm, 0);
 	gi.unlinkentity(ent);
+
+	((int32_t *)ent)[game.fields.is_linked] = false;
 }
 
 static void QC_BoxEdicts(qcvm_t *vm)
@@ -255,7 +259,7 @@ static void QC_BoxEdicts(qcvm_t *vm)
 	const vec3_t maxs = qcvm_argv_vector(vm, 2);
 	const int32_t maxcount = qcvm_argv_int32(vm, 3);
 	const box_edicts_area_t areatype = qcvm_argv_int32(vm, 4);
-	edict_t *raw_entities[maxcount];
+	static edict_t *raw_entities[MAX_EDICTS];
 
 	const int32_t count = gi.BoxEdicts(&mins, &maxs, raw_entities, maxcount, areatype);
 

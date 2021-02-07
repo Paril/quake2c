@@ -150,7 +150,7 @@ last save position.
 void WriteGame(const char *filename, qboolean autosave)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_WRITEGAME;
+	qvm->profiling.mark = MARK_WRITEGAME;
 #endif
 
 	FILE *fp = fopen(filename, "wb");
@@ -216,7 +216,7 @@ void WriteGame(const char *filename, qboolean autosave)
 void ReadGame(const char *filename)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_READGAME;
+	qvm->profiling.mark = MARK_READGAME;
 #endif
 
 	FILE *fp = fopen(filename, "rb");
@@ -224,7 +224,8 @@ void ReadGame(const char *filename)
 	qcvm_function_t *func = qcvm_get_function(qvm, qce.PreReadGame);
 	qcvm_execute(qvm, func);
 
-	uint32_t magic, version, edict_size, maxclients;
+	uint32_t magic, version, maxclients;
+	int32_t edict_size;
 
 	fread(&magic, sizeof(magic), 1, fp);
 
@@ -334,7 +335,7 @@ WriteLevel
 void WriteLevel(const char *filename)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_WRITELEVEL;
+	qvm->profiling.mark = MARK_WRITELEVEL;
 #endif
 
 	FILE *fp = fopen(filename, "wb");
@@ -393,7 +394,7 @@ void WriteLevel(const char *filename)
 			WriteEntityFieldData(fp, ent, def);
 		}
 
-		uint32_t i = -1;
+		uint32_t i = (uint32_t) -1;
 		fwrite(&i, sizeof(i), 1, fp);
 	}
 
@@ -425,7 +426,7 @@ No clients are connected yet.
 void ReadLevel(const char *filename)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_READLEVEL;
+	qvm->profiling.mark = MARK_READLEVEL;
 #endif
 
 	FILE *fp = fopen(filename, "rb");
@@ -433,7 +434,8 @@ void ReadLevel(const char *filename)
 	qcvm_function_t *func = qcvm_get_function(qvm, qce.PreReadLevel);
 	qcvm_execute(qvm, func);
 
-	uint32_t magic, version, edict_size, maxclients;
+	uint32_t magic, version, maxclients;
+	int32_t edict_size;
 
 	fread(&magic, sizeof(magic), 1, fp);
 

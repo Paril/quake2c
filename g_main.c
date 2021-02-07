@@ -66,7 +66,7 @@ static void FieldEnt2Entity(void *out, const void *in)
 	*(edict_t **)(out) = qcvm_ent_to_entity(qvm, (*(const qcvm_ent_t *)(in)), false);
 }
 
-static void InitFieldWraps()
+static void InitFieldWraps(void)
 {
 #define RegisterSingle(field_name, strct, name) \
 	qcvm_field_wrap_list_register(qvm, field_name, 0, offsetof(strct, name), NULL)
@@ -224,15 +224,11 @@ static void InitKMQ2Constants(void)
 void AssignClientPointer(edict_t *e, const bool assign)
 {
 	if (assign)
-	{
 		e->client = &game.clients[e->s.number - 1];
-		((int32_t *)e)[game.fields.is_client] = true;
-	}
 	else
-	{
 		e->client = NULL;
-		((int32_t *)e)[game.fields.is_client] = true;
-	}
+
+	((int32_t *)e)[game.fields.is_client] = true;
 }
 
 void WipeClientPointers(void)
@@ -251,7 +247,7 @@ void WipeEntities(void)
 	WipeClientPointers();
 }
 
-static __attribute__((noreturn)) void qvm_error(const char *str)
+static qcvm_noreturn void qvm_error(const char *str)
 {
 	gi.error("%s", str);
 }
@@ -271,7 +267,7 @@ static void InitGameField(qcvm_global_t *field_ptr, const char *name)
 	const qcvm_definition_t *field = qcvm_find_field(qvm, name);
 
 	if (!field)
-		qcvm_error(qvm, "missing required field: \"is_client\"");
+		qcvm_error(qvm, "missing required field: \"%s\"", name);
 
 	*field_ptr = (qcvm_global_t)field->global_index;
 }
@@ -279,6 +275,7 @@ static void InitGameField(qcvm_global_t *field_ptr, const char *name)
 static void InitGameFields(void)
 {
 	InitGameField(&game.fields.is_client, "is_client");
+	InitGameField(&game.fields.is_linked, "is_linked");
 	InitGameField(&game.fields.owner, "owner");
 	
 	game.funcs.ClientConnect = qcvm_get_function(qvm, qce.ClientConnect);
@@ -314,25 +311,25 @@ static void InitGame (void)
 	qvm->alloc = qvm_alloc;
 	qvm->free = gi.TagFree;
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_INIT;
+	qvm->profiling.mark = MARK_INIT;
 #endif
 
 	qvm->max_edicts = globals.max_edicts = MAX_EDICTS;
 	qvm->system_edict_size = sizeof(edict_t);
 
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profile_flags = (int32_t)gi.cvar("qc_profile_flags", "0", CVAR_LATCH)->value;
+	qvm->profiling.flags = (int32_t)gi.cvar("qc_profile_flags", "0", CVAR_LATCH)->value;
 
-	if (qvm->profile_flags & PROFILE_CONTINUOUS)
+	if (qvm->profiling.flags & PROFILE_CONTINUOUS)
 	{
 		const cvar_t *qc_profile_name = gi.cvar("qc_profile_filename", qcvm_temp_format(qvm, "%u", time(NULL)), CVAR_NOSET);
-		qvm->profile_name = qc_profile_name->string;
+		qvm->profiling.filename = qc_profile_name->string;
 	}
 #endif
 
 #ifdef ALLOW_PROFILING
-	qvm->sample_rate = (uint32_t)gi.cvar("qc_sample_rate", "32", CVAR_LATCH)->value;
-	qvm->sample_id = qvm->sample_rate;
+	qvm->profiling.sampling.rate = (uint32_t)gi.cvar("qc_sample_rate", "32", CVAR_LATCH)->value;
+	qvm->profiling.sampling.id = qvm->profiling.sampling.function_id = qvm->profiling.sampling.rate;
 #endif
 
 	qcvm_load(qvm, "Quake2C DLL", GetProgsName());
@@ -353,7 +350,7 @@ static void InitGame (void)
 	const cvar_t *qc_profile_func = gi.cvar("qc_profile_func", "", CVAR_LATCH);
 
 	if (*qc_profile_func->string)
-		qvm->profiler_func = qcvm_find_function(qvm, qc_profile_func->string);
+		qvm->profiling.instrumentation.func = qcvm_find_function(qvm, qc_profile_func->string);
 #endif
 
 	InitFieldWraps();
@@ -403,7 +400,7 @@ static void InitGame (void)
 static void ShutdownGame(void)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_SHUTDOWN;
+	qvm->profiling.mark = MARK_SHUTDOWN;
 #endif
 
 #ifdef ALLOW_DEBUGGING
@@ -436,10 +433,14 @@ void RestoreClientData(void)
 	for (uint32_t i = 0; i < game.num_clients; i++)
 	{
 		edict_t *ent = (edict_t *)qcvm_itoe(qvm, i + 1);
+#ifdef __GNU__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
+#endif
 		edict_t *backup = (edict_t *)((uint8_t *)game.client_load_data + (globals.edict_size * i));
+#ifdef __GNU__
 #pragma GCC diagnostic pop
+#endif
 
 		AssignClientPointer(ent, true);
 
@@ -474,7 +475,7 @@ void RestoreClientData(void)
 static void SpawnEntities(const char *mapname, const char *entities, const char *spawnpoint)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_SPAWNENTITIES;
+	qvm->profiling.mark = MARK_SPAWNENTITIES;
 #endif
 
 #ifdef ALLOW_DEBUGGING
@@ -503,7 +504,7 @@ static void SpawnEntities(const char *mapname, const char *entities, const char 
 static qboolean ClientConnect(edict_t *e, char *userinfo)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_CLIENTCONNECT;
+	qvm->profiling.mark = MARK_CLIENTCONNECT;
 #endif
 
 #ifdef ALLOW_DEBUGGING
@@ -530,7 +531,7 @@ static qboolean ClientConnect(edict_t *e, char *userinfo)
 static void ClientBegin(edict_t *e)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_CLIENTBEGIN;
+	qvm->profiling.mark = MARK_CLIENTBEGIN;
 #endif
 
 #ifdef ALLOW_DEBUGGING
@@ -547,7 +548,7 @@ static void ClientBegin(edict_t *e)
 static void ClientUserinfoChanged(edict_t *e, char *userinfo)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_CLIENTUSERINFOCHANGED;
+	qvm->profiling.mark = MARK_CLIENTUSERINFOCHANGED;
 #endif
 
 #ifdef ALLOW_DEBUGGING
@@ -563,7 +564,7 @@ static void ClientUserinfoChanged(edict_t *e, char *userinfo)
 static void ClientDisconnect(edict_t *e)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_CLIENTDISCONNECT;
+	qvm->profiling.mark = MARK_CLIENTDISCONNECT;
 #endif
 
 #ifdef ALLOW_DEBUGGING
@@ -578,7 +579,7 @@ static void ClientDisconnect(edict_t *e)
 static void ClientCommand(edict_t *e)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_CLIENTCOMMAND;
+	qvm->profiling.mark = MARK_CLIENTCOMMAND;
 #endif
 
 #ifdef ALLOW_DEBUGGING
@@ -593,7 +594,7 @@ static void ClientCommand(edict_t *e)
 static void ClientThink(edict_t *e, usercmd_t *ucmd)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_CLIENTTHINK;
+	qvm->profiling.mark = MARK_CLIENTTHINK;
 #endif
 
 #ifdef ALLOW_DEBUGGING
@@ -618,10 +619,10 @@ static void ClientThink(edict_t *e, usercmd_t *ucmd)
 	qcvm_execute(qvm, game.funcs.ClientThink);
 }
 
-static void RunFrame()
+static void RunFrame(void)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_RUNFRAME;
+	qvm->profiling.mark = MARK_RUNFRAME;
 #endif
 
 #ifdef ALLOW_DEBUGGING
@@ -635,10 +636,10 @@ static void RunFrame()
 #include "vm_opcodes.h"
 #undef OPCODES_ONLY
 
-static void ServerCommand()
+static void ServerCommand(void)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	qvm->profiler_mark = MARK_SERVERCOMMAND;
+	qvm->profiling.mark = MARK_SERVERCOMMAND;
 #endif
 
 #ifdef _DEBUG

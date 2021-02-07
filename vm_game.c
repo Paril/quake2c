@@ -23,13 +23,6 @@ static void QC_ClearEntity(qcvm_t *vm)
 	qcvm_field_wrap_list_check_set(vm, entity, globals.edict_size / sizeof(qcvm_global_t));
 }
 
-static void QC_entitylinked(qcvm_t *vm)
-{
-	edict_t *entity = qcvm_argv_entity(vm, 0);
-	const int32_t val = !!entity->area.prev;
-	qcvm_return_int32(vm, val);
-}
-
 const char *ParseSlashes(const char *value)
 {
 	// no slashes to parse
@@ -165,7 +158,6 @@ void qcvm_init_game_builtins(qcvm_t *vm)
 {
 	qcvm_register_builtin(SetNumEdicts);
 	qcvm_register_builtin(ClearEntity);
-	qcvm_register_builtin(entitylinked);
 	
 	qcvm_register_builtin(entity_key_parse);
 	qcvm_register_builtin(struct_key_parse);

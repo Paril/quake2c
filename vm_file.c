@@ -135,19 +135,49 @@ static void QC_FRead(qcvm_t *vm)
 	const qcvm_pointer_t pointer = qcvm_argv_pointer(vm, 0);
 	const int32_t size = qcvm_argv_int32(vm, 1);
 	const fileHandle_t *handle = qcvm_argv_handle(fileHandle_t, vm, 2);
-	int32_t written;
+	int32_t read;
 	void *address;
 
 	if (!qcvm_resolve_pointer(vm, pointer, false, size, &address))
 		qcvm_error(vm, "bad pointer");
 
 #ifdef KMQUAKE2_ENGINE_MOD
-	written = gi.FRead(address, size, (fileHandle_t)handle);
+	read = gi.FRead(address, size, (fileHandle_t)handle);
 #else
-	written = fread(address, size, 1, (FILE *)handle);
+	read = fread(address, size, 1, (FILE *)handle);
 #endif
 
-	qcvm_return_int32(vm, written);
+	qcvm_return_int32(vm, read);
+}
+
+static void QC_FReadString(qcvm_t *vm)
+{
+	int32_t size = qcvm_argv_int32(vm, 1);
+	const fileHandle_t *handle = qcvm_argv_handle(fileHandle_t, vm, 2);
+	int32_t read = 0;
+
+	if (size == -1)
+	{
+
+	}
+	else if (size)
+	{
+		char *buffer = qcvm_temp_buffer(vm, size);
+
+#ifdef KMQUAKE2_ENGINE_MOD
+		read = gi.FRead(buffer, size, (fileHandle_t)handle);
+#else
+		read = fread(buffer, size, 1, (FILE *)handle);
+#endif
+
+		// trim trailing zeroes
+		while (size && !buffer[size - 1])
+			size--;
+
+		qcvm_set_global_str(vm, GLOBAL_PARM0, buffer, size, true);
+	}
+
+	qcvm_return_int32(vm, read);
 }
 
 static void QC_FWrite(qcvm_t *vm)
@@ -266,6 +296,8 @@ void qcvm_init_file_builtins(qcvm_t *vm)
 	qcvm_register_builtin(OpenCompressedFile);
 	qcvm_register_builtin(FRead);
 	qcvm_register_builtin(FWrite);
+	qcvm_register_builtin(FReadString);
+	//qcvm_register_builtin(FWriteString);
 	qcvm_register_builtin(CreatePath);
 	qcvm_register_builtin(GameDir);
 	qcvm_register_builtin(SaveGameDir);

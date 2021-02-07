@@ -1,5 +1,4 @@
-#pragma once
-
+#ifndef OPLIST
 #define OPLIST(f) \
 	f(OP_DONE), \
 	f(OP_MUL_F), \
@@ -273,6 +272,10 @@
 	f(OP_STOREP_B), \
 	f(OP_LOADP_B), \
 \
+	f(OP_INTRIN_SQRT), \
+	f(OP_INTRIN_SIN), \
+	f(OP_INTRIN_COS), \
+\
 	f(OP_NUMOPS)
 
 enum
@@ -290,9 +293,8 @@ OPLIST(U)
 };
 
 #define OP_BREAKPOINT 0x10000000
+#endif
 
 #ifndef OPCODES_ONLY
-typedef void(*qcvm_opcode_func_t) (qcvm_t *vm, const qcvm_operands_t operands, int *depth);
-
 #include "vm_opcodes.c.h"
 #endif

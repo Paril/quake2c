@@ -1,3 +1,6 @@
+#pragma once
+typedef void(*qcvm_opcode_func_t) (qcvm_t *vm, const qcvm_operands_t operands, int *depth);
+
 // This is the "source" component of vm_opcodes.h that is included alongside it.
 static void F_OP_DONE(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
@@ -396,8 +399,8 @@ static void F_OP_NOT_S(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 
 #ifdef ALLOW_INSTRUMENTING
 #define PROFILE_COND_JUMP \
-	if (vm->profile_flags & PROFILE_FIELDS) \
-		current->profile->fields[NumConditionalJumps][vm->profiler_mark]++
+	if (vm->profiling.flags & PROFILE_FIELDS) \
+		current->profile->fields[NumConditionalJumps][vm->profiling.mark]++
 #else
 #define PROFILE_COND_JUMP
 #endif
@@ -456,7 +459,10 @@ static void F_OP_IFNOT_S(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 	}
 }
 
-__attribute__((always_inline)) static inline void F_OP_CALL_BASE(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
+#ifndef _DEBUG
+qcvm_always_inline
+#endif
+static void F_OP_CALL_BASE(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 {
 	const int32_t enter_func = *qcvm_get_global_typed(int32_t, vm, operands.a);
 
@@ -464,10 +470,10 @@ __attribute__((always_inline)) static inline void F_OP_CALL_BASE(qcvm_t *vm, con
 		qcvm_error(vm, "NULL function");
 	
 #ifdef ALLOW_INSTRUMENTING
-	if (vm->profile_flags & PROFILE_FIELDS)
+	if (vm->profiling.flags & PROFILE_FIELDS)
 	{
 		qcvm_stack_t *current = &vm->state.stack[vm->state.current];
-		current->profile->fields[NumFuncCalls][vm->profiler_mark]++;
+		current->profile->fields[NumFuncCalls][vm->profiling.mark]++;
 	}
 #endif
 
@@ -475,6 +481,17 @@ __attribute__((always_inline)) static inline void F_OP_CALL_BASE(qcvm_t *vm, con
 
 	if (!call->id)
 		qcvm_error(vm, "Tried to call missing function %s", qcvm_get_string(vm, call->name_index));
+
+#ifdef ALLOW_PROFILING
+	if (vm->profiling.flags & PROFILE_SAMPLES)
+	{
+		if (!--vm->profiling.sampling.function_id)
+		{
+			vm->profiling.sampling.function_data[enter_func].count[vm->profiling.mark]++;
+			vm->profiling.sampling.function_id = vm->profiling.sampling.rate;
+		}
+	}
+#endif
 
 	if (call->id < 0) /* negative statements are built in functions */
 	{
@@ -538,8 +555,8 @@ static void F_OP_GOTO(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 	current->statement += (int16_t)current->statement->args.a - 1;
 
 #ifdef ALLOW_INSTRUMENTING
-	if (vm->profile_flags & PROFILE_FIELDS)
-		current->profile->fields[NumUnconditionalJumps][vm->profiler_mark]++;
+	if (vm->profiling.flags & PROFILE_FIELDS)
+		current->profile->fields[NumUnconditionalJumps][vm->profiling.mark]++;
 #endif
 }
 
@@ -951,6 +968,24 @@ static void F_OP_LOADP_B(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 	qcvm_set_global_typed_value(int32_t, vm, operands.c, result);
 }
 
+static void F_OP_INTRIN_SQRT(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
+{
+	const vec_t result = sqrt(*qcvm_get_global_typed(vec_t, vm, operands.b));
+	qcvm_set_global_typed_value(vec_t, vm, GLOBAL_RETURN, result);
+}
+
+static void F_OP_INTRIN_SIN(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
+{
+	const vec_t result = sin(*qcvm_get_global_typed(vec_t, vm, operands.b));
+	qcvm_set_global_typed_value(vec_t, vm, GLOBAL_RETURN, result);
+}
+
+static void F_OP_INTRIN_COS(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
+{
+	const vec_t result = cos(*qcvm_get_global_typed(vec_t, vm, operands.b));
+	qcvm_set_global_typed_value(vec_t, vm, GLOBAL_RETURN, result);
+}
+
 #define FOR_ALL_JUMPCODES(OP) \
 	OP(DONE) \
 \
@@ -1166,8 +1201,12 @@ static void F_OP_LOADP_B(qcvm_t *vm, const qcvm_operands_t operands, int *depth)
 	OP(STOREF_V) \
 \
 	OP(LOADP_B) \
+\
+	OP(INTRIN_SQRT) \
+	OP(INTRIN_SIN) \
+	OP(INTRIN_COS)
 	
-#ifdef USE_GNU_OPCODE_JUMPING
+#if defined(USE_GNU_OPCODE_JUMPING) && defined(__GNU__)
 #define OPC(N) \
 	[OP_##N] = &&JMP_##N,
 

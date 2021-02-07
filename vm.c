@@ -11,6 +11,7 @@
 #include "vm_hash.h"
 #include "vm_structlist.h"
 #include "vm_list.h"
+#include "vm_heap.h"
 #include "vm_opcodes.h"
 
 #include <time.h>
@@ -298,7 +299,7 @@ void qcvm_field_wrap_list_register(qcvm_t *vm, const char *field_name, const siz
 		else if (strcmp(qcvm_get_string(vm, f->name_index), field_name))
 			continue;
 
-		assert((f->global_index + field_offset) >= 0 && (f->global_index + field_offset) < vm->field_real_size);
+		assert((f->global_index + field_offset) < vm->field_real_size);
 
 		qcvm_field_wrapper_t *wrapper = &vm->field_wraps[f->global_index + field_offset];
 		*wrapper = (qcvm_field_wrapper_t) {
@@ -320,12 +321,12 @@ void qcvm_field_wrap_list_check_set(qcvm_t *vm, const void *ptr, const size_t sp
 	if (!vm)
 		return;
 
-	START_TIMER(list->vm, WrapApply);
+	START_TIMER(vm, WrapApply);
 
 	// no entities involved in this wrap check (or no entities to check yet)
 	if (ptr < vm->edicts || ptr >= (void *)((uint8_t *)vm->edicts + (vm->edict_size * vm->max_edicts)))
 	{
-		END_TIMER(list->vm, PROFILE_TIMERS);
+		END_TIMER(vm, PROFILE_TIMERS);
 		return;
 	}
 
@@ -365,7 +366,7 @@ void qcvm_field_wrap_list_check_set(qcvm_t *vm, const void *ptr, const size_t sp
 			*(int32_t *)dst = *sptr;
 	}
 
-	END_TIMER(list->vm, PROFILE_TIMERS);
+	END_TIMER(vm, PROFILE_TIMERS);
 }
 
 static void qcvm_state_init(qcvm_state_t *state, qcvm_t *vm)
@@ -413,7 +414,7 @@ qcvm_stack_t *qcvm_state_stack_push(qcvm_state_t *state)
 {
 	state->current++;
 
-	if (state->current == state->stack_allocated)
+	if ((size_t)state->current == state->stack_allocated)
 		qcvm_state_needs_resize(state);
 
 	return &state->stack[state->current];
@@ -569,8 +570,8 @@ const char *qcvm_dump_pointer(qcvm_t *vm, const qcvm_global_t *ptr)
 qcvm_global_t *qcvm_get_global(qcvm_t *vm, const qcvm_global_t g)
 {
 #ifdef ALLOW_INSTRUMENTING
-	if ((vm->profile_flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
-		vm->state.stack[vm->state.current].profile->fields[NumGlobalsFetched][vm->profiler_mark]++;
+	if ((vm->profiling.flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
+		vm->state.stack[vm->state.current].profile->fields[NumGlobalsFetched][vm->profiling.mark]++;
 #endif
 
 	return vm->global_data + g;
@@ -579,8 +580,8 @@ qcvm_global_t *qcvm_get_global(qcvm_t *vm, const qcvm_global_t g)
 const qcvm_global_t *qcvm_get_const_global(const qcvm_t *vm, const qcvm_global_t g)
 {
 #ifdef ALLOW_INSTRUMENTING
-	if ((vm->profile_flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
-		vm->state.stack[vm->state.current].profile->fields[NumGlobalsFetched][vm->profiler_mark]++;
+	if ((vm->profiling.flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
+		vm->state.stack[vm->state.current].profile->fields[NumGlobalsFetched][vm->profiling.mark]++;
 #endif
 
 	return vm->global_data + g;
@@ -603,8 +604,8 @@ void *qcvm_get_global_ptr(qcvm_t *vm, const qcvm_global_t global, const size_t v
 void qcvm_set_global(qcvm_t *vm, const qcvm_global_t global, const void *value, const size_t value_size)
 {
 #ifdef ALLOW_INSTRUMENTING
-	if ((vm->profile_flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
-		vm->state.stack[vm->state.current].profile->fields[NumGlobalsSet][vm->profiler_mark]++;
+	if ((vm->profiling.flags & PROFILE_FIELDS) && vm->state.current >= 0 && vm->state.stack[vm->state.current].profile)
+		vm->state.stack[vm->state.current].profile->fields[NumGlobalsSet][vm->profiling.mark]++;
 #endif
 
 	if (global == GLOBAL_NULL)
@@ -1014,8 +1015,8 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 		statement = ++current->statement;
 
 #ifdef ALLOW_INSTRUMENTING
-		if (vm->profile_flags & PROFILE_FIELDS)
-			current->profile->fields[NumInstructions][vm->profiler_mark]++;
+		if (vm->profiling.flags & PROFILE_FIELDS)
+			current->profile->fields[NumInstructions][vm->profiling.mark]++;
 #endif
 
 #ifdef ALLOW_DEBUGGING
@@ -1061,12 +1062,12 @@ void qcvm_execute(qcvm_t *vm, qcvm_function_t *function)
 		END_TIMER(vm, PROFILE_OPCODES);
 
 #ifdef ALLOW_PROFILING
-		if (vm->profile_flags & PROFILE_SAMPLES)
+		if (vm->profiling.flags & PROFILE_SAMPLES)
 		{
-			if (!--vm->sample_id)
+			if (!--vm->profiling.sampling.id)
 			{
-				vm->sample_data[statement - vm->statements].count[vm->profiler_mark]++;
-				vm->sample_id = vm->sample_rate;
+				vm->profiling.sampling.data[statement - vm->statements].count[vm->profiling.mark]++;
+				vm->profiling.sampling.id = vm->profiling.sampling.rate;
 			}
 		}
 #endif
@@ -1368,9 +1369,9 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 		
 		fread(&lno_header, sizeof(lno_header), 1, fp);
 
-		if (lno_header.magic == lnotype && lno_header.ver == version && lno_header.numglobaldefs == header.sections.definition.size &&
-			lno_header.numglobals == header.sections.globals.size && lno_header.numfielddefs == header.sections.field.size &&
-			lno_header.numstatements == header.sections.statement.size)
+		if (lno_header.magic == lnotype && lno_header.ver == version && (size_t)lno_header.numglobaldefs == header.sections.definition.size &&
+			(size_t)lno_header.numglobals == header.sections.globals.size && (size_t)lno_header.numfielddefs == header.sections.field.size &&
+			(size_t)lno_header.numstatements == header.sections.statement.size)
 		{
 			vm->linenumbers = (int *)qcvm_alloc(vm, sizeof(*vm->linenumbers) * header.sections.statement.size);
 			fread(vm->linenumbers, sizeof(int), header.sections.statement.size, fp);
@@ -1380,32 +1381,34 @@ void qcvm_load(qcvm_t *vm, const char *engine_name, const char *filename)
 	}
 
 #ifdef ALLOW_INSTRUMENTING
-	vm->profile_data = (qcvm_profile_t *)qcvm_alloc(vm, sizeof(qcvm_profile_t) * vm->functions_size);
+	vm->profiling.instrumentation.data = (qcvm_profile_t *)qcvm_alloc(vm, sizeof(qcvm_profile_t) * vm->functions_size);
 #endif
 
 #ifdef ALLOW_PROFILING
-	vm->sample_data = (qcvm_sampling_t *)qcvm_alloc(vm, sizeof(qcvm_sampling_t) * vm->statements_size);
+	vm->profiling.sampling.data = (qcvm_sampling_t *)qcvm_alloc(vm, sizeof(qcvm_sampling_t) * vm->statements_size);
+	vm->profiling.sampling.function_data = (qcvm_sampling_t *)qcvm_alloc(vm, sizeof(qcvm_sampling_t) * vm->functions_size);
 #endif
 
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	if (vm->profile_flags & PROFILE_CONTINUOUS)
+	if (vm->profiling.flags & PROFILE_CONTINUOUS)
 	{
-		fp = fopen(qcvm_temp_format(vm, "%s%s.perf", vm->path, vm->profile_name), "rb");
+		fp = fopen(qcvm_temp_format(vm, "%s%s.perf", vm->path, vm->profiling.filename), "rb");
 
 		if (fp)
 		{
 #ifdef ALLOW_INSTRUMENTING
-			fread(vm->profile_data, sizeof(qcvm_profile_t), vm->functions_size, fp);
-			fread(vm->opcode_timers, sizeof(qcvm_profile_timer_t), OP_NUMOPS, fp);
-			fread(vm->timers, sizeof(qcvm_profile_timer_t), OP_NUMOPS, fp);
+			fread(vm->profiling.instrumentation.data, sizeof(qcvm_profile_t), vm->functions_size, fp);
+			fread(vm->profiling.instrumentation.opcode_timers, sizeof(qcvm_profile_timer_t), OP_NUMOPS, fp);
+			fread(vm->profiling.instrumentation.timers, sizeof(qcvm_profile_timer_t), OP_NUMOPS, fp);
 #endif
 #ifdef ALLOW_PROFILING
-			fread(vm->sample_data, sizeof(qcvm_sampling_t), vm->statements_size, fp);
+			fread(vm->profiling.sampling.data, sizeof(qcvm_sampling_t), vm->statements_size, fp);
+			fread(vm->profiling.sampling.function_data, sizeof(qcvm_sampling_t), vm->functions_size, fp);
 #endif
 
 			fclose(fp);
 
-			vm->debug_print(qcvm_temp_format(vm, "QCVM: continuing profile of %s\n", vm->profile_name));
+			vm->debug_print(qcvm_temp_format(vm, "QCVM: continuing profile of %s\n", vm->profiling.filename));
 		}
 	}
 #endif
@@ -1520,6 +1523,22 @@ static inline void qcvm_check_builtins(qcvm_t *vm)
 	for (qcvm_function_t *func = vm->functions; func < vm->functions + vm->functions_size; func++)
 		if (func->id == 0 && func->name_index != STRING_EMPTY)
 			vm->warning("Missing builtin function: %s\n", qcvm_get_string(vm, func->name_index));
+
+	// Set up intrinsics
+	for (qcvm_statement_t *s = vm->statements; s < vm->statements + vm->statements_size; s++)
+	{
+		if (s->opcode == OP_CALL1H)
+		{
+			qcvm_func_t f = *(vm->global_data + s->args.a);
+
+			if (f == qcvm_find_function_id(vm, "sqrt"))
+				s->opcode = OP_INTRIN_SQRT;
+			if (f == qcvm_find_function_id(vm, "sin"))
+				s->opcode = OP_INTRIN_SIN;
+			if (f == qcvm_find_function_id(vm, "cos"))
+				s->opcode = OP_INTRIN_COS;
+		}
+	}
 }
 
 void qcvm_check(qcvm_t *vm)
@@ -1587,17 +1606,18 @@ static const char *mark_names[TOTAL_MARKS] =
 void qcvm_shutdown(qcvm_t *vm)
 {
 #if defined(ALLOW_INSTRUMENTING) || defined(ALLOW_PROFILING)
-	if (vm->profile_flags & PROFILE_CONTINUOUS)
+	if (vm->profiling.flags & PROFILE_CONTINUOUS)
 	{
-		FILE *fp = fopen(qcvm_temp_format(vm, "%s%s.perf", vm->path, vm->profile_name), "wb");
+		FILE *fp = fopen(qcvm_temp_format(vm, "%s%s.perf", vm->path, vm->profiling.filename), "wb");
 
 #ifdef ALLOW_INSTRUMENTING
-		fwrite(vm->profile_data, sizeof(qcvm_profile_t), vm->functions_size, fp);
-		fwrite(vm->opcode_timers, sizeof(vm->opcode_timers), 1, fp);
-		fwrite(vm->timers, sizeof(vm->timers), 1, fp);
+		fwrite(vm->profiling.instrumentation.data, sizeof(qcvm_profile_t), vm->functions_size, fp);
+		fwrite(vm->profiling.instrumentation.opcode_timers, sizeof(vm->profiling.instrumentation.opcode_timers), 1, fp);
+		fwrite(vm->profiling.instrumentation.timers, sizeof(vm->profiling.instrumentation.timers), 1, fp);
 #endif
 #ifdef ALLOW_PROFILING
-		fwrite(vm->sample_data, sizeof(qcvm_sampling_t), vm->statements_size, fp);
+		fwrite(vm->profiling.sampling.data, sizeof(qcvm_sampling_t), vm->statements_size, fp);
+		fwrite(vm->profiling.sampling.function_data, sizeof(qcvm_sampling_t), vm->functions_size, fp);
 #endif
 
 		fclose(fp);
@@ -1605,23 +1625,39 @@ void qcvm_shutdown(qcvm_t *vm)
 #endif
 
 #ifdef ALLOW_PROFILING
-	if (vm->profile_flags & PROFILE_SAMPLES)
+	if (vm->profiling.flags & PROFILE_SAMPLES)
 	{
 		for (size_t m = 0; m < TOTAL_MARKS; m++)
 		{
 			const char *mark = mark_names[m];
-			FILE *fp = fopen(qcvm_temp_format(vm, "%sprf_%s_profile.csv", vm->path, mark), "wb");
+			FILE *fp = fopen(qcvm_temp_format(vm, "%sprf_%s_samples.csv", vm->path, mark), "wb");
 
 			fprintf(fp, "ID,Path,Count\n");
 
 			for (size_t i = 0; i < vm->statements_size; i++)
 			{
-				const qcvm_sampling_t *sample = vm->sample_data + i;
+				const qcvm_sampling_t *sample = vm->profiling.sampling.data + i;
 
 				if (!sample->count[m])
 					continue;
 
 				fprintf(fp, "%" PRIuPTR ",%s:%i,%llu\n", i, qcvm_function_for(vm, vm->statements + i), qcvm_line_number_for(vm, vm->statements + i), sample->count[m]);
+			}
+
+			fclose(fp);
+
+			fp = fopen(qcvm_temp_format(vm, "%sprf_%s_samples_func.csv", vm->path, mark), "wb");
+
+			fprintf(fp, "ID,Name,Count\n");
+
+			for (size_t i = 0; i < vm->functions_size; i++)
+			{
+				const qcvm_sampling_t *sample = vm->profiling.sampling.function_data + i;
+
+				if (!sample->count[m])
+					continue;
+
+				fprintf(fp, "%" PRIuPTR ",%s,%llu\n", i, qcvm_get_string(vm, qcvm_get_function(vm, i)->name_index), sample->count[m]);
 			}
 
 			fclose(fp);
@@ -1634,20 +1670,19 @@ void qcvm_shutdown(qcvm_t *vm)
 	{
 		const char *mark = mark_names[m];
 
-		if (vm->profile_flags & (PROFILE_FUNCTIONS | PROFILE_FIELDS))
+		if (vm->profiling.flags & (PROFILE_FUNCTIONS | PROFILE_FIELDS))
 		{
 			FILE *fp = fopen(qcvm_temp_format(vm, "%sprf_%s_profile.csv", vm->path, mark), "wb");
 			double all_total = 0;
 		
 			for (size_t i = 0; i < vm->functions_size; i++)
 			{
-				const qcvm_profile_t *profile = vm->profile_data + i;
+				const qcvm_profile_t *profile = vm->profiling.instrumentation.data + i;
 
 				if (!profile->fields[NumSelfCalls][m] && !profile->self[m] && !profile->ext[m])
 					continue;
 
-				const double total = Q_time_adjust(profile->self[m]) / 1000000.0;
-				all_total += total;
+				all_total += profile->self[m];
 			}
 
 			fprintf(fp, "ID,Name,Total (ms),Self(ms),Funcs(ms),Total (%%),Self (%%)");
@@ -1659,7 +1694,7 @@ void qcvm_shutdown(qcvm_t *vm)
 
 			for (size_t i = 0; i < vm->functions_size; i++)
 			{
-				const qcvm_profile_t *profile = vm->profile_data + i;
+				const qcvm_profile_t *profile = vm->profiling.instrumentation.data + i;
 
 				if (!profile->fields[NumSelfCalls][m] && !profile->self[m] && !profile->ext[m])
 					continue;
@@ -1667,8 +1702,8 @@ void qcvm_shutdown(qcvm_t *vm)
 				const qcvm_function_t *ff = vm->functions + i;
 				const char *name = qcvm_get_string(vm, ff->name_index);
 		
-				const double self = Q_time_adjust(profile->self[m]) / 1000000.0;
-				const double ext = Q_time_adjust(profile->ext[m]) / 1000000.0;
+				const float self = profile->self[m];
+				const float ext = profile->ext[m];
 				const double total = self + ext;
 
 				fprintf(fp, "%" PRIuPTR ",%s,%f,%f,%f,%f,%f", i, name, total, self, ext, (total / all_total) * 100, (self / all_total) * 100);
@@ -1682,24 +1717,23 @@ void qcvm_shutdown(qcvm_t *vm)
 			fclose(fp);
 		}
 	
-		if (vm->profile_flags & PROFILE_TIMERS)
+		if (vm->profiling.flags & PROFILE_TIMERS)
 		{
 			FILE *fp = fopen(qcvm_temp_format(vm, "%sprf_%s_timers.csv", vm->path, mark), "wb");
 			double all_total = 0;
 
 			for (size_t i = 0; i < TotalTimerFields; i++)
 			{
-				const qcvm_profile_timer_t *timer = &vm->timers[i][m];
-				const double total = Q_time_adjust(timer->time[m]) / 1000000.0;
-				all_total += total;
+				const qcvm_profile_timer_t *timer = &vm->profiling.instrumentation.timers[i][m];
+				all_total += timer->time[m];
 			}
 
 			fprintf(fp, "Name,Count,Total (ms),Avg (ns),%%\n");
 
 			for (size_t i = 0; i < TotalTimerFields; i++)
 			{
-				const qcvm_profile_timer_t *timer = &vm->timers[i][m];
-				const double total = Q_time_adjust(timer->time[m]) / 1000000.0;
+				const qcvm_profile_timer_t *timer = &vm->profiling.instrumentation.timers[i][m];
+				const float total = timer->time[m];
 
 				fprintf(fp, "%s,%" PRIuPTR ",%f,%f,%f\n", timer_type_names[i], timer->count[m], total, (total / timer->count[m]) * 1000, (total / all_total) * 100);
 			}
@@ -1707,32 +1741,31 @@ void qcvm_shutdown(qcvm_t *vm)
 			fclose(fp);
 		}
 	
-		if (vm->profile_flags & PROFILE_OPCODES)
+		if (vm->profiling.flags & PROFILE_OPCODES)
 		{
 			FILE *fp = fopen(qcvm_temp_format(vm, "%sprf_%s_opcodes.csv", vm->path, mark), "wb");
 			double all_total = 0;
 
 			for (size_t i = 0; i < OP_NUMOPS; i++)
 			{
-				const qcvm_profile_timer_t *timer = &vm->opcode_timers[i][m];
+				const qcvm_profile_timer_t *timer = &vm->profiling.instrumentation.opcode_timers[i][m];
 
 				if (!timer->count[m])
 					continue;
 
-				const double total = Q_time_adjust(timer->time[m]) / 1000000.0;
-				all_total += total;
+				all_total += timer->time[m];
 			}
 
 			fprintf(fp, "ID,Count,Total (ms),Avg (ns),%%\n");
 
 			for (size_t i = 0; i < OP_NUMOPS; i++)
 			{
-				const qcvm_profile_timer_t *timer = &vm->opcode_timers[i][m];
+				const qcvm_profile_timer_t *timer = &vm->profiling.instrumentation.opcode_timers[i][m];
 
 				if (!timer->count[m])
 					continue;
 
-				const double total = Q_time_adjust(timer->time[m]) / 1000000.0;
+				const float total = timer->time[m];
 
 				fprintf(fp, "%" PRIuPTR ",%" PRIuPTR ",%f,%f,%f\n", i, timer->count[m], total, (total / timer->count[m]) * 1000, (total / all_total) * 100);
 			}
@@ -1757,4 +1790,5 @@ void qcvm_init_all_builtins(qcvm_t *vm)
 	qcvm_init_hash_builtins(vm);
 	qcvm_init_structlist_builtins(vm);
 	qcvm_init_list_builtins(vm);
+	qcvm_init_heap_builtins(vm);
 }
