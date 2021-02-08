@@ -1,0 +1,13 @@
+option('KMQUAKE2', type: 'boolean', value: false,
+       description: 'build as kmquake2 mod (as opposed to vanilla)')
+option('X32', type: 'boolean', value: false,
+       description: 'force 32bit build (only of relevance on x86...)')
+option('ALLOW_DEBUGGING', type: 'boolean', value: true,
+       description: 'Allow FTEQCC debugging')
+option('ALLOW_INSTRUMENTING', type: 'boolean', value: false,
+       description: 'Allow instrumentation (may hurt performance)')
+option('ALLOW_PROFILING', type: 'boolean', value: true,
+       description: 'Allow profiling (minimal performance impact)')
+option('USE_GNU_OPCODE_JUMPING', type: 'boolean', value: true,
+       description: 'Use GNUC address-of-label jumps.')
+#TODO: test for compiler support rather than asking the user to toggle this
