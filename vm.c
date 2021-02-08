@@ -453,7 +453,9 @@ void qcvm_error(const qcvm_t *vm, const char *format, ...)
 	// fine.
 #if ALLOW_DEBUGGING
 	qcvm_break_on_current_statement((qcvm_t *)vm);
+#ifdef WINDOWS
 	__debugbreak();
+#endif
 #endif
 
 	vm->error(buffer);
