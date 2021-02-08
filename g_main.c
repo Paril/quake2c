@@ -433,12 +433,12 @@ void RestoreClientData(void)
 	for (uint32_t i = 0; i < game.num_clients; i++)
 	{
 		edict_t *ent = (edict_t *)qcvm_itoe(qvm, i + 1);
-#ifdef __GNU__
+#if defined(__GNU__) || defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-align"
 #endif
 		edict_t *backup = (edict_t *)((uint8_t *)game.client_load_data + (globals.edict_size * i));
-#ifdef __GNU__
+#if defined(__GNU__) || defined(__clang__)
 #pragma GCC diagnostic pop
 #endif
 

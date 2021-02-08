@@ -69,7 +69,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Vanilla Release|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>ClangCL</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
@@ -297,10 +297,8 @@
       <ErrorReporting>Send</ErrorReporting>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalOptions>
-      </AdditionalOptions>
+      <AdditionalOptions>-Weverything -Wpedantic -Wno-missing-braces -Wno-c++98-compat-pedantic -Wno-newline-eof -Wno-implicit-float-conversion -Wno-unused-parameter -Wno-gnu-anonymous-struct -Wno-microsoft-include -Wno-float-conversion -Wno-missing-field-initializers -Wno-exit-time-destructors -Wno-global-constructors -Wno-sign-conversion -Wno-invalid-offsetof -Wno-float-equal -Wno-format-nonliteral -Wno-date-time -Wno-double-promotion -Wno-missing-prototypes -Wno-sign-compare -Wno-undef -Wno-implicit-int-conversion -Wno-zero-as-null-pointer-constant -Wno-c99-extensions -Wno-switch-enum -Wno-covered-switch-default -Wno-old-style-cast -Wno-implicit-fallthrough -Wno-cast-qual -Wno-extra-semi-stmt -Wno-extra-semi  -Wno-vla -Wno-gnu-label-as-value -Wno-nested-anon-types</AdditionalOptions>
       <ExceptionHandling>Sync</ExceptionHandling>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>

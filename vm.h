@@ -1064,7 +1064,7 @@ qcvm_always_inline
 #else
 inline
 #endif
-void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
+static void qcvm_call_builtin(qcvm_t *vm, qcvm_function_t *function)
 {
 	qcvm_builtin_t func;
 
@@ -1115,7 +1115,7 @@ qcvm_always_inline
 #else
 inline
 #endif
-void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
+static void qcvm_enter(qcvm_t *vm, qcvm_function_t *function)
 {
 #if ALLOW_INSTRUMENTING
 	if (vm->profiling.instrumentation.func && function == vm->profiling.instrumentation.func && !vm->state.profile_mark_depth)
@@ -1180,7 +1180,7 @@ qcvm_always_inline
 #else
 inline
 #endif
-void qcvm_leave(qcvm_t *vm)
+static void qcvm_leave(qcvm_t *vm)
 {
 	// restore stack
 	qcvm_stack_t *current_stack = &vm->state.stack[vm->state.current];

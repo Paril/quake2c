@@ -38,7 +38,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "shared/platform.h"
 
 #if defined(__clang__) || defined(__GNUC__)
-#define qcvm_always_inline __attribute__((always_inline))
+#define qcvm_always_inline __attribute__((always_inline)) inline
 #define qcvm_noreturn __attribute__((noreturn))
 #elif defined(_MSC_VER)
 #define qcvm_always_inline __forceinline
