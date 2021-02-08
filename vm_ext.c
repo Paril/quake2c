@@ -31,7 +31,7 @@ typedef struct
 	qcvm_function_t *func;
 } qsort_context_t;
 
-#ifdef _WIN32
+#if defined(_WIN32)
 static int QC_qsort_callback(void *ctx, const void *a, const void *b)
 #else
 static int QC_qsort_callback(const void *a, const void *b, void *ctx)
@@ -48,6 +48,24 @@ static int QC_qsort_callback(const void *a, const void *b, void *ctx)
 
 	return *qcvm_get_global_typed(int32_t, context->vm, GLOBAL_RETURN);
 }
+
+#if !defined(__STDC_LIB_EXT1__) && !defined(_WIN32)
+static int (*qsort_s_callback)(const void *, const void *, void *);
+static void *qsort_s_ctx;
+
+static int qsort_s_wrapper(const void *a, const void *b)
+{
+	return qsort_s_callback(a, b, qsort_s_ctx);
+}
+
+static void qsort_s(const void *base, size_t count, size_t size, int (*callback)(const void *, const void *, void *), void *context)
+{
+	qsort_s_callback = callback;
+	qsort_s_ctx = context;
+
+	qsort((void *)base, count, size, qsort_s_wrapper);
+}
+#endif
 
 static void QC_qsort(qcvm_t *vm)
 {
