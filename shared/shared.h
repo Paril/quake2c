@@ -33,9 +33,10 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stddef.h>
 #include <inttypes.h>
 
-#include "shared/platform.h"
+#include "platform.h"
 
 #if defined(__clang__) || defined(__GNUC__)
 #define qcvm_always_inline __attribute__((always_inline)) inline
