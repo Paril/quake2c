@@ -49,6 +49,13 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #define qcvm_noreturn
 #endif
 
+#ifdef UNIX
+//shim stricmp/strnicmp
+#include <strings.h>
+#define stricmp strcasecmp
+#define strnicmp strncasecmp
+#endif
+
 // ABI compat only, don't use
 typedef enum
 {
