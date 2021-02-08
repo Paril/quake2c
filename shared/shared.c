@@ -30,7 +30,11 @@ size_t Q_strlcpy(char *dst, const char *src, size_t size)
 	size_t ret = strlen(src);
 
 	if (size) {
-		size_t len = min(ret, size - 1);
+		size_t len = size - 1;
+		
+		if (ret < len)
+			len = ret;
+
 		memcpy(dst, src, len);
 		dst[len] = 0;
 	}
